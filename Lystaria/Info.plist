@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Lystaria uses your calendar to sync your reminders and events with Apple Calendar.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>google</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.884423680795-bl05i5b3c4k658g7s016cong1pcg80ut</string>
+			</array>
+		</dict>
+	</array>
+	<key>UIAppFonts</key>
+	<array>
+		<string>LilyScriptOne-Regular.ttf</string>
+	</array>
+</dict>
+</plist>

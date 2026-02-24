@@ -1,0 +1,11 @@
+.DS_Store
+xcuserdata/
+DerivedData/
+*.xcuserstate
+Lystaria.xcodeproj/**/xcuserdata/
+
+# Xcode user files
+**/xcuserdata/
+**/*.xcuserstate
+DerivedData/
+.DS_Store
