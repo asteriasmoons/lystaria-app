@@ -1,6 +1,13 @@
+//
+// ChecklistsView.swift
+//
+// Created By Asteria Moon
+//
+
 import SwiftUI
 import SwiftData
 import Foundation
+import UniformTypeIdentifiers
 
 // MARK: - ChecklistsView (Items Screen)
 
@@ -13,15 +20,21 @@ struct ChecklistsView: View {
     private var checklists: [Checklist]
 
     @State private var tab: ChecklistTab = .active
+    @State private var draggedItem: ChecklistItem?
+    // In-memory reorder buffer — mutated during drag, flushed to SwiftData on drop
+    @State private var dragBuffer: [ChecklistItem] = []
 
     // Pagination
-    @State private var visibleCount: Int = 6
-    private let pageSize: Int = 6
+    @State private var visibleCount: Int = 4
+    private let pageSize: Int = 4
 
     // Single default container for now.
     private var activeChecklist: Checklist? { checklists.first }
 
     private var itemsSorted: [ChecklistItem] {
+        // During a drag use the in-memory buffer so the UI reflects reordering
+        // without any SwiftData writes happening mid-drag.
+        if !dragBuffer.isEmpty { return dragBuffer }
         guard let c = activeChecklist else { return [] }
         return c.items.sorted { $0.sortOrder < $1.sortOrder }
     }
@@ -47,59 +60,7 @@ struct ChecklistsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 0) {
-                header
-
-                VStack(spacing: 14) {
-                    tabs
-
-                    if activeChecklist == nil {
-                        GlassCard {
-                            EmptyState(
-                                icon: "checklist",
-                                message: "No checklist yet.\nTap + to add your first item.",
-                                actionLabel: "Add Item"
-                            ) {
-                                ensureDefaultChecklistIfNeeded()
-                                addNewItem()
-                            }
-                        }
-                    } else if filteredItems.isEmpty {
-                        GlassCard {
-                            EmptyState(
-                                icon: "checklist",
-                                message: emptyMessage,
-                                actionLabel: tab == .done ? "View Active" : "Add Item"
-                            ) {
-                                if tab == .done {
-                                    tab = .active
-                                } else {
-                                    addNewItem()
-                                }
-                            }
-                        }
-                    } else {
-                        VStack(spacing: 12) {
-                            ForEach(visibleItems, id: \.persistentModelID) { item in
-                                ChecklistItemCard(item: item)
-                            }
-
-                            if canLoadMore {
-                                LoadMoreButton {
-                                    visibleCount += pageSize
-                                }
-                                .padding(.top, 4)
-                            }
-                        }
-                    }
-
-                    // Extra scroll room so the last card is never clipped by the tab bar / FAB.
-                    Spacer().frame(height: 120)
-                }
-                .padding(.horizontal, LSpacing.pageHorizontal)
-                .padding(.top, 14)
-                .padding(.bottom, 20)
-            }
+            content
         }
         .scrollIndicators(.hidden)
         // Prevent scroll-to-dismiss keyboard gestures from delaying taps/focus.
@@ -135,6 +96,95 @@ struct ChecklistsView: View {
                 visibleCount = pageSize
             }
         }
+    }
+
+    private var content: some View {
+        VStack(spacing: 0) {
+            header
+
+            VStack(spacing: 14) {
+                tabs
+                mainContent
+
+                // Extra scroll room so the last card is never clipped by the tab bar / FAB.
+                Spacer().frame(height: 120)
+            }
+            .padding(.horizontal, LSpacing.pageHorizontal)
+            .padding(.top, 14)
+            .padding(.bottom, 20)
+        }
+    }
+
+    @ViewBuilder
+    private var mainContent: some View {
+        if activeChecklist == nil {
+            GlassCard {
+                EmptyState(
+                    icon: "checklist",
+                    message: "No checklist yet.\nTap + to add your first item.",
+                    actionLabel: "Add Item"
+                ) {
+                    ensureDefaultChecklistIfNeeded()
+                    addNewItem()
+                }
+            }
+        } else if filteredItems.isEmpty {
+            GlassCard {
+                EmptyState(
+                    icon: "checklist",
+                    message: emptyMessage,
+                    actionLabel: tab == .done ? "View Active" : "Add Item"
+                ) {
+                    if tab == .done {
+                        tab = .active
+                    } else {
+                        addNewItem()
+                    }
+                }
+            }
+        } else {
+            checklistItemsSection
+        }
+    }
+
+    private var checklistItemsSection: some View {
+        VStack(spacing: 12) {
+            ForEach(visibleItems, id: \.persistentModelID) { item in
+                draggableChecklistCard(for: item)
+            }
+
+            if canLoadMore {
+                LoadMoreButton {
+                    visibleCount += pageSize
+                }
+                .padding(.top, 4)
+            }
+        }
+    }
+
+    private func draggableChecklistCard(for item: ChecklistItem) -> some View {
+        let isDragging = draggedItem?.persistentModelID == item.persistentModelID
+
+        return ChecklistItemCard(item: item, isDragging: isDragging)
+            .onDrag {
+                draggedItem = item
+                // Seed the buffer once when the drag starts so all mid-drag
+                // reorders mutate only in-memory state.
+                if dragBuffer.isEmpty {
+                    dragBuffer = itemsSorted
+                }
+                return NSItemProvider(object: NSString(string: String(describing: item.persistentModelID)))
+            }
+            .onDrop(
+                of: [.text],
+                delegate: ChecklistItemDropDelegate(
+                    targetItem: item,
+                    draggedItem: $draggedItem,
+                    dragBuffer: $dragBuffer,
+                    reorderAction: reorderInBuffer,
+                    commitAction: commitDrop
+                )
+            )
     }
 
     // MARK: - Header
@@ -179,6 +229,34 @@ struct ChecklistsView: View {
     }
 
     // MARK: - Actions
+
+    // Called on every dropEntered — pure in-memory swap, zero I/O.
+    private func reorderInBuffer(_ item: ChecklistItem, before target: ChecklistItem) {
+        guard item.persistentModelID != target.persistentModelID else { return }
+        guard !dragBuffer.isEmpty else { return }
+
+        guard let fromIndex = dragBuffer.firstIndex(where: { $0.persistentModelID == item.persistentModelID }),
+              let toIndex   = dragBuffer.firstIndex(where: { $0.persistentModelID == target.persistentModelID }) else {
+            return
+        }
+
+        var reordered = dragBuffer
+        let movingItem = reordered.remove(at: fromIndex)
+        let adjustedIndex = fromIndex < toIndex ? max(toIndex - 1, 0) : toIndex
+        reordered.insert(movingItem, at: adjustedIndex)
+        dragBuffer = reordered
+    }
+
+    // Called once on performDrop — flushes sortOrder to SwiftData.
+    private func commitDrop() {
+        for (index, item) in dragBuffer.enumerated() {
+            item.sortOrder = index
+        }
+        activeChecklist?.updatedAt = Date()
+        activeChecklist?.needsSync = true
+        try? modelContext.save()
+        dragBuffer = []
+    }
 
     private func ensureDefaultChecklistIfNeeded() {
         if activeChecklist == nil {
@@ -228,6 +306,7 @@ private enum ChecklistTab: CaseIterable {
 private struct ChecklistItemCard: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var item: ChecklistItem
+    let isDragging: Bool
 
     @State private var isEditing: Bool = false
 
@@ -341,6 +420,7 @@ private struct ChecklistItemCard: View {
                 }
             }
         }
+        .opacity(isDragging ? 0.6 : 1)
         .onAppear {
             // Auto-focus newly created blank items.
             if item.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -385,4 +465,33 @@ private struct ChecklistItemCard: View {
 
 #Preview {
     ChecklistsView()
+}
+
+private struct ChecklistItemDropDelegate: DropDelegate {
+    let targetItem: ChecklistItem
+    @Binding var draggedItem: ChecklistItem?
+    @Binding var dragBuffer: [ChecklistItem]
+    let reorderAction: (ChecklistItem, ChecklistItem) -> Void
+    let commitAction: () -> Void
+
+    func dropEntered(info: DropInfo) {
+        // Pure in-memory reorder — no SwiftData writes here.
+        guard let draggedItem, draggedItem.persistentModelID != targetItem.persistentModelID else { return }
+        reorderAction(draggedItem, targetItem)
+    }
+
+    func validateDrop(info: DropInfo) -> Bool {
+        true
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        // Flush sortOrder to SwiftData exactly once, when the user lets go.
+        commitAction()
+        draggedItem = nil
+        return true
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
 }

@@ -2,7 +2,6 @@
 // DailyIntentionView.swift
 //
 // Created by Asteria Moon
-// THE REAL INTENTIONS PAGE
 //
 
 import SwiftUI
@@ -230,17 +229,25 @@ struct DailyIntentionView: View {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
-        if let r = record {
-            r.text = trimmed
-            r.updatedAt = Date()
-        } else {
-            let r = DailyIntention(date: todayDate, text: trimmed)
-            modelContext.insert(r)
-            record = r
+        do {
+            try DailyIntentionWriter.setTodayIntention(
+                trimmed,
+                modelContext: modelContext
+            )
+
+            let key = DailyIntentionWriter.todayKey()
+
+            let descriptor = FetchDescriptor<DailyIntention>(
+                predicate: #Predicate<DailyIntention> { $0.dateKey == key }
+            )
+
+            record = try modelContext.fetch(descriptor).first
+            text = trimmed
+            isEditing = false
+
+        } catch {
+            print("Failed to save daily intention: \(error)")
         }
-        try? modelContext.save()
-        persistToUserDefaults()
-        isEditing = false
     }
 
     private func clear() {

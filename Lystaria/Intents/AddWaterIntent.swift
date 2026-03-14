@@ -10,7 +10,7 @@ import AppIntents
 // MARK: - Add 8 fl oz
 
 struct Add8OzIntent: AppIntent {
-    static var title: LocalizedStringResource = "Add 8 fl oz of Water"
+    static var title: LocalizedStringResource = "Add 8 Fl Oz of Water"
     static var description = IntentDescription("Log 8 fl oz of water in Lystaria.")
     static var openAppWhenRun: Bool = false
 
@@ -24,7 +24,7 @@ struct Add8OzIntent: AppIntent {
 // MARK: - Add 20 fl oz
 
 struct Add20OzIntent: AppIntent {
-    static var title: LocalizedStringResource = "Add 20 fl oz of Water"
+    static var title: LocalizedStringResource = "Add 20 Fl Oz of Water"
     static var description = IntentDescription("Log 20 fl oz of water in Lystaria.")
     static var openAppWhenRun: Bool = false
 

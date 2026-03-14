@@ -10,8 +10,6 @@ import SwiftData
 import Foundation
 
 struct DashboardView: View {
-    // MARK: - Today Helpers
-
     // MARK: - Data Queries
 
     @Query(sort: \JournalEntry.createdAt, order: .reverse)
@@ -24,13 +22,17 @@ struct DashboardView: View {
     @Query(sort: \HabitLog.dayStart, order: .reverse)
     private var habitLogs: [HabitLog]
 
+
     @StateObject private var stepHealth = HealthKitManager.shared
     @StateObject private var waterHealth = WaterHealthKitManager.shared
     @StateObject private var onboarding = OnboardingManager()
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage("waterGoalFlOz") private var waterGoal: Double = 80
     @AppStorage("stepGoal") private var stepGoal: Double = 5000
+    @AppStorage("readingLastCheckIn") private var readingLastCheckInTimestamp: Double = 0
 
     @State private var showToolbox = false
+    @State private var momentumRefreshID = UUID()
 
     @AppStorage("dashboardTarotDayKey") private var tarotDayKey: String = ""
     @AppStorage("dashboardTarotId") private var tarotStoredId: String = ""
@@ -151,6 +153,17 @@ struct DashboardView: View {
         tarotStoredMessage = tip.message
     }
 
+    private func refreshMomentumHealthData() {
+        Task {
+            await stepHealth.fetchTodaySteps()
+            await waterHealth.fetchTodayWater()
+        }
+    }
+
+    private func refreshMomentumCard() {
+        momentumRefreshID = UUID()
+    }
+
 
     // MARK: - System Activation Checks
 
@@ -180,6 +193,12 @@ struct DashboardView: View {
         stepHealth.todaySteps > 0
     }
 
+    private var readingLoggedToday: Bool {
+        guard readingLastCheckInTimestamp > 0 else { return false }
+        let lastCheckIn = Date(timeIntervalSince1970: readingLastCheckInTimestamp)
+        return dashboardCalendar.isDate(lastCheckIn, inSameDayAs: Date())
+    }
+
 
     private var activatedCount: Int {
         [
@@ -187,7 +206,8 @@ struct DashboardView: View {
             moodLoggedToday,
             habitCompletedToday,
             waterLoggedToday,
-            stepsLoggedToday
+            stepsLoggedToday,
+            readingLoggedToday
         ]
         .filter { $0 }
         .count
@@ -311,15 +331,17 @@ struct DashboardView: View {
 
                         DailyMomentumCard(
                             activatedCount: activatedCount,
-                            totalCount: 5,
+                            totalCount: 6,
                             items: [
                                 .init(title: "Journal", systemImage: "notesfill", isActive: journaledToday),
                                 .init(title: "Mood", systemImage: "facefill", isActive: moodLoggedToday),
                                 .init(title: "Habits", systemImage: "goalsparkle", isActive: habitCompletedToday),
                                 .init(title: "Water", systemImage: "dropfill", isActive: waterLoggedToday),
-                                .init(title: "Steps", systemImage: "shoefill", isActive: stepsLoggedToday)
+                                .init(title: "Steps", systemImage: "shoefill", isActive: stepsLoggedToday),
+                                .init(title: "Reading", systemImage: "sparklebook", isActive: readingLoggedToday)
                             ]
                         )
+                        .id(momentumRefreshID)
 
                         DashboardTarotCard(
                             tip: currentDailyTarotTip,
@@ -348,11 +370,34 @@ struct DashboardView: View {
             .navigationDestination(isPresented: $showToolbox) {
                 ToolboxView()
             }
+            // MARK: - REFRESH MOMENTUM CARD HELPERS
             .onAppear {
-                Task {
-                    await stepHealth.fetchTodaySteps()
-                    await waterHealth.fetchTodayWater()
+                refreshMomentumHealthData()
+                refreshMomentumCard()
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                if newPhase == .active {
+                    refreshMomentumHealthData()
+                    refreshMomentumCard()
                 }
+            }
+            .onChange(of: journalEntries.count) { _, _ in
+                refreshMomentumCard()
+            }
+            .onChange(of: moodLogs.count) { _, _ in
+                refreshMomentumCard()
+            }
+            .onChange(of: habitLogs.count) { _, _ in
+                refreshMomentumCard()
+            }
+            .onChange(of: readingLastCheckInTimestamp) { _, _ in
+                refreshMomentumCard()
+            }
+            .onReceive(stepHealth.$todaySteps) { _ in
+                refreshMomentumCard()
+            }
+            .onReceive(waterHealth.$todayWaterFlOz) { _ in
+                refreshMomentumCard()
             }
             .overlayPreferenceValue(OnboardingTargetKey.self) { anchors in
                 ZStack {
@@ -410,7 +455,7 @@ private struct DashboardHoroscopeCard: View {
         GlassCard {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .center, spacing: 10) {
-                    Image("wandfill")
+                    Image("planetfill")
                         .renderingMode(.template)
                         .resizable()
                         .scaledToFit()

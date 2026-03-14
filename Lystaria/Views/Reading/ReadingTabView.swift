@@ -172,23 +172,18 @@ struct ReadingTabView: View {
 
                             HStack(spacing: 12) {
                                 Button {
-                                    if alreadyCheckedInToday {
-                                        print("[ReadingTabView] Check-in ignored (already checked in today)")
-                                        return
-                                    }
-
-                                    // 1. AppStorage — immediate, survives everything.
-                                    streakDays += 1
-                                    lastCheckInTimestamp = Date().timeIntervalSince1970
-                                    print("[ReadingTabView] Check-in: streak is now \(streakDays)")
-
-                                    // 2. SwiftData — kept in sync for server push.
-                                    if let record = syncRecord {
-                                        record.streakDays = streakDays
-                                        record.lastCheckInDate = Date()
-                                        record.updatedAt = Date()
-                                        record.needsSync = true
-                                        try? modelContext.save()
+                                    do {
+                                        let didCheckIn = try ReadingCheckInWriter.checkInToday(modelContext: modelContext)
+                                        if didCheckIn {
+                                            streakDays = UserDefaults.standard.integer(forKey: ReadingCheckInWriter.streakDaysKey)
+                                            lastCheckInTimestamp = UserDefaults.standard.double(forKey: ReadingCheckInWriter.lastCheckInKey)
+                                            loadOrCreateSyncRecord()
+                                            print("[ReadingTabView] Check-in: streak is now \(streakDays)")
+                                        } else {
+                                            print("[ReadingTabView] Check-in ignored (already checked in today)")
+                                        }
+                                    } catch {
+                                        print("[ReadingTabView] Failed to check in: \(error)")
                                     }
                                 } label: {
                                     HStack(spacing: 8) {

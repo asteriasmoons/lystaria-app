@@ -35,7 +35,7 @@ struct LystariaShortcuts: AppShortcutsProvider {
                     "Add 8 oz of water in \(.applicationName)",
                     "Log 8 oz water in \(.applicationName)"
                 ],
-                shortTitle: "Add 8 fl oz",
+                shortTitle: "Add 8 Fl Oz",
                 systemImageName: "drop.fill"
             ),
             AppShortcut(
@@ -44,7 +44,7 @@ struct LystariaShortcuts: AppShortcutsProvider {
                     "Add 20 oz of water in \(.applicationName)",
                     "Log 20 oz water in \(.applicationName)"
                 ],
-                shortTitle: "Add 20 fl oz",
+                shortTitle: "Add 20 Fl Oz",
                 systemImageName: "drop.fill"
             ),
             AppShortcut(
@@ -57,6 +57,36 @@ struct LystariaShortcuts: AppShortcutsProvider {
                 ],
                 shortTitle: "Add Custom Water",
                 systemImageName: "drop.fill"
+            ),
+            AppShortcut(
+                intent: CheckInReadingIntent(),
+                phrases: [
+                    "Check in reading in \(.applicationName)",
+                    "Check in for reading in \(.applicationName)",
+                    "Log reading streak in \(.applicationName)"
+                ],
+                shortTitle: "Reading Check-In",
+                systemImageName: "book.fill"
+            ),
+            AppShortcut(
+                intent: SetDailyIntentionIntent(),
+                phrases: [
+                    "Set daily intention in \(.applicationName)",
+                    "Set intention in \(.applicationName)",
+                    "Update daily intention in \(.applicationName)"
+                ],
+                shortTitle: "Daily Intention",
+                systemImageName: "sparkles"
+            ),
+            AppShortcut(
+                intent: AddChecklistItemIntent(),
+                phrases: [
+                    "Add checklist item in \(.applicationName)",
+                    "Add to checklist in \(.applicationName)",
+                    "New checklist item in \(.applicationName)"
+                ],
+                shortTitle: "Add Checklist Item",
+                systemImageName: "checklist"
             )
         ]
     }

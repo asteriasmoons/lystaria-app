@@ -22,10 +22,15 @@
 		CF13B6272F6442C6008D3CE9 /* JournalBookEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B6262F6442BC008D3CE9 /* JournalBookEntity.swift */; };
 		CF13B6292F6442F5008D3CE9 /* JournalEntryIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B6282F6442EE008D3CE9 /* JournalEntryIntent.swift */; };
 		CF13B62D2F644AD3008D3CE9 /* AddWaterIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B62C2F644ACE008D3CE9 /* AddWaterIntent.swift */; };
+		CF13B62F2F65AE26008D3CE9 /* ReadingCheckInWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B62E2F65AE1E008D3CE9 /* ReadingCheckInWriter.swift */; };
+		CF13B6312F65AE5C008D3CE9 /* CheckInReadingIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B6302F65AE55008D3CE9 /* CheckInReadingIntent.swift */; };
+		CF13B6332F65B563008D3CE9 /* DailyIntentionWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B6322F65B55A008D3CE9 /* DailyIntentionWriter.swift */; };
+		CF13B6352F65B582008D3CE9 /* SetDailyIntentionIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B6342F65B57A008D3CE9 /* SetDailyIntentionIntent.swift */; };
+		CF13B6372F65C044008D3CE9 /* ChecklistItemWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B6362F65C03B008D3CE9 /* ChecklistItemWriter.swift */; };
+		CF13B6392F65C064008D3CE9 /* ChecklistItemIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B6382F65C05E008D3CE9 /* ChecklistItemIntent.swift */; };
 		CF20513E2F5787DD006B71AA /* JournalBook.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF20513D2F5787D9006B71AA /* JournalBook.swift */; };
 		CF2051402F5788CE006B71AA /* JournalBookEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF20513F2F5788C6006B71AA /* JournalBookEditorSheet.swift */; };
 		CF2051422F5788F9006B71AA /* Color+Hex.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF2051412F5788F3006B71AA /* Color+Hex.swift */; };
-		CF2051442F5789D4006B71AA /* DailyIntentionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF2051432F5789D4006B71AA /* DailyIntentionCard.swift */; };
 		CF2051462F578C64006B71AA /* DailyIntentionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF2051452F578C64006B71AA /* DailyIntentionView.swift */; };
 		CF2051482F578D59006B71AA /* JournalEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF2051472F578D59006B71AA /* JournalEditorSheet.swift */; };
 		CF20514A2F578DFB006B71AA /* JournalCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF2051492F578DFB006B71AA /* JournalCard.swift */; };
@@ -153,10 +158,15 @@
 		CF13B6262F6442BC008D3CE9 /* JournalBookEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalBookEntity.swift; sourceTree = "<group>"; };
 		CF13B6282F6442EE008D3CE9 /* JournalEntryIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalEntryIntent.swift; sourceTree = "<group>"; };
 		CF13B62C2F644ACE008D3CE9 /* AddWaterIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddWaterIntent.swift; sourceTree = "<group>"; };
+		CF13B62E2F65AE1E008D3CE9 /* ReadingCheckInWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingCheckInWriter.swift; sourceTree = "<group>"; };
+		CF13B6302F65AE55008D3CE9 /* CheckInReadingIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInReadingIntent.swift; sourceTree = "<group>"; };
+		CF13B6322F65B55A008D3CE9 /* DailyIntentionWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyIntentionWriter.swift; sourceTree = "<group>"; };
+		CF13B6342F65B57A008D3CE9 /* SetDailyIntentionIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetDailyIntentionIntent.swift; sourceTree = "<group>"; };
+		CF13B6362F65C03B008D3CE9 /* ChecklistItemWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChecklistItemWriter.swift; sourceTree = "<group>"; };
+		CF13B6382F65C05E008D3CE9 /* ChecklistItemIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChecklistItemIntent.swift; sourceTree = "<group>"; };
 		CF20513D2F5787D9006B71AA /* JournalBook.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalBook.swift; sourceTree = "<group>"; };
 		CF20513F2F5788C6006B71AA /* JournalBookEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalBookEditorSheet.swift; sourceTree = "<group>"; };
 		CF2051412F5788F3006B71AA /* Color+Hex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Hex.swift"; sourceTree = "<group>"; };
-		CF2051432F5789D4006B71AA /* DailyIntentionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyIntentionCard.swift; sourceTree = "<group>"; };
 		CF2051452F578C64006B71AA /* DailyIntentionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyIntentionView.swift; sourceTree = "<group>"; };
 		CF2051472F578D59006B71AA /* JournalEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalEditorSheet.swift; sourceTree = "<group>"; };
 		CF2051492F578DFB006B71AA /* JournalCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalCard.swift; sourceTree = "<group>"; };
@@ -288,6 +298,9 @@
 		CF13B6212F6441F7008D3CE9 /* Intents */ = {
 			isa = PBXGroup;
 			children = (
+				CF13B6382F65C05E008D3CE9 /* ChecklistItemIntent.swift */,
+				CF13B6342F65B57A008D3CE9 /* SetDailyIntentionIntent.swift */,
+				CF13B6302F65AE55008D3CE9 /* CheckInReadingIntent.swift */,
 				CF13B62C2F644ACE008D3CE9 /* AddWaterIntent.swift */,
 				CF13B6282F6442EE008D3CE9 /* JournalEntryIntent.swift */,
 				CF13B61D2F63BA55008D3CE9 /* LogMoodIntent.swift */,
@@ -298,6 +311,9 @@
 		CF13B6222F644205008D3CE9 /* Writers */ = {
 			isa = PBXGroup;
 			children = (
+				CF13B6362F65C03B008D3CE9 /* ChecklistItemWriter.swift */,
+				CF13B6322F65B55A008D3CE9 /* DailyIntentionWriter.swift */,
+				CF13B62E2F65AE1E008D3CE9 /* ReadingCheckInWriter.swift */,
 				CF13B6232F644262008D3CE9 /* JournalEntryWriter.swift */,
 				CF13B61A2F63B9E7008D3CE9 /* MoodLogWriter.swift */,
 			);
@@ -453,8 +469,6 @@
 				CF2051412F5788F3006B71AA /* Color+Hex.swift */,
 				CF20513F2F5788C6006B71AA /* JournalBookEditorSheet.swift */,
 				CF8D83592F5129A50092FC98 /* JournalTabView.swift */,
-				CF8D836B2F53AA600092FC98 /* DailyIntention.swift */,
-				CF2051432F5789D4006B71AA /* DailyIntentionCard.swift */,
 				CF2051452F578C64006B71AA /* DailyIntentionView.swift */,
 				CF2051472F578D59006B71AA /* JournalEditorSheet.swift */,
 				CF2051492F578DFB006B71AA /* JournalCard.swift */,
@@ -551,6 +565,7 @@
 				CF8D832A2F50A4940092FC98 /* Reminder.swift */,
 				CF8D832B2F50A4940092FC98 /* UserSettings.swift */,
 				CF8D836D2F53B1170092FC98 /* ReadingStats.swift */,
+				CF8D836B2F53AA600092FC98 /* DailyIntention.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -777,6 +792,7 @@
 				CF0A09CF2F5C8C5500401658 /* BookSummaryService.swift in Sources */,
 				CF8421A02F607BD80069F12F /* OnboardingPages.swift in Sources */,
 				CF8421B82F6266380069F12F /* DashboardView.swift in Sources */,
+				CF13B6312F65AE5C008D3CE9 /* CheckInReadingIntent.swift in Sources */,
 				CF8D835C2F5129B10092FC98 /* CalendarTabView.swift in Sources */,
 				CF8421C42F632DCB0069F12F /* HoroscopeService.swift in Sources */,
 				CF13B6182F63B996008D3CE9 /* MoodIntentEnum.swift in Sources */,
@@ -785,6 +801,7 @@
 				CF8421C92F638EAD0069F12F /* KanbanView.swift in Sources */,
 				CF13B6242F644268008D3CE9 /* JournalEntryWriter.swift in Sources */,
 				CF8D836E2F53B1170092FC98 /* ReadingStats.swift in Sources */,
+				CF13B62F2F65AE26008D3CE9 /* ReadingCheckInWriter.swift in Sources */,
 				CF2051462F578C64006B71AA /* DailyIntentionView.swift in Sources */,
 				CF84217C2F5FA7580069F12F /* HealthKitManager.swift in Sources */,
 				CF8D83822F548EAC0092FC98 /* ProfileTabView.swift in Sources */,
@@ -812,20 +829,22 @@
 				CF8D83302F50A4940092FC98 /* JournalEntry.swift in Sources */,
 				CF8D83562F5125F80092FC98 /* ContentView.swift in Sources */,
 				CF20513E2F5787DD006B71AA /* JournalBook.swift in Sources */,
+				CF13B6332F65B563008D3CE9 /* DailyIntentionWriter.swift in Sources */,
 				CF8D83522F51256D0092FC98 /* HabitsView.swift in Sources */,
 				CF8D83312F50A4940092FC98 /* AuthUser.swift in Sources */,
 				CF8D83542F5125820092FC98 /* ChecklistsView.swift in Sources */,
 				CF0A09D32F5C987300401658 /* BookRecommendationsService.swift in Sources */,
 				CF0A09D52F5C989400401658 /* BookRecommendationsSheet.swift in Sources */,
 				CF20514A2F578DFB006B71AA /* JournalCard.swift in Sources */,
+				CF13B6372F65C044008D3CE9 /* ChecklistItemWriter.swift in Sources */,
 				CF8D83392F50A4A40092FC98 /* LystariaApp.swift in Sources */,
 				CF13B6272F6442C6008D3CE9 /* JournalBookEntity.swift in Sources */,
 				CF8D83322F50A4940092FC98 /* ChecklistItem.swift in Sources */,
-				CF2051442F5789D4006B71AA /* DailyIntentionCard.swift in Sources */,
 				CF13B62D2F644AD3008D3CE9 /* AddWaterIntent.swift in Sources */,
 				CF8D833F2F50D5EE0092FC98 /* AppState.swift in Sources */,
 				CF0A09D72F5CA7A200401658 /* JournalPromptService.swift in Sources */,
 				CF8D83332F50A4940092FC98 /* HabitLog.swift in Sources */,
+				CF13B6392F65C064008D3CE9 /* ChecklistItemIntent.swift in Sources */,
 				CF8421832F5FBD8B0069F12F /* WaterHealthKitManager.swift in Sources */,
 				CF8421962F607B100069F12F /* BookSyncTest.swift in Sources */,
 				CF8421C72F636DD00069F12F /* ToolboxView.swift in Sources */,
@@ -847,6 +866,7 @@
 				CF8421BA2F631BE90069F12F /* DailyTarot.swift in Sources */,
 				CF8421BE2F6320590069F12F /* Tarot.swift in Sources */,
 				CF2051482F578D59006B71AA /* JournalEditorSheet.swift in Sources */,
+				CF13B6352F65B582008D3CE9 /* SetDailyIntentionIntent.swift in Sources */,
 				CF8D837A2F53E0C40092FC98 /* GoogleAuthTest.swift in Sources */,
 				CF8421C02F6329610069F12F /* DailyHoroscope.swift in Sources */,
 			);
