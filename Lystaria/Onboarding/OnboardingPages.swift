@@ -36,6 +36,17 @@ struct OnboardingPages {
         ]
     )
 
+    static let dashboard = OnboardingPage(
+        pageID: "onboarding_dashboard",
+        steps: [
+            OnboardingStep(
+                targetID: "toolboxIcon",
+                title: "Toolbox",
+                message: "Tap the pause icon to open the Toolbox. Inside you'll find a breathing timer with a calming animation to help you reset, and a burn card where you can type anything weighing on you and press \"Burn\" to watch it disappear in a flame."
+            )
+        ]
+    )
+
     static let journal = OnboardingPage(
         pageID: "onboarding_journal",
         steps: [

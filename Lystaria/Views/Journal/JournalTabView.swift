@@ -4,11 +4,12 @@
 import SwiftUI
 import SwiftData
 import Combine
+import Supabase
 
 struct JournalTabView: View {
     @Environment(\.modelContext) private var modelContext
 
-    @Query(sort: \JournalBook.createdAt, order: .reverse) private var books: [JournalBook]
+    @Query(filter: #Predicate<JournalBook> { $0.deletedAt == nil }, sort: \JournalBook.createdAt, order: .reverse) private var books: [JournalBook]
     @Query(filter: #Predicate<JournalEntry> { $0.deletedAt == nil }, sort: \JournalEntry.createdAt, order: .reverse) private var allEntries: [JournalEntry] // for migration + counts
 
     @State private var showBookEditor = false
@@ -58,14 +59,18 @@ struct JournalTabView: View {
                     .preferredColorScheme(.dark)
             }
             .overlayPreferenceValue(OnboardingTargetKey.self) { anchors in
-                OnboardingOverlay(anchors: anchors)
-                    .environmentObject(onboarding)
+                ZStack {
+                    OnboardingOverlay(anchors: anchors)
+                        .environmentObject(onboarding)
+                }
+                .task(id: anchors.count) {
+                    if anchors.count > 0 {
+                        onboarding.start(page: OnboardingPages.journal)
+                    }
+                }
             }
             .onAppear {
                 migrateEntriesIntoDefaultBookIfNeeded()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    onboarding.start(page: OnboardingPages.journal)
-                }
             }
             // Prevent the NavigationStack default backgrounds from covering the custom background
             .toolbarBackground(.hidden, for: .navigationBar)
@@ -595,18 +600,24 @@ struct JournalBookCard: View {
 struct JournalBookDetailView: View {
     @Environment(\.modelContext) private var modelContext
     let book: JournalBook
-
+    
     @Query private var entries: [JournalEntry]
-
+    
     @State private var showEditor = false
     @State private var showPromptSheet = false
     @State private var editingEntry: JournalEntry? = nil
     @State private var viewerEntry: JournalEntry? = nil
     @State private var tagFilter: String? = nil
-
+    
+    // Prompt overlay state
+    @State private var promptText: String = ""
+    @State private var promptLoading = false
+    @State private var promptError: String?
+    @State private var promptShowCopied = false
+    
     init(book: JournalBook) {
         self.book = book
-
+        
         let bookID = book.persistentModelID
         _entries = Query(
             filter: #Predicate<JournalEntry> { entry in
@@ -617,12 +628,12 @@ struct JournalBookDetailView: View {
             order: .reverse
         )
     }
-
+    
     private var filteredEntries: [JournalEntry] {
         guard let tag = tagFilter, !tag.isEmpty else { return entries }
         return entries.filter { $0.tags.contains(tag) }
     }
-
+    
     var body: some View {
         ZStack {
             LystariaBackground()
@@ -633,20 +644,20 @@ struct JournalBookDetailView: View {
                         header
                         // Breathing room under the header
                         Spacer().frame(height: 14)
-
+                        
                         if let tag = tagFilter {
                             tagFilterBar(tag)
                         } else {
                             Spacer().frame(height: 6)
                         }
-
+                        
                         entriesList
                             .padding(.top, 10)
                     }
                     .padding(.bottom, 120)
                 }
                 .scrollIndicators(.hidden)
-
+                
                 // Floating "+" adds ENTRY to this book
                 FloatingActionButton {
                     editingEntry = nil
@@ -660,10 +671,7 @@ struct JournalBookDetailView: View {
                 JournalEditorSheet(entry: editingEntry, book: book)
                     .preferredColorScheme(.dark)
             }
-            .sheet(isPresented: $showPromptSheet) {
-                JournalPromptSheet()
-                    .preferredColorScheme(.dark)
-            }
+            
             .sheet(item: $viewerEntry) { entry in
                 JournalPreviewSheet(
                     entry: entry,
@@ -684,9 +692,17 @@ struct JournalBookDetailView: View {
                 )
                 .preferredColorScheme(.dark)
             }
+            
+            // MARK: - Journal Prompt Overlay
+            if showPromptSheet {
+                journalPromptOverlay
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .zIndex(10)
+            }
         }
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showPromptSheet)
     }
-
+    
     private var header: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
@@ -694,16 +710,16 @@ struct JournalBookDetailView: View {
                     .fill(Color(hex: book.coverHex))
                     .frame(width: 42, height: 42)
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(LColors.glassBorder, lineWidth: 1))
-
+                
                 VStack(alignment: .leading, spacing: 2) {
                     GradientTitle(text: book.title, font: .system(size: 20, weight: .bold))
                     Text("Entries")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(LColors.textSecondary)
                 }
-
+                
                 Spacer()
-
+                
                 Button {
                     showPromptSheet = true
                 } label: {
@@ -723,25 +739,25 @@ struct JournalBookDetailView: View {
             }
             .padding(.horizontal, LSpacing.pageHorizontal)
             .padding(.vertical, 14)
-
+            
             Rectangle().fill(LColors.glassBorder).frame(height: 1)
         }
     }
-
+    
     private func tagFilterBar(_ tag: String) -> some View {
         HStack {
             HStack(spacing: 8) {
                 Image(systemName: "tag.fill")
                     .font(.system(size: 12))
                     .foregroundStyle(LColors.textSecondary)
-
+                
                 Text("Filtered by #\(tag)")
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(LColors.textPrimary)
             }
-
+            
             Spacer()
-
+            
             Button { withAnimation { tagFilter = nil } } label: {
                 Text("Clear")
                     .font(.system(size: 12, weight: .bold))
@@ -760,7 +776,7 @@ struct JournalBookDetailView: View {
         .padding(.horizontal, LSpacing.pageHorizontal)
         .padding(.top, 14).padding(.bottom, 8)
     }
-
+    
     private var entriesList: some View {
         VStack(spacing: 12) {
             if filteredEntries.isEmpty {
@@ -779,4 +795,168 @@ struct JournalBookDetailView: View {
         }
         .padding(.top, 2)
     }
+    
+    // MARK: - Journal Prompt Overlay
+
+    private var journalPromptOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.55)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        showPromptSheet = false
+                    }
+                }
+
+            VStack(spacing: 20) {
+                GradientTitle(
+                    text: "Journal Prompt",
+                    font: .system(size: 22, weight: .bold)
+                )
+
+                if promptLoading {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .tint(.white)
+                        .padding(.vertical, 12)
+                } else if let error = promptError {
+                    Text(error)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                } else if !promptText.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(alignment: .center) {
+                            Text("Prompt")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(LColors.textSecondary)
+
+                            Spacer()
+
+                            Button {
+                                UIPasteboard.general.string = promptText
+                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                    promptShowCopied = true
+                                }
+                                Task {
+                                    try? await Task.sleep(for: .seconds(2))
+                                    withAnimation(.easeOut(duration: 0.3)) {
+                                        promptShowCopied = false
+                                    }
+                                }
+                            } label: {
+                                Image("copyfill")
+                                    .renderingMode(.template)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 16, height: 16)
+                                    .foregroundStyle(.white)
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        Text(promptText)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(LColors.textPrimary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(14)
+                    .background(Color.white.opacity(0.07))
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .stroke(LColors.glassBorder, lineWidth: 1)
+                    )
+                }
+
+                Button {
+                    Task { await generatePrompt() }
+                } label: {
+                    Text("Generate Prompt")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(LGradients.blue)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        showPromptSheet = false
+                    }
+                } label: {
+                    Text("Close")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(LColors.glassBorder, lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(24)
+            .frame(maxWidth: 360)
+            .background(
+                ZStack {
+                    LGradients.blue
+                        .clipShape(RoundedRectangle(cornerRadius: 24))
+
+                    GradientOverlayBackground()
+                        .clipShape(RoundedRectangle(cornerRadius: 24))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 24)
+                                .stroke(LColors.glassBorder, lineWidth: 1)
+                        )
+                }
+                .shadow(color: .black.opacity(0.4), radius: 30, y: 12)
+            )
+            .padding(.horizontal, 28)
+            .overlay(alignment: .bottom) {
+                if promptShowCopied {
+                    Text("Copied to Clipboard")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 10)
+                        .background(LGradients.blue)
+                        .clipShape(Capsule())
+                        .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
+                        .padding(.bottom, 18)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+        }
+    }
+
+    private func generatePrompt() async {
+        do {
+            await MainActor.run {
+                promptLoading = true
+                promptError = nil
+            }
+
+            let session = try await SupabaseManager.shared.client.auth.session
+            let userId = session.user.id.uuidString
+            let response = try await JournalPromptService.shared.generatePrompt(userId: userId)
+
+            await MainActor.run {
+                promptText = response.prompt
+                promptLoading = false
+            }
+        } catch {
+            await MainActor.run {
+                promptLoading = false
+                promptError = error.localizedDescription
+            }
+        }
+    }
 }
+

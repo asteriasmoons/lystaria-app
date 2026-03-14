@@ -98,6 +98,11 @@ final class LystariaReminder {
         self.needsSync = true
     }
 
+    // MARK: - Kanban
+    var kanbanColumn: KanbanColumn?
+    var kanbanSortOrder: Int = 0
+    var isKanbanDone: Bool = false
+
     // MARK: - Optional Link (used for Habits, etc.)
     var linkedKindRaw: String?     // e.g. "habit"
     var linkedHabitId: UUID?       // Habit.id

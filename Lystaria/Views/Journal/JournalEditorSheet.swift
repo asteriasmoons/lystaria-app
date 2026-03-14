@@ -1,3 +1,10 @@
+//
+// JournalEditorSheet.swift
+//
+// Created by Asteria Moon
+//
+
+
 import SwiftUI
 import SwiftData
 

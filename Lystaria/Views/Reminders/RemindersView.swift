@@ -13,6 +13,7 @@ struct RemindersView: View {
     @State private var showNewReminder = false
     @State private var filter = "all"
     @State private var visibleCount: Int = 5
+    @State private var showKanban = false
     
     // Onboarding
     @StateObject private var onboarding = OnboardingManager()
@@ -53,66 +54,105 @@ struct RemindersView: View {
                     VStack(alignment: .leading, spacing: 18) {
 
                         // Header
-                        HStack {
-                            GradientTitle(text: greeting, font: .title.bold())
-                            Spacer()
+                        VStack(spacing: 0) {
+                            HStack {
+                                GradientTitle(text: greeting, font: .title.bold())
+                                Spacer()
 
-                            HStack(spacing: 8) {
-                                NavigationLink {
-                                    StepCountView()
-                                        .preferredColorScheme(.dark)
-                                } label: {
-                                    ZStack {
-                                        Circle()
-                                            .fill(Color.white.opacity(0.08))
-                                            .overlay(
-                                                Circle().stroke(LColors.glassBorder, lineWidth: 1)
-                                            )
-                                            .frame(width: 34, height: 34)
+                                HStack(spacing: 8) {
+                                    Button {
+                                        showNewReminder = true
+                                    } label: {
+                                        ZStack {
+                                            Circle()
+                                                .fill(Color.white.opacity(0.08))
+                                                .overlay(
+                                                    Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                                                )
+                                                .frame(width: 34, height: 34)
 
-                                        Image("shoefill")
-                                            .renderingMode(.template)
-                                            .resizable()
-                                            .scaledToFit()
-                                            .frame(width: 16, height: 16)
-                                            .foregroundColor(.white)
+                                            Image(systemName: "plus")
+                                                .font(.system(size: 15, weight: .semibold))
+                                                .foregroundStyle(.white)
+                                        }
                                     }
-                                }
-                                .buttonStyle(.plain)
-                                .onboardingTarget("stepsIcon")
+                                    .buttonStyle(.plain)
 
-                                NavigationLink {
-                                    WaterTrackingView()
-                                        .preferredColorScheme(.dark)
-                                } label: {
-                                    ZStack {
-                                        Circle()
-                                            .fill(Color.white.opacity(0.08))
-                                            .overlay(
-                                                Circle().stroke(LColors.glassBorder, lineWidth: 1)
-                                            )
-                                            .frame(width: 34, height: 34)
+                                    NavigationLink {
+                                        StepCountView()
+                                            .preferredColorScheme(.dark)
+                                    } label: {
+                                        ZStack {
+                                            Circle()
+                                                .fill(Color.white.opacity(0.08))
+                                                .overlay(
+                                                    Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                                                )
+                                                .frame(width: 34, height: 34)
 
-                                        Image("glassfill")
-                                            .renderingMode(.template)
-                                            .resizable()
-                                            .scaledToFit()
-                                            .frame(width: 16, height: 16)
-                                            .foregroundColor(.white)
+                                            Image("shoefill")
+                                                .renderingMode(.template)
+                                                .resizable()
+                                                .scaledToFit()
+                                                .frame(width: 16, height: 16)
+                                                .foregroundColor(.white)
+                                        }
                                     }
-                                }
-                                .buttonStyle(.plain)
-                                .onboardingTarget("waterIcon")
+                                    .buttonStyle(.plain)
+                                    .onboardingTarget("stepsIcon")
 
-                                Button { showNewReminder = true } label: {
-                                    Image(systemName: "plus.circle.fill")
-                                        .font(.title2)
-                                        .foregroundStyle(LColors.accent)
+                                    NavigationLink {
+                                        WaterTrackingView()
+                                            .preferredColorScheme(.dark)
+                                    } label: {
+                                        ZStack {
+                                            Circle()
+                                                .fill(Color.white.opacity(0.08))
+                                                .overlay(
+                                                    Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                                                )
+                                                .frame(width: 34, height: 34)
+
+                                            Image("glassfill")
+                                                .renderingMode(.template)
+                                                .resizable()
+                                                .scaledToFit()
+                                                .frame(width: 16, height: 16)
+                                                .foregroundColor(.white)
+                                        }
+                                    }
+                                    .buttonStyle(.plain)
+                                    .onboardingTarget("waterIcon")
+
+                                    Button {
+                                        showKanban = true
+                                    } label: {
+                                        ZStack {
+                                            Circle()
+                                                .fill(Color.white.opacity(0.08))
+                                                .overlay(
+                                                    Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                                                )
+                                                .frame(width: 34, height: 34)
+
+                                            Image("blocksfill")
+                                                .renderingMode(.template)
+                                                .resizable()
+                                                .scaledToFit()
+                                                .frame(width: 16, height: 16)
+                                                .foregroundStyle(.white)
+                                        }
+                                    }
+                                    .buttonStyle(.plain)
                                 }
-                                .buttonStyle(.plain)
                             }
+                            .padding(.top, 24)
+
+                            Rectangle()
+                                .fill(LColors.glassBorder)
+                                .frame(height: 1)
+                                .padding(.top, 12)
                         }
-                        .padding(.top, 24)
 
 
                         // Filters
@@ -178,26 +218,10 @@ struct RemindersView: View {
                                     .padding(.top, 2)
 
                                     if visibleCount < filtered.count {
-                                        Button {
+                                        LoadMoreButton {
                                             visibleCount += 5
-                                        } label: {
-                                            HStack(spacing: 8) {
-                                                Text("Load more")
-                                                Image(systemName: "chevron.down")
-                                            }
-                                            .font(.system(size: 14, weight: .semibold))
-                                            .foregroundStyle(.white)
-                                            .frame(maxWidth: .infinity)
-                                            .padding(.vertical, 14)
-                                            .background(Color.white.opacity(0.16))
-                                            .clipShape(RoundedRectangle(cornerRadius: 14))
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 14)
-                                                    .stroke(Color.white.opacity(0.22), lineWidth: 1)
-                                            )
                                         }
-                                        .buttonStyle(.plain)
-                                        .padding(.top, 6)
+                                        .padding(.top, 4)
                                     }
                                 }
                             }
@@ -210,6 +234,7 @@ struct RemindersView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .clipped()
+                
 
                 // ── Completion toast ──────────────────────────────
                 if let msg = toastMessage {
@@ -235,11 +260,22 @@ struct RemindersView: View {
             }
             .animation(.spring(response: 0.4, dampingFraction: 0.8), value: toastMessage)
             .overlayPreferenceValue(OnboardingTargetKey.self) { anchors in
-                OnboardingOverlay(anchors: anchors)
-                    .environmentObject(onboarding)
+                ZStack {
+                    OnboardingOverlay(anchors: anchors)
+                        .environmentObject(onboarding)
+                }
+                .task(id: anchors.count) {
+                    if anchors.count > 0 {
+                        onboarding.start(page: OnboardingPages.reminders)
+                    }
+                }
             }
             .sheet(isPresented: $showNewReminder) {
                 NewReminderSheet().preferredColorScheme(.dark)
+            }
+            .navigationDestination(isPresented: $showKanban) {
+                KanbanView()
+                    .preferredColorScheme(.dark)
             }
             // Use a boolean-driven sheet so we DO NOT depend on Identifiable behavior.
             .sheet(
@@ -286,10 +322,7 @@ struct RemindersView: View {
             }
             .onAppear {
                 visibleCount = 5
-
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    onboarding.start(page: OnboardingPages.reminders)
-                }
+                showKanban = false
             }
         }
     }
@@ -439,9 +472,23 @@ struct ReminderCard: View {
     let onEdit: () -> Void
     let onDelete: () -> Void
 
-    private var scheduleLabel: String { reminder.schedule?.kind.label ?? "Once" }
+    private var scheduleLabel: String {
+        guard let schedule = reminder.schedule else { return "Once" }
+
+        if schedule.kind == .daily, (schedule.interval ?? 1) > 1 {
+            return "Custom"
+        }
+
+        return schedule.kind.label
+    }
 
     private var badgeColor: Color {
+        if let schedule = reminder.schedule,
+           schedule.kind == .daily,
+           (schedule.interval ?? 1) > 1 {
+            return Color(red: 201/255, green: 44/255, blue: 194/255) // #c92cc2
+        }
+
         switch reminder.schedule?.kind ?? .once {
         case .once: return LColors.badgeOnce
         case .daily: return LColors.badgeDaily
@@ -607,7 +654,7 @@ struct ReminderCard: View {
                     HStack(spacing: 10) {
                         LButton(title: "Snooze", icon: "clock.arrow.circlepath", style: .secondary) { onSnooze() }
                         LButton(title: "Edit", icon: "pencil", style: .secondary) { onEdit() }
-                        LButton(title: "Delete", icon: "trash", style: .gradient) { onDelete() }
+                        GradientCapsuleButton(title: "Delete", icon: "trashfill") { onDelete() }
                     }
                 }
             }
@@ -1786,4 +1833,3 @@ enum ReminderCompute {
         }
     }
 }
-

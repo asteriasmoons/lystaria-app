@@ -342,9 +342,6 @@ struct CalendarTabView: View {
             // FIX 5: Build the map on appear and whenever allEvents or the month changes.
             .onAppear {
                 rebuildEventsByDay()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    onboarding.start(page: OnboardingPages.calendar)
-                }
             }
             .onChange(of: allEvents) { _, _ in
                 rebuildEventsByDay()
@@ -363,8 +360,15 @@ struct CalendarTabView: View {
                 .preferredColorScheme(.dark)
             }
             .overlayPreferenceValue(OnboardingTargetKey.self) { anchors in
-                OnboardingOverlay(anchors: anchors)
-                    .environmentObject(onboarding)
+                ZStack {
+                    OnboardingOverlay(anchors: anchors)
+                        .environmentObject(onboarding)
+                }
+                .task(id: anchors.count) {
+                    if anchors.count > 0 {
+                        onboarding.start(page: OnboardingPages.calendar)
+                    }
+                }
             }
         }
     }
@@ -928,68 +932,57 @@ struct EventSheet: View {
                                     .pickerStyle(.menu)
                                 }
 
-                                if recurrenceFreq == .weekly {
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        Text("WEEKLY INTERVAL")
-                                            .font(.system(size: 13, weight: .semibold))
-                                            .foregroundStyle(LColors.textSecondary)
-                                            .tracking(0.5)
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("INTERVAL")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(LColors.textSecondary)
+                                        .tracking(0.5)
 
-                                        HStack(spacing: 10) {
-                                            Button {
-                                                recurrenceInterval = max(1, recurrenceInterval - 1)
-                                            } label: {
-                                                Image(systemName: "minus")
-                                                    .font(.system(size: 13, weight: .bold))
-                                                    .foregroundStyle(.white)
-                                                    .frame(width: 34, height: 34)
-                                                    .background(Color.white.opacity(0.08))
-                                                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                                                    .overlay(
-                                                        RoundedRectangle(cornerRadius: 10)
-                                                            .stroke(LColors.glassBorder, lineWidth: 1)
-                                                    )
-                                            }
-                                            .buttonStyle(.plain)
-
-                                            Text("Every \(recurrenceInterval) \(recurrenceInterval == 1 ? "week" : "weeks")")
-                                                .font(.system(size: 14, weight: .semibold))
-                                                .foregroundStyle(LColors.textPrimary)
-                                                .frame(maxWidth: .infinity, alignment: .center)
-                                                .padding(.horizontal, 12)
-                                                .padding(.vertical, 10)
+                                    HStack(spacing: 10) {
+                                        Button {
+                                            recurrenceInterval = max(1, recurrenceInterval - 1)
+                                        } label: {
+                                            Image(systemName: "minus")
+                                                .font(.system(size: 13, weight: .bold))
+                                                .foregroundStyle(.white)
+                                                .frame(width: 34, height: 34)
                                                 .background(Color.white.opacity(0.08))
-                                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                                .clipShape(RoundedRectangle(cornerRadius: 10))
                                                 .overlay(
-                                                    RoundedRectangle(cornerRadius: 12)
+                                                    RoundedRectangle(cornerRadius: 10)
                                                         .stroke(LColors.glassBorder, lineWidth: 1)
                                                 )
+                                        }
+                                        .buttonStyle(.plain)
 
-                                            Button {
-                                                recurrenceInterval = min(52, recurrenceInterval + 1)
-                                            } label: {
-                                                Image(systemName: "plus")
-                                                    .font(.system(size: 13, weight: .bold))
-                                                    .foregroundStyle(.white)
-                                                    .frame(width: 34, height: 34)
-                                                    .background(Color.white.opacity(0.08))
-                                                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                                                    .overlay(
-                                                        RoundedRectangle(cornerRadius: 10)
-                                                            .stroke(LColors.glassBorder, lineWidth: 1)
-                                                    )
-                                            }
-                                            .buttonStyle(.plain)
+                                        Text("Every \(recurrenceInterval) \(recurrenceInterval == 1 ? unitLabel(for: recurrenceFreq) : unitLabel(for: recurrenceFreq) + "s")")
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundStyle(LColors.textPrimary)
+                                            .frame(maxWidth: .infinity, alignment: .center)
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 10)
+                                            .background(Color.white.opacity(0.08))
+                                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 12)
+                                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                            )
+
+                                        Button {
+                                            recurrenceInterval = min(365, recurrenceInterval + 1)
+                                        } label: {
+                                            Image(systemName: "plus")
+                                                .font(.system(size: 13, weight: .bold))
+                                                .foregroundStyle(.white)
+                                                .frame(width: 34, height: 34)
+                                                .background(Color.white.opacity(0.08))
+                                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 10)
+                                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                                )
                                         }
-                                    }
-                                } else {
-                                    CalendarControlRow(label: "Interval") {
-                                        Stepper(value: $recurrenceInterval, in: 1...52, step: 1) {
-                                            Text("Every \(recurrenceInterval) \(recurrenceInterval == 1 ? unitLabel(for: recurrenceFreq) : unitLabel(for: recurrenceFreq) + "s")")
-                                                .font(.system(size: 14, weight: .semibold))
-                                                .foregroundStyle(LColors.textPrimary)
-                                        }
-                                        .labelsHidden()
+                                        .buttonStyle(.plain)
                                     }
                                 }
 

@@ -7,66 +7,102 @@ import SwiftData
 struct MoodLoggerView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-
+    
     // Latest logs for display
     @Query(sort: \MoodLog.createdAt, order: .reverse) private var logs: [MoodLog]
-
+    
     // UI state
     @State private var selectedMoods: Set<String> = []
     @State private var selectedActivities: Set<String> = []
     @State private var note: String = ""
-
+    
     @State private var moodsExpanded: Bool = false
     @State private var activitiesExpanded: Bool = false
-
+    
     @State private var selectedTab: MoodLogTab = .today
     @State private var historyVisibleCount: Int = 4
-
+    @State private var logPendingDelete: MoodLog?
+    @State private var showDeleteConfirmation: Bool = false
+    
     private var latestLog: MoodLog? { logs.first }
-
+    
     private var visibleHistoryLogs: [MoodLog] {
         Array(logs.prefix(historyVisibleCount))
     }
-
+    
     private var canLoadMoreHistory: Bool {
         logs.count > historyVisibleCount
     }
-
+    
     private var shouldShowMoodInsights: Bool {
         logs.count >= 3
     }
-
+    
     private var averageMoodScore: Double {
         guard !logs.isEmpty else { return 0 }
         let total = logs.reduce(0.0) { $0 + $1.score }
         return total / Double(logs.count)
     }
-
+    
     private var mostPickedMoodKey: String? {
-        let counts = logs.flatMap(\.moods).reduce(into: [String: Int]()) { partial, mood in
-            partial[mood, default: 0] += 1
+        var stats: [String: (count: Int, latestDate: Date)] = [:]
+
+        for log in logs {
+            for mood in log.moods {
+                if let existing = stats[mood] {
+                    stats[mood] = (
+                        count: existing.count + 1,
+                        latestDate: max(existing.latestDate, log.createdAt)
+                    )
+                } else {
+                    stats[mood] = (count: 1, latestDate: log.createdAt)
+                }
+            }
         }
-        return counts.max { lhs, rhs in
-            if lhs.value == rhs.value { return lhs.key > rhs.key }
-            return lhs.value < rhs.value
+
+        return stats.max { lhs, rhs in
+            if lhs.value.count != rhs.value.count {
+                return lhs.value.count < rhs.value.count
+            }
+            if lhs.value.latestDate != rhs.value.latestDate {
+                return lhs.value.latestDate < rhs.value.latestDate
+            }
+            return lhs.key > rhs.key
         }?.key
     }
-
+    
     private var mostPickedActivityKey: String? {
-        let counts = logs.flatMap(\.activities).reduce(into: [String: Int]()) { partial, activity in
-            partial[activity, default: 0] += 1
+        var stats: [String: (count: Int, latestDate: Date)] = [:]
+
+        for log in logs {
+            for activity in log.activities {
+                if let existing = stats[activity] {
+                    stats[activity] = (
+                        count: existing.count + 1,
+                        latestDate: max(existing.latestDate, log.createdAt)
+                    )
+                } else {
+                    stats[activity] = (count: 1, latestDate: log.createdAt)
+                }
+            }
         }
-        return counts.max { lhs, rhs in
-            if lhs.value == rhs.value { return lhs.key > rhs.key }
-            return lhs.value < rhs.value
+
+        return stats.max { lhs, rhs in
+            if lhs.value.count != rhs.value.count {
+                return lhs.value.count < rhs.value.count
+            }
+            if lhs.value.latestDate != rhs.value.latestDate {
+                return lhs.value.latestDate < rhs.value.latestDate
+            }
+            return lhs.key > rhs.key
         }?.key
     }
-
+    
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
                 header
-
+                
                 VStack(spacing: 14) {
                     if shouldShowMoodInsights {
                         MoodInsightsCard(
@@ -75,9 +111,9 @@ struct MoodLoggerView: View {
                             averageScore: averageMoodScore
                         )
                     }
-
+                    
                     moodLogTabs
-
+                    
                     // Logger card
                     FreeFormGlassCard {
                         VStack(alignment: .leading, spacing: 14) {
@@ -92,7 +128,7 @@ struct MoodLoggerView: View {
                                 },
                                 accent: Color(red: 3/255, green: 219/255, blue: 252/255)
                             )
-
+                            
                             MultiSelectDropdown(
                                 title: "Activities",
                                 subtitle: "Choose one or more",
@@ -104,27 +140,23 @@ struct MoodLoggerView: View {
                                 },
                                 accent: Color(red: 125/255, green: 25/255, blue: 247/255)
                             )
-
+                            
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("NOTE")
                                     .font(.system(size: 13, weight: .semibold))
                                     .foregroundStyle(LColors.textSecondary)
                                     .tracking(0.5)
-
+                                
                                 GlassTextEditor(
                                     placeholder: "How's your day going? (optional)",
                                     text: $note,
                                     minHeight: 120
                                 )
                             }
-
+                            
                             HStack {
-                                LButton(title: "Close", style: .secondary) {
-                                    dismiss()
-                                }
-
                                 Spacer()
-
+                                
                                 Button {
                                     logMood()
                                 } label: {
@@ -147,7 +179,7 @@ struct MoodLoggerView: View {
                             .padding(.top, 2)
                         }
                     }
-
+                    
                     if selectedTab == .today {
                         if let latestLog {
                             MoodLogCard(log: latestLog)
@@ -162,9 +194,16 @@ struct MoodLoggerView: View {
                         } else {
                             VStack(spacing: 12) {
                                 ForEach(visibleHistoryLogs) { log in
-                                    MoodLogCard(log: log)
+                                    MoodLogCard(
+                                        log: log,
+                                        showsDeleteButton: true,
+                                        onDelete: {
+                                            logPendingDelete = log
+                                            showDeleteConfirmation = true
+                                        }
+                                    )
                                 }
-
+                                
                                 if canLoadMoreHistory {
                                     Button {
                                         historyVisibleCount += 4
@@ -198,8 +237,20 @@ struct MoodLoggerView: View {
             LystariaBackground()
                 .ignoresSafeArea()
         )
-    }
+        .alert("Delete Mood Log?", isPresented: $showDeleteConfirmation, presenting: logPendingDelete) { log in
+            Button("Cancel", role: .cancel) {
+                logPendingDelete = nil
+            }
 
+            Button("Delete", role: .destructive) {
+                deleteLog(log)
+                logPendingDelete = nil
+            }
+        } message: { _ in
+            Text("This mood log will be permanently removed.")
+        }
+    }
+    
     private var moodLogTabs: some View {
         HStack(spacing: 8) {
             moodTabButton(.today, title: "Today")
@@ -207,11 +258,11 @@ struct MoodLoggerView: View {
             Spacer(minLength: 0)
         }
     }
-
+    
     @ViewBuilder
     private func moodTabButton(_ tab: MoodLogTab, title: String) -> some View {
         let isSelected = selectedTab == tab
-
+        
         Button {
             withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
                 selectedTab = tab
@@ -235,52 +286,54 @@ struct MoodLoggerView: View {
         }
         .buttonStyle(.plain)
     }
-
+    
     // MARK: - Header
-
+    
     private var header: some View {
         VStack(spacing: 0) {
             HStack {
                 GradientTitle(text: "Mood Log", font: .system(size: 28, weight: .bold))
                 Spacer()
-
-                Button { dismiss() } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(LColors.textSecondary)
-                }
-                .buttonStyle(.plain)
             }
             .padding(.horizontal, LSpacing.pageHorizontal)
             .padding(.top, 20)
             .padding(.bottom, 12)
-
+            
             Rectangle().fill(LColors.glassBorder).frame(height: 1)
         }
     }
-
+    
     // MARK: - Actions
-
+    
     private func logMood() {
-        guard !selectedMoods.isEmpty, !selectedActivities.isEmpty else { return }
-        let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !selectedMoods.isEmpty else { return }
+        
+        do {
+            try MoodLogWriter.saveMoodLog(
+                moods: Array(selectedMoods),
+                activities: Array(selectedActivities),
+                note: note,
+                modelContext: modelContext
+            )
+            
+            selectedMoods.removeAll()
+            selectedActivities.removeAll()
+            note = ""
+            moodsExpanded = false
+            activitiesExpanded = false
+        } catch {
+            print("Failed to save mood log: \(error)")
+        }
+    }
 
-        let log = MoodLog(
-            moods: Array(selectedMoods),
-            activities: Array(selectedActivities),
-            note: trimmedNote.isEmpty ? nil : trimmedNote
-        )
+    private func deleteLog(_ log: MoodLog) {
+        modelContext.delete(log)
 
-        log.markDirty()
-        modelContext.insert(log)
-        try? modelContext.save()
-
-        // Reset UI
-        selectedMoods.removeAll()
-        selectedActivities.removeAll()
-        note = ""
-        moodsExpanded = false
-        activitiesExpanded = false
+        do {
+            try modelContext.save()
+        } catch {
+            print("Failed to delete mood log: \(error)")
+        }
     }
 }
 
@@ -482,6 +535,8 @@ private struct MoodInsightsCard: View {
 
 private struct MoodLogCard: View {
     let log: MoodLog
+    var showsDeleteButton: Bool = false
+    var onDelete: (() -> Void)? = nil
 
     private var percent: Double {
         // score is 1...5
@@ -553,6 +608,34 @@ private struct MoodLogCard: View {
                         Text(note)
                             .font(.system(size: 13))
                             .foregroundStyle(LColors.textPrimary)
+                    }
+                }
+                if showsDeleteButton, let onDelete {
+                    HStack {
+                        Spacer()
+
+                        Button {
+                            onDelete()
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image("trashfill")
+                                    .renderingMode(.template)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 14, height: 14)
+                                    .foregroundStyle(.white)
+
+                                Text("Delete")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(.white)
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(AnyShapeStyle(LGradients.blue))
+                            .clipShape(Capsule())
+                            .shadow(color: LColors.accent.opacity(0.3), radius: 8, y: 4)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
             }

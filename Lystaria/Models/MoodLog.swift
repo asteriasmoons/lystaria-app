@@ -1,5 +1,3 @@
-
-
 // MoodLog.swift
 // Lystaria
 //
@@ -41,10 +39,12 @@ final class MoodLog {
     // MARK: - Single source of truth (mirrors mini-app constants)
 
     static let moodValues: [String] = [
-        "happy","content","inspired","productive","loved","grateful","optimistic","confident","motivated","amused",
-        "sad","irritated","disappointed","angry","cynical","insecure","overwhelmed","stressed","scared","confused",
-        "reflective","distracted","lonely","discouraged",
-        "good","okay","neutral"
+        "happy","content","inspired","productive","loved","grateful","optimistic","confident","motivated","proud",
+        "energized","hopeful","playful","satisfied",
+        "okay","neutral","reflective","distracted","confused","calm","thoughtful","mellow","settled",
+        "indifferent","reserved","detached","apathetic","composed",
+        "sad","irritated","disappointed","angry","insecure","overwhelmed","stressed","scared","lonely","discouraged",
+        "drained","frustrated","restless","defeated"
     ]
 
     static let moodActivities: [String] = [
@@ -68,26 +68,41 @@ final class MoodLog {
         "optimistic": 4.0,
         "confident": 4.0,
         "motivated": 4.0,
-        "amused": 3.9,
+        "proud": 4.1,
+        "energized": 4.2,
+        "hopeful": 4.0,
+        "playful": 4.0,
+        "satisfied": 3.8,
 
-        "good": 3.6,
-        "okay": 3.0,
+        "okay": 3.2,
         "neutral": 3.0,
         "reflective": 3.2,
-        "distracted": 2.7,
-        "confused": 2.6,
+        "distracted": 2.8,
+        "confused": 2.7,
+        "calm": 3.3,
+        "thoughtful": 3.3,
+        "mellow": 3.2,
+        "settled": 3.3,
+        "indifferent": 2.9,
+        "reserved": 3.0,
+        "detached": 2.8,
+        "apathetic": 2.4,
+        "composed": 3.3,
 
         "sad": 1.8,
         "irritated": 2.0,
         "disappointed": 1.9,
         "angry": 1.7,
-        "cynical": 2.0,
         "insecure": 1.9,
         "overwhelmed": 1.6,
         "stressed": 1.7,
         "scared": 1.6,
         "lonely": 1.7,
-        "discouraged": 1.8
+        "discouraged": 1.8,
+        "drained": 1.8,
+        "frustrated": 1.9,
+        "restless": 2.2,
+        "defeated": 1.6
     ]
 
     // MARK: - Initializers

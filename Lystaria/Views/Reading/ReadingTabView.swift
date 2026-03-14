@@ -27,8 +27,8 @@ struct ReadingTabView: View {
     @State private var showDeleteConfirm = false
     @State private var bookPendingDeletion: Book? = nil
     @State private var showSummary = true
-    @State private var showBookSummarySheet = false
-    @State private var showBookRecommendationsSheet = false
+    @State private var showBookSummaryPopup = false
+    @State private var showBookRecommendationsPopup = false
     @State private var tagFilter: String? = nil
     @State private var selectedStatus: BookStatus? = nil // nil means All
 
@@ -46,51 +46,88 @@ struct ReadingTabView: View {
         return Calendar.current.isDateInToday(Date(timeIntervalSince1970: lastCheckInTimestamp))
     }
 
+    @ViewBuilder
+    private var readingPopupsOverlay: some View {
+        if showBookSummaryPopup {
+            BookSummarySheet(isPresented: $showBookSummaryPopup)
+                .preferredColorScheme(.dark)
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                .zIndex(50)
+        }
+
+        if showBookRecommendationsPopup {
+            BookRecommendationsSheet(isPresented: $showBookRecommendationsPopup)
+                .preferredColorScheme(.dark)
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                .zIndex(51)
+        }
+    }
+
+    private var headerSection: some View {
+        VStack(spacing: 0) {
+            HStack {
+                GradientTitle(text: "Reading", font: .largeTitle.bold())
+                Spacer()
+            }
+            .padding(.top, 24)
+
+            Rectangle()
+                .fill(LColors.glassBorder)
+                .frame(height: 1)
+                .padding(.top, 12)
+        }
+    }
+
+    private var topToggleSection: some View {
+        HStack(spacing: 10) {
+            Button {
+                showSummary = true
+                showBookSummaryPopup = true
+                showBookRecommendationsPopup = false
+            } label: {
+                Text("Summary")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(showSummary ? .white : LColors.textPrimary)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 10)
+                    .background(showSummary ? LColors.accent : Color.white.opacity(0.08))
+                    .clipShape(Capsule())
+                    .overlay(
+                        Capsule().stroke(showSummary ? LColors.accent : LColors.glassBorder, lineWidth: 1)
+                    )
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                showSummary = false
+                showBookRecommendationsPopup = true
+                showBookSummaryPopup = false
+            } label: {
+                Text("Recs")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(!showSummary ? .white : LColors.textPrimary)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 10)
+                    .background(!showSummary ? LColors.accent : Color.white.opacity(0.08))
+                    .clipShape(Capsule())
+                    .overlay(
+                        Capsule().stroke(!showSummary ? LColors.accent : LColors.glassBorder, lineWidth: 1)
+                    )
+            }
+            .buttonStyle(.plain)
+
+            Spacer()
+        }
+    }
+
     var body: some View {
         ZStack {
             LystariaBackground()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-
-                    HStack {
-                        GradientTitle(text: "Reading", font: .largeTitle.bold())
-                        Spacer()
-                    }
-                    .padding(.top, 24)
-
-                    // Top toggle pills (Summary / Recs)
-                    HStack(spacing: 10) {
-                        Button {
-                            showSummary = true
-                            showBookSummarySheet = true
-                        } label: {
-                            Text("Summary")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(showSummary ? .white : LColors.textPrimary)
-                                .padding(.horizontal, 18).padding(.vertical, 10)
-                                .background(showSummary ? LColors.accent : Color.white.opacity(0.08))
-                                .clipShape(Capsule())
-                                .overlay(Capsule().stroke(showSummary ? LColors.accent : LColors.glassBorder, lineWidth: 1))
-                        }
-                        .buttonStyle(.plain)
-
-                        Button {
-                            showSummary = false
-                            showBookRecommendationsSheet = true
-                        } label: {
-                            Text("Recs")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(!showSummary ? .white : LColors.textPrimary)
-                                .padding(.horizontal, 18).padding(.vertical, 10)
-                                .background(!showSummary ? LColors.accent : Color.white.opacity(0.08))
-                                .clipShape(Capsule())
-                                .overlay(Capsule().stroke(!showSummary ? LColors.accent : LColors.glassBorder, lineWidth: 1))
-                        }
-                        .buttonStyle(.plain)
-
-                        Spacer()
-                    }
+                    headerSection
+                    topToggleSection
 
                     // Reading streak card area (placeholder for your existing content)
                     GlassCard {
@@ -464,26 +501,10 @@ struct ReadingTabView: View {
                                                 .buttonStyle(.plain)
                                             }
 
-                                            Button {
+                                            GradientCapsuleButton(title: "Delete", icon: "trashfill") {
                                                 bookPendingDeletion = book
                                                 showDeleteConfirm = true
-                                            } label: {
-                                                HStack(spacing: 8) {
-                                                    Image(systemName: "trash")
-                                                    Text("Delete")
-                                                        .font(.system(size: 13, weight: .semibold))
-                                                }
-                                                .foregroundStyle(AnyShapeStyle(LGradients.blue))
-                                                .padding(.horizontal, 12)
-                                                .padding(.vertical, 9)
-                                                .background(Color.white.opacity(0.08))
-                                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                                                .overlay(
-                                                    RoundedRectangle(cornerRadius: 12)
-                                                        .stroke(LColors.glassBorder, lineWidth: 1)
-                                                )
                                             }
-                                            .buttonStyle(.plain)
 
 
                                             Spacer()
@@ -500,7 +521,11 @@ struct ReadingTabView: View {
                 .padding(.horizontal, 24)
                 .padding(.bottom, 140)
             }
+
+            readingPopupsOverlay
         }
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showBookSummaryPopup)
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showBookRecommendationsPopup)
         .overlay(alignment: .bottomTrailing) {
             Button {
                 showAddBook = true
@@ -521,14 +546,6 @@ struct ReadingTabView: View {
         .zIndex(9999)
         .sheet(isPresented: $showAddBook) {
             AddBookSheet()
-                .preferredColorScheme(.dark)
-        }
-        .sheet(isPresented: $showBookSummarySheet) {
-            BookSummarySheet()
-                .preferredColorScheme(.dark)
-        }
-        .sheet(isPresented: $showBookRecommendationsSheet) {
-            BookRecommendationsSheet()
                 .preferredColorScheme(.dark)
         }
         .sheet(item: $editingBook) { book in
@@ -1171,4 +1188,3 @@ struct LystariaNumberField: View {
             }
     }
 }
-

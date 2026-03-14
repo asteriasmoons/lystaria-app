@@ -1,3 +1,9 @@
+//
+// ProfileTabView.swift
+//
+// Created By Asteria Moon
+//
+
 import SwiftUI
 import SwiftData
 import GoogleSignIn
@@ -73,10 +79,17 @@ struct ProfileTabView: View {
 
             ScrollView {
                 VStack(spacing: 18) {
-                    HStack {
-                        Spacer()
-                        GradientTitle(text: "Profile", font: .system(size: 28, weight: .bold))
-                        Spacer()
+                    VStack(spacing: 0) {
+                        HStack {
+                            Spacer()
+                            GradientTitle(text: "Profile", font: .system(size: 28, weight: .bold))
+                            Spacer()
+                        }
+
+                        Rectangle()
+                            .fill(LColors.glassBorder)
+                            .frame(height: 1)
+                            .padding(.top, 6)
                     }
 
                     // Profile avatar + card
@@ -163,7 +176,7 @@ struct ProfileTabView: View {
                             Task {
                                 if let data = try? await newItem.loadTransferable(type: Data.self), let uiImage = UIImage(data: data) {
                                     self.profileImage = uiImage
-                                    if let savedURL = saveUIImageToAppSupport(uiImage) {
+                                    if saveUIImageToAppSupport(uiImage) != nil {
                                         // Always mirror to AppStorage
                                         self.profileImagePathDefaults = "profile.png"
                                         if let user = currentUser {
@@ -196,7 +209,7 @@ struct ProfileTabView: View {
 
                         // Info card
                         GlassCard {
-                            VStack(alignment: .leading, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 10) {
                                 if let user = currentUser {
                                     HStack(spacing: 10) {
                                         Image(systemName: "person.crop.circle.fill")
@@ -236,7 +249,7 @@ struct ProfileTabView: View {
                                     .foregroundStyle(LColors.textSecondary)
 
                                 // Use System Timezone toggle
-                                HStack(spacing: 12) {
+                                HStack(spacing: 10) {
                                     Text("Use System Timezone")
                                         .font(.system(size: 14, weight: .semibold))
                                         .foregroundStyle(LColors.textPrimary)
@@ -247,14 +260,14 @@ struct ProfileTabView: View {
                                     }))
                                     .labelsHidden()
                                 }
-                                .padding(12)
+                                .padding(10)
                                 .background(Color.white.opacity(0.08))
-                                .clipShape(RoundedRectangle(cornerRadius: 14))
-                                .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay(RoundedRectangle(cornerRadius: 12).stroke(LColors.glassBorder, lineWidth: 1))
 
                                 // Picker for manual timezone when not using system
                                 if !useSystemTimezone {
-                                    VStack(alignment: .leading, spacing: 8) {
+                                    VStack(alignment: .leading, spacing: 6) {
                                         Text("SELECT TIMEZONE")
                                             .font(.system(size: 11, weight: .bold))
                                             .foregroundStyle(LColors.textSecondary)
@@ -265,7 +278,7 @@ struct ProfileTabView: View {
                                         TextField("Search timezones", text: $timezoneSearch)
                                             .textFieldStyle(.plain)
                                             .foregroundStyle(LColors.textPrimary)
-                                            .padding(10)
+                                            .padding(8)
                                             .background(Color.white.opacity(0.06))
                                             .clipShape(RoundedRectangle(cornerRadius: 10))
                                             .overlay(RoundedRectangle(cornerRadius: 10).stroke(LColors.glassBorder, lineWidth: 1))
@@ -287,7 +300,8 @@ struct ProfileTabView: View {
                                                             Spacer()
                                                             if on { Image(systemName: "checkmark").foregroundStyle(LColors.accent) }
                                                         }
-                                                        .padding(8)
+                                                        .padding(.horizontal, 8)
+                                                        .padding(.vertical, 6)
                                                         .background(on ? Color.white.opacity(0.08) : Color.clear)
                                                         .clipShape(RoundedRectangle(cornerRadius: 8))
                                                     }
@@ -295,12 +309,12 @@ struct ProfileTabView: View {
                                                 }
                                             }
                                         }
-                                        .frame(maxHeight: 180)
+                                        .frame(maxHeight: 150)
                                     }
-                                    .padding(12)
+                                    .padding(10)
                                     .background(Color.white.opacity(0.08))
-                                    .clipShape(RoundedRectangle(cornerRadius: 14))
-                                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(LColors.glassBorder, lineWidth: 1))
                                 }
 
                                 // Effective label
@@ -645,4 +659,3 @@ struct ProfileTabView: View {
     }
     #endif
 }
-

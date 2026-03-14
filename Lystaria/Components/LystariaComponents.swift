@@ -12,6 +12,67 @@ private extension NSAttributedString.Key {
     static let lystariaBlockquote = NSAttributedString.Key("lystariaBlockquote")
 }
 
+// MARK: - Load More Button (Reusable)
+
+struct LoadMoreButton: View {
+    var title: String = "Load More"
+    var action: () -> Void
+
+    var body: some View {
+        Button {
+            action()
+        } label: {
+            Text(title)
+                .font(.subheadline.bold())
+                .foregroundStyle(.white)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 10)
+                .background(AnyShapeStyle(LGradients.blue))
+                .clipShape(Capsule())
+                .shadow(color: LColors.accent.opacity(0.3), radius: 8, y: 4)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Gradient Capsule Button (Reusable)
+
+struct GradientCapsuleButton: View {
+    let title: String
+    var icon: String? = nil   // image asset name
+    var action: () -> Void
+
+    var body: some View {
+        Button {
+            action()
+        } label: {
+            HStack(spacing: 8) {
+                if let icon {
+                    Image(icon)
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 14, height: 14)
+                        .foregroundStyle(.white)
+                }
+
+                Text(title)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(AnyShapeStyle(LGradients.blue), in: RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
+            .overlay(
+                RoundedRectangle(cornerRadius: LSpacing.buttonRadius)
+                    .stroke(.clear, lineWidth: 1)
+            )
+            .shadow(color: LColors.accent.opacity(0.3), radius: 8, y: 4)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 // MARK: - Animated Background
 
 struct LystariaBackground: View {
@@ -72,10 +133,14 @@ struct LystariaBackground: View {
 struct GradientOverlayBackground: View {
     var body: some View {
         ZStack {
-            // Softer ambient glow layers intended to sit *over* another background
+            // Dark veil to soften the gradients so they behave like an overlay
+            Color.black.opacity(0.45)
+                .ignoresSafeArea()
+
+            // Ambient glow layers sitting under the veil
             RadialGradient(
                 colors: [
-                    Color(red: 125/255, green: 25/255, blue: 247/255).opacity(0.12),
+                    Color(red: 125/255, green: 25/255, blue: 247/255).opacity(0.10),
                     .clear
                 ],
                 center: .topLeading,
@@ -86,7 +151,7 @@ struct GradientOverlayBackground: View {
 
             RadialGradient(
                 colors: [
-                    Color(red: 3/255, green: 219/255, blue: 252/255).opacity(0.10),
+                    Color(red: 3/255, green: 219/255, blue: 252/255).opacity(0.08),
                     .clear
                 ],
                 center: .bottomTrailing,
@@ -97,7 +162,7 @@ struct GradientOverlayBackground: View {
 
             RadialGradient(
                 colors: [
-                    Color(red: 3/255, green: 219/255, blue: 252/255).opacity(0.06),
+                    Color(red: 3/255, green: 219/255, blue: 252/255).opacity(0.05),
                     .clear
                 ],
                 center: .topTrailing,
@@ -108,7 +173,7 @@ struct GradientOverlayBackground: View {
 
             RadialGradient(
                 colors: [
-                    Color(red: 125/255, green: 25/255, blue: 247/255).opacity(0.07),
+                    Color(red: 125/255, green: 25/255, blue: 247/255).opacity(0.05),
                     .clear
                 ],
                 center: .bottomLeading,

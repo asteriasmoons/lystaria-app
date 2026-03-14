@@ -18,25 +18,42 @@ struct SettingsView: View {
     @AppStorage("settings.calendarSyncEnabled") private var calendarSyncEnabled: Bool = false
     @AppStorage("settings.selectedCalendarIdentifier") private var selectedCalendarIdentifier: String = ""
 
+    // Controls whether onboarding tours should run again on the next launch
+    @AppStorage("settings.showOnboardingNextLaunch") private var showOnboardingNextLaunch: Bool = false
+    // Allows Settings to relaunch the welcome screens
+    @AppStorage("hasSeenWelcome") private var hasSeenWelcome: Bool = true
+
     var body: some View {
         ZStack {
             LystariaBackground()
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
+
+                // MARK: - Page Header
+                VStack(alignment: .leading, spacing: 10) {
+                    GradientTitle(text: "Settings", size: 28)
+
+                    Rectangle()
+                        .fill(LColors.glassBorder)
+                        .frame(height: 1)
+                }
+                .padding(.horizontal, LSpacing.pageHorizontal)
+                .padding(.top, 8)
+                .padding(.bottom, 16)
+
                 // MARK: - Content
                 ScrollView {
                     VStack(spacing: LSpacing.sectionGap) {
                         profileSection
                         calendarSyncSection
+                        onboardingSection
                     }
                     .padding(.horizontal, LSpacing.pageHorizontal)
                     .padding(.bottom, 40)
                 }
             }
         }
-        .navigationTitle("Settings")
-        .navigationBarTitleDisplayMode(.inline)
         .task {
             calendarManager.refreshAuthorizationStatus()
             if calendarManager.hasFullAccess {
@@ -74,7 +91,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 14) {
             GlassCard {
                 VStack(spacing: 0) {
-                    HStack(spacing: 14) {
+                    HStack(spacing: 12) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Display Name")
                                 .font(.caption)
@@ -86,7 +103,7 @@ struct SettingsView: View {
                             )
                         }
                     }
-                    .padding(14)
+                    .padding(12)
                 }
             }
         }
@@ -99,7 +116,7 @@ struct SettingsView: View {
             SectionHeader(title: "Calendar Sync", icon: "calendar")
 
             GlassCard {
-                VStack(spacing: 16) {
+                VStack(spacing: 12) {
 
                     // Toggle row
                     HStack {
@@ -144,25 +161,29 @@ struct SettingsView: View {
             }
 
             if calendarSyncEnabled && calendarManager.hasFullAccess {
-                LButton(
-                    title: calendarManager.isSyncing ? "Syncing…" : "Sync Now",
-                    icon: calendarManager.isSyncing ? nil : "arrow.triangle.2.circlepath",
-                    style: .gradient
-                ) {
-                    Task {
-                        if selectedCalendarIdentifier.isEmpty,
-                           let first = calendarManager.calendars.first {
-                            selectedCalendarIdentifier = first.calendarIdentifier
-                        }
+                HStack {
+                    Spacer()
+                    LButton(
+                        title: calendarManager.isSyncing ? "Syncing…" : "Sync Now",
+                        icon: calendarManager.isSyncing ? nil : "arrow.triangle.2.circlepath",
+                        style: .gradient
+                    ) {
+                        Task {
+                            if selectedCalendarIdentifier.isEmpty,
+                               let first = calendarManager.calendars.first {
+                                selectedCalendarIdentifier = first.calendarIdentifier
+                            }
 
-                        await calendarManager.syncEvents(
-                            appEvents: appEvents,
-                            modelContext: modelContext,
-                            selectedCalendarIdentifier: selectedCalendarIdentifier
-                        )
+                            await calendarManager.syncEvents(
+                                appEvents: appEvents,
+                                modelContext: modelContext,
+                                selectedCalendarIdentifier: selectedCalendarIdentifier
+                            )
+                        }
                     }
+                    .disabled(calendarManager.isSyncing || selectedCalendarIdentifier.isEmpty)
+                    Spacer()
                 }
-                .disabled(calendarManager.isSyncing || selectedCalendarIdentifier.isEmpty)
             }
 
             if let syncMessage = calendarManager.syncStatusMessage, !syncMessage.isEmpty {
@@ -208,7 +229,7 @@ struct SettingsView: View {
                     .font(.footnote)
                     .foregroundStyle(LColors.textSecondary)
             }
-            .padding(12)
+            .padding(10)
             .background(LColors.warning.opacity(0.08))
             .clipShape(RoundedRectangle(cornerRadius: LSpacing.inputRadius))
             .overlay(
@@ -260,8 +281,8 @@ struct SettingsView: View {
                                 .font(.caption)
                                 .foregroundStyle(LColors.textSecondary)
                         }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 12)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
                         .background(LColors.glassSurface2)
                         .clipShape(RoundedRectangle(cornerRadius: LSpacing.inputRadius))
                         .overlay(
@@ -288,6 +309,54 @@ struct SettingsView: View {
             Text("Last synced \(lastSyncDate.formatted(date: .abbreviated, time: .shortened))")
                 .font(.caption)
                 .foregroundStyle(LColors.textSecondary)
+        }
+    }
+    // MARK: - App Guides Section
+
+    private var onboardingSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            SectionHeader(title: "App Guides", icon: "sparkles")
+
+            GlassCard {
+                VStack(spacing: 12) {
+
+                    // Feature tour toggle
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Run Feature Tour Again")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundStyle(LColors.textPrimary)
+
+                            Text("Show icon explanations again the next time you open each page.")
+                                .font(.caption)
+                                .foregroundStyle(LColors.textSecondary)
+                        }
+
+                        Spacer()
+
+                        Toggle("", isOn: $showOnboardingNextLaunch)
+                            .labelsHidden()
+                            .tint(LColors.accent)
+                    }
+
+                    Divider()
+                        .background(LColors.glassBorder)
+
+                    // Welcome screens button
+                    HStack {
+                        Spacer()
+                        LButton(
+                            title: "View Welcome Screens",
+                            icon: "sparkles",
+                            style: .gradient
+                        ) {
+                            hasSeenWelcome = false
+                        }
+                        Spacer()
+                    }
+                }
+            }
         }
     }
 }

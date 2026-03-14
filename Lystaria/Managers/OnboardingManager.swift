@@ -14,7 +14,7 @@ class OnboardingManager: ObservableObject {
     // Development helper so onboarding always appears when running the app.
     // Remove this initializer once onboarding design is finalized.
     init() {
-        resetAllOnboarding()
+        // resetAllOnboarding()  // DEV MODE (disabled for production)
     }
 
     @Published var activePage: OnboardingPage?
@@ -22,7 +22,23 @@ class OnboardingManager: ObservableObject {
     @Published var isShowing: Bool = false
 
     func start(page: OnboardingPage) {
-        guard !UserDefaults.standard.bool(forKey: page.pageID) else { return }
+        let defaults = UserDefaults.standard
+
+        // Settings toggle allows onboarding tours to run again once
+        let shouldForceRun = defaults.bool(forKey: "settings.showOnboardingNextLaunch")
+
+        if shouldForceRun {
+            // Clear previous completion flags so onboarding can run again
+            resetAllOnboarding()
+
+            // Turn the setting back off so it only runs once
+            defaults.set(false, forKey: "settings.showOnboardingNextLaunch")
+        }
+
+        // Normal behaviour: do not run if this page was already completed
+        if !shouldForceRun && defaults.bool(forKey: page.pageID) {
+            return
+        }
 
         activePage = page
         currentStepIndex = 0
@@ -63,5 +79,6 @@ class OnboardingManager: ObservableObject {
         defaults.removeObject(forKey: "onboarding_reminders")
         defaults.removeObject(forKey: "onboarding_calendar")
         defaults.removeObject(forKey: "onboarding_journal")
+        defaults.removeObject(forKey: "onboarding_dashboard")
     }
 }

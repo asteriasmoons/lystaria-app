@@ -1,0 +1,1069 @@
+// KanbanView.swift
+// Lystaria
+
+import SwiftUI
+import SwiftData
+
+// MARK: - Main Kanban View
+
+struct KanbanView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+    @Query(sort: \KanbanBoard.sortOrder) private var boards: [KanbanBoard]
+    @Query(sort: \LystariaReminder.nextRunAt) private var allReminders: [LystariaReminder]
+
+    @State private var selectedBoardID: UUID? = nil
+    @State private var showNewBoard = false
+    @State private var showEditBoard: KanbanBoard? = nil
+    @State private var showNewColumn = false
+    @State private var showEditColumn: KanbanColumn? = nil
+    @State private var draggingReminder: LystariaReminder? = nil
+    @State private var toastMessage: String? = nil
+
+    private var selectedBoard: KanbanBoard? {
+        guard let id = selectedBoardID else { return boards.first }
+        return boards.first(where: { $0.id == id }) ?? boards.first
+    }
+
+    private var sortedColumns: [KanbanColumn] {
+        (selectedBoard?.columns ?? []).sorted { $0.sortOrder < $1.sortOrder }
+    }
+
+    // Reminders not yet assigned to any column on this board
+    private var unassignedReminders: [LystariaReminder] {
+        allReminders.filter {
+            $0.status != .deleted && $0.kanbanColumn == nil
+        }
+    }
+
+    var body: some View {
+        ZStack {
+            LystariaBackground().ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                // MARK: Header
+                VStack(spacing: 0) {
+                    HStack {
+                        GradientTitle(text: "Kanban", size: 28)
+
+                        Spacer()
+
+                        Button { showNewBoard = true } label: {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.white.opacity(0.08))
+                                    .overlay(
+                                        Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                                    )
+                                    .frame(width: 34, height: 34)
+
+                                Image(systemName: "plus")
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundStyle(.white)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, LSpacing.pageHorizontal)
+                    .padding(.top, 16)
+                    .padding(.bottom, 14)
+
+                    Rectangle()
+                        .fill(LColors.glassBorder)
+                        .frame(height: 1)
+                        .padding(.horizontal, LSpacing.pageHorizontal)
+                }
+                .padding(.bottom, 14)
+
+                // MARK: Board Selector
+                if boards.isEmpty {
+                    emptyBoardsState
+                } else {
+                    boardSelectorBar
+
+                    if let board = selectedBoard {
+                        boardContent(board: board)
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showNewBoard) {
+            BoardEditorSheet(board: nil) { name, hex in
+                let b = KanbanBoard(name: name, colorHex: hex, sortOrder: boards.count)
+                modelContext.insert(b)
+                try? modelContext.save()
+                selectedBoardID = b.id
+            }
+            .preferredColorScheme(.dark)
+        }
+        .sheet(item: $showEditBoard) { board in
+            BoardEditorSheet(board: board) { name, hex in
+                board.name = name
+                board.colorHex = hex
+                board.updatedAt = Date()
+                try? modelContext.save()
+            }
+            .preferredColorScheme(.dark)
+        }
+        .sheet(isPresented: $showNewColumn) {
+            if let board = selectedBoard {
+                ColumnEditorSheet(column: nil) { name, hex in
+                    let col = KanbanColumn(name: name, colorHex: hex, sortOrder: board.columns.count)
+                    col.board = board
+                    modelContext.insert(col)
+                    try? modelContext.save()
+                }
+                .preferredColorScheme(.dark)
+            }
+        }
+        .sheet(item: $showEditColumn) { col in
+            ColumnEditorSheet(column: col) { name, hex in
+                col.name = name
+                col.colorHex = hex
+                col.updatedAt = Date()
+                try? modelContext.save()
+            }
+            .preferredColorScheme(.dark)
+        }
+        .overlay(alignment: .bottom) {
+            if let msg = toastMessage {
+                ToastView(message: msg)
+            }
+        }
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: toastMessage)
+    }
+
+    // MARK: - Empty State
+
+    private var emptyBoardsState: some View {
+        VStack(spacing: 20) {
+            Spacer()
+            Image(systemName: "rectangle.3.group")
+                .font(.system(size: 52))
+                .foregroundStyle(LColors.textSecondary.opacity(0.3))
+            Text("No boards yet")
+                .font(.title3.bold())
+                .foregroundStyle(LColors.textPrimary)
+            Text("Create a board to start organizing your reminders visually.")
+                .font(.subheadline)
+                .foregroundStyle(LColors.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+            LButton(title: "Create Board", icon: "plus", style: .gradient) {
+                showNewBoard = true
+            }
+            Spacer()
+        }
+    }
+
+    // MARK: - Board Selector Bar
+
+    private var boardSelectorBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(boards) { board in
+                    let selected = selectedBoard?.id == board.id
+                    Button {
+                        selectedBoardID = board.id
+                    } label: {
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(board.color)
+                                .frame(width: 8, height: 8)
+                            Text(board.name)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(selected ? .white : LColors.textPrimary)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(selected ? board.color.opacity(0.25) : Color.white.opacity(0.08))
+                        .clipShape(Capsule())
+                        .overlay(Capsule().stroke(selected ? board.color : LColors.glassBorder, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        Button("Edit Board") { showEditBoard = board }
+                        Button("Add Column") { showNewColumn = true }
+                        Button("Delete Board", role: .destructive) { deleteBoard(board) }
+                    }
+                }
+            }
+            .padding(.horizontal, LSpacing.pageHorizontal)
+        }
+        .padding(.bottom, 14)
+    }
+
+    // MARK: - Board Content
+
+    @ViewBuilder
+    private func boardContent(board: KanbanBoard) -> some View {
+        if sortedColumns.isEmpty {
+            VStack(spacing: 16) {
+                Spacer()
+                Image(systemName: "rectangle.split.3x1")
+                    .font(.system(size: 40))
+                    .foregroundStyle(LColors.textSecondary.opacity(0.3))
+                Text("No columns yet")
+                    .font(.headline)
+                    .foregroundStyle(LColors.textPrimary)
+                Text("Add columns like \"To Do\", \"In Progress\", \"Done\"")
+                    .font(.subheadline)
+                    .foregroundStyle(LColors.textSecondary)
+                    .multilineTextAlignment(.center)
+                LButton(title: "Add Column", icon: "plus", style: .gradient) {
+                    showNewColumn = true
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 32)
+        } else {
+            HStack(alignment: .top) {
+                // Column action button
+                Button { showNewColumn = true } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.accent)
+                }
+                .buttonStyle(.plain)
+                .padding(.leading, LSpacing.pageHorizontal)
+                .padding(.top, 2)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 14) {
+                        ForEach(sortedColumns) { column in
+                            KanbanColumnView(
+                                column: column,
+                                allReminders: allReminders,
+                                draggingReminder: $draggingReminder,
+                                onEditColumn: { showEditColumn = column },
+                                onDeleteColumn: { deleteColumn(column) },
+                                onDropReminder: { reminder in moveReminder(reminder, to: column) },
+                                onMarkDone: { reminder in markDone(reminder) },
+                                onUnassign: { reminder in unassign(reminder) }
+                            )
+                        }
+
+                        // Inbox column — unassigned reminders
+                        if !unassignedReminders.isEmpty {
+                            InboxColumnView(
+                                reminders: unassignedReminders,
+                                columns: sortedColumns,
+                                draggingReminder: $draggingReminder,
+                                onMoveToColumn: { reminder, col in moveReminder(reminder, to: col) },
+                                onMarkDone: { reminder in markDone(reminder) }
+                            )
+                        }
+                    }
+                    .padding(.horizontal, LSpacing.pageHorizontal)
+                    .padding(.bottom, 120)
+                }
+            }
+        }
+    }
+
+    // MARK: - Actions
+
+    private func moveReminder(_ reminder: LystariaReminder, to column: KanbanColumn) {
+        reminder.kanbanColumn = column
+        reminder.isKanbanDone = false
+        reminder.markDirty()
+        try? modelContext.save()
+        showToast("Moved to \(column.name)")
+    }
+
+    private func unassign(_ reminder: LystariaReminder) {
+        reminder.kanbanColumn = nil
+        reminder.isKanbanDone = false
+        reminder.markDirty()
+        try? modelContext.save()
+    }
+
+    private func markDone(_ reminder: LystariaReminder) {
+        let now = Date()
+
+        if let schedule = reminder.schedule, schedule.kind != .once {
+            reminder.nextRunAt = ReminderCompute.nextRun(after: now.addingTimeInterval(91), reminder: reminder)
+            reminder.acknowledgedAt = nil
+            reminder.isKanbanDone = false
+            reminder.updatedAt = now
+            reminder.markDirty()
+            try? modelContext.save()
+
+            NotificationManager.shared.cancelReminder(reminder)
+            NotificationManager.shared.scheduleReminder(reminder)
+        #if DEBUG
+            NotificationManager.shared.printPendingNotifications()
+        #endif
+
+            showToast("Completed")
+            return
+        }
+
+        reminder.isKanbanDone = true
+        reminder.acknowledgedAt = now
+        reminder.updatedAt = now
+        reminder.markDirty()
+        try? modelContext.save()
+
+        NotificationManager.shared.scheduleReminder(reminder)
+#if DEBUG
+        NotificationManager.shared.printPendingNotifications()
+#endif
+
+        showToast("Completed")
+    }
+
+    private func deleteBoard(_ board: KanbanBoard) {
+        // Unassign all reminders before deleting
+        for col in board.columns {
+            for r in col.reminders {
+                r.kanbanColumn = nil
+            }
+        }
+        modelContext.delete(board)
+        try? modelContext.save()
+        selectedBoardID = boards.first?.id
+    }
+
+    private func deleteColumn(_ column: KanbanColumn) {
+        for r in column.reminders {
+            r.kanbanColumn = nil
+        }
+        modelContext.delete(column)
+        try? modelContext.save()
+    }
+
+    private func showToast(_ message: String) {
+        withAnimation { toastMessage = message }
+        Task {
+            try? await Task.sleep(for: .seconds(2.5))
+            withAnimation { toastMessage = nil }
+        }
+    }
+}
+
+private struct ToastView: View {
+    let message: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(LColors.success)
+            Text(message)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(LColors.textPrimary)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+        .background(.ultraThinMaterial)
+        .clipShape(Capsule())
+        .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
+        .padding(.bottom, 110)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+        .zIndex(99)
+    }
+}
+
+// MARK: - Kanban Column View
+
+struct KanbanColumnView: View {
+    @ViewBuilder
+    private func reminderCard(for reminder: LystariaReminder) -> some View {
+        let isDragging = draggingReminder?.persistentModelID == reminder.persistentModelID
+
+        KanbanCard(
+            reminder: reminder,
+            accentColor: column.color,
+            onMarkDone: { onMarkDone(reminder) },
+            onUnassign: { onUnassign(reminder) }
+        )
+        .draggable(reminder.persistentModelID.hashValue.description) {
+            KanbanDragPreview(title: reminder.title, color: column.color)
+        }
+        .opacity(isDragging ? 0.4 : 1)
+    }
+    @Bindable var column: KanbanColumn
+    let allReminders: [LystariaReminder]
+    @Binding var draggingReminder: LystariaReminder?
+    let onEditColumn: () -> Void
+    let onDeleteColumn: () -> Void
+    let onDropReminder: (LystariaReminder) -> Void
+    let onMarkDone: (LystariaReminder) -> Void
+    let onUnassign: (LystariaReminder) -> Void
+
+    @State private var isDropTargeted = false
+
+    private var kanbanColumnBackground: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 18).fill(.ultraThinMaterial).opacity(0.5)
+            RoundedRectangle(cornerRadius: 18).fill(LColors.glassSurface)
+        }
+    }
+
+    private func countBadge(_ n: Int) -> some View {
+        let background = Color.white.opacity(0.08)
+
+        return Text("\(n)")
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(LColors.textSecondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(background)
+            .clipShape(Capsule())
+    }
+
+    private var columnReminders: [LystariaReminder] {
+        column.reminders
+            .filter { $0.status != .deleted }
+            .sorted { $0.kanbanSortOrder < $1.kanbanSortOrder }
+    }
+
+    private var doneCount: Int {
+        columnReminders.filter { $0.isKanbanDone }.count
+    }
+
+    private var totalCount: Int {
+        columnReminders.count
+    }
+
+    private var headerBackground: Color {
+        column.color.opacity(0.10)
+    }
+
+    private var headerStroke: Color {
+        column.color.opacity(0.25)
+    }
+
+    private var columnBorderColor: Color {
+        isDropTargeted ? column.color.opacity(0.6) : LColors.glassBorder
+    }
+
+    private var columnBorderWidth: CGFloat {
+        isDropTargeted ? 2 : 1
+    }
+
+    var body: some View {
+        let progressFraction = totalCount > 0 ? (Double(doneCount) / Double(totalCount)) : 0
+        let placeholderFill = Color.white.opacity(isDropTargeted ? 0.10 : 0.04)
+        let placeholderStrokeColor = isDropTargeted ? column.color : LColors.glassBorder
+        let placeholderDash: [CGFloat] = isDropTargeted ? [] : [6]
+        VStack(alignment: .leading, spacing: 0) {
+            // Column header
+            HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(column.color)
+                    .frame(width: 4, height: 20)
+
+                Text(column.name)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(LColors.textPrimary)
+
+                countBadge(totalCount)
+
+                Spacer()
+
+                Menu {
+                    Button("Edit Column") { onEditColumn() }
+                    Button("Delete Column", role: .destructive) { onDeleteColumn() }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .frame(width: 28, height: 28)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(headerBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(headerStroke, lineWidth: 1)
+            )
+
+            // Progress bar if any done
+            if totalCount > 0 {
+                GeometryReader { geo in
+                    let fraction = progressFraction
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color.white.opacity(0.08))
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(column.color)
+                            .frame(width: geo.size.width * fraction)
+                            .animation(.easeInOut, value: doneCount)
+                    }
+                }
+                .frame(height: 3)
+                .padding(.horizontal, 4)
+                .padding(.top, 6)
+            }
+
+            // Cards
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 10) {
+                    if columnReminders.isEmpty {
+                        // Drop target placeholder
+                        RoundedRectangle(cornerRadius: 14)
+                            .fill(placeholderFill)
+                            .frame(height: 80)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .strokeBorder(
+                                        placeholderStrokeColor,
+                                        style: StrokeStyle(lineWidth: 1.5, dash: placeholderDash)
+                                    )
+                            )
+                            .overlay(
+                                Text("Drop here")
+                                    .font(.caption)
+                                    .foregroundStyle(LColors.textSecondary)
+                            )
+                    } else {
+                        ForEach(columnReminders, id: \.id) { reminder in
+                            reminderCard(for: reminder)
+                        }
+                    }
+                }
+                .padding(.top, 10)
+                .padding(.bottom, 8)
+            }
+        }
+        .frame(width: 240)
+        .padding(12)
+        .background(kanbanColumnBackground)
+        .overlay(
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(columnBorderColor, lineWidth: columnBorderWidth)
+        )
+        .dropDestination(for: String.self) { items, _ in
+            guard let hashStr = items.first,
+                  let reminder = findReminder(hashStr: hashStr) else { return false }
+            onDropReminder(reminder)
+            return true
+        } isTargeted: { isDropTargeted = $0 }
+    }
+
+    private func findReminder(hashStr: String) -> LystariaReminder? {
+        allReminders.first(where: { $0.persistentModelID.hashValue.description == hashStr })
+    }
+}
+
+// MARK: - Inbox Column (Unassigned Reminders)
+
+struct InboxColumnView: View {
+    let reminders: [LystariaReminder]
+    let columns: [KanbanColumn]
+    @Binding var draggingReminder: LystariaReminder?
+    let onMoveToColumn: (LystariaReminder, KanbanColumn) -> Void
+    let onMarkDone: (LystariaReminder) -> Void
+
+    private var kanbanColumnBackground: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 18).fill(.ultraThinMaterial).opacity(0.5)
+            RoundedRectangle(cornerRadius: 18).fill(LColors.glassSurface)
+        }
+    }
+
+    private func countBadge(_ n: Int) -> some View {
+        let background = Color.white.opacity(0.08)
+
+        return Text("\(n)")
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(LColors.textSecondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(background)
+            .clipShape(Capsule())
+    }
+
+    private func makeColumnMenu(for reminder: LystariaReminder) -> (() -> AnyView)? {
+        guard !columns.isEmpty else { return nil }
+
+        return {
+            AnyView(
+                Menu {
+                    ForEach(columns, id: \.id) { col in
+                        Button(col.name) {
+                            onMoveToColumn(reminder, col)
+                        }
+                    }
+                } label: {
+                    Label("Move to…", systemImage: "arrow.right.circle")
+                        .font(.caption)
+                        .foregroundStyle(LColors.accent)
+                }
+                .buttonStyle(.plain)
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func inboxReminderCard(for reminder: LystariaReminder) -> some View {
+        let columnMenu = makeColumnMenu(for: reminder)
+
+        KanbanCard(
+            reminder: reminder,
+            accentColor: LColors.textSecondary,
+            onMarkDone: { onMarkDone(reminder) },
+            onUnassign: nil,
+            columnMenu: columnMenu
+        )
+        .draggable(reminder.persistentModelID.hashValue.description) {
+            KanbanDragPreview(title: reminder.title, color: LColors.textSecondary)
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(LColors.textSecondary)
+                    .frame(width: 4, height: 20)
+
+                Text("Inbox")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(LColors.textPrimary)
+
+                countBadge(reminders.count)
+
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(Color.white.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
+
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 10) {
+                    ForEach(reminders, id: \.id) { reminder in
+                        inboxReminderCard(for: reminder)
+                    }
+                }
+                .padding(.top, 10)
+                .padding(.bottom, 8)
+            }
+        }
+        .frame(width: 240)
+        .padding(12)
+        .background(kanbanColumnBackground)
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(LColors.glassBorder, lineWidth: 1))
+    }
+}
+
+// MARK: - Kanban Card
+
+struct KanbanCard: View {
+    @Bindable var reminder: LystariaReminder
+    let accentColor: Color
+    let onMarkDone: () -> Void
+    let onUnassign: (() -> Void)?
+    var columnMenu: (() -> AnyView)? = nil
+
+    private var isDone: Bool { reminder.isKanbanDone }
+
+    private var isDueNow: Bool {
+        let now = Date()
+        if isDone { return false }
+        if reminder.isRecurring {
+            let startOfToday = Calendar.current.startOfDay(for: now)
+            if reminder.nextRunAt < startOfToday {
+                return false
+            }
+        }
+        return reminder.status != .deleted && now >= reminder.nextRunAt
+    }
+
+    private var isUpcoming: Bool {
+        let now = Date()
+        if isDone { return false }
+        if now >= reminder.nextRunAt { return false }
+        return reminder.status != .deleted && reminder.nextRunAt <= now.addingTimeInterval(24 * 60 * 60)
+    }
+
+    private var scheduleLabel: String {
+        guard let schedule = reminder.schedule else { return "Once" }
+
+        if schedule.kind == .daily, (schedule.interval ?? 1) > 1 {
+            return "Custom"
+        }
+
+        return schedule.kind.label
+    }
+    @ViewBuilder
+    private var actionRow: some View {
+        HStack(spacing: 6) {
+            Text(scheduleLabel.uppercased())
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(badgeColor.opacity(0.35))
+                .clipShape(Capsule())
+
+            if isDueNow {
+                dueNowBadge
+            } else if isUpcoming {
+                upcomingBadge
+            }
+
+            Spacer()
+
+            if let menu = columnMenu {
+                menu()
+            }
+
+            if let unassign = onUnassign {
+                Button { unassign() } label: {
+                    Image(systemName: "xmark.circle")
+                        .font(.caption)
+                        .foregroundStyle(LColors.textSecondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var scheduleKind: ReminderScheduleKind {
+        reminder.schedule?.kind ?? .once
+    }
+
+    private var badgeColor: Color {
+        if let schedule = reminder.schedule,
+           schedule.kind == .daily,
+           (schedule.interval ?? 1) > 1 {
+            return Color(red: 201/255, green: 44/255, blue: 194/255) // #c92cc2
+        }
+
+        switch scheduleKind {
+        case .once:
+            return LColors.badgeOnce
+        case .daily:
+            return LColors.badgeDaily
+        case .weekly:
+            return LColors.badgeWeekly
+        case .monthly:
+            return LColors.badgeMonthly
+        case .yearly:
+            return LColors.gradientPurple
+        case .interval:
+            return LColors.badgeInterval
+        }
+    }
+    
+    private var dueNowBadge: some View {
+        Text("DUE NOW")
+            .font(.system(size: 8, weight: .bold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(LGradients.blue)
+            .clipShape(Capsule())
+    }
+    
+    private var upcomingBadge: some View {
+        Text("UPCOMING")
+            .font(.system(size: 8, weight: .bold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(Color.teal.opacity(0.42))
+            .clipShape(Capsule())
+    }
+
+    private var nextRunText: String {
+        reminder.nextRunAt.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    var body: some View {
+        let titleColor = isDone ? LColors.textSecondary : LColors.textPrimary
+        let checkmarkColor = isDone ? LColors.success : LColors.textSecondary
+        let cardFill = isDone ? Color.white.opacity(0.04) : Color.white.opacity(0.08)
+        let cardStroke = isDone ? LColors.glassBorder.opacity(0.5) : accentColor.opacity(0.22)
+        VStack(alignment: .leading, spacing: 10) {
+            // Top row: done check + title
+            HStack(alignment: .top, spacing: 10) {
+                Button { onMarkDone() } label: {
+                    Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 18))
+                        .foregroundStyle(checkmarkColor)
+                }
+                .buttonStyle(.plain)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(reminder.title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(titleColor)
+                        .strikethrough(isDone, color: LColors.textSecondary)
+                        .lineLimit(2)
+
+                    if let details = reminder.details, !details.isEmpty {
+                        Text(details)
+                            .font(.caption)
+                            .foregroundStyle(LColors.textSecondary)
+                            .lineLimit(2)
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            // Bottom row: badge + time + actions
+            actionRow
+
+            // Next run date
+            HStack(spacing: 4) {
+                Image(systemName: "clock")
+                    .font(.system(size: 10))
+                    .foregroundStyle(LColors.textSecondary)
+                Text(nextRunText)
+                    .font(.system(size: 11))
+                    .foregroundStyle(LColors.textSecondary)
+            }
+        }
+        .padding(12)
+        .background(cardFill, in: RoundedRectangle(cornerRadius: 14))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(cardStroke, lineWidth: 1)
+        }
+        .animation(.easeInOut(duration: 0.2), value: isDone)
+    }
+}
+
+// MARK: - Drag Preview
+
+struct KanbanDragPreview: View {
+    let title: String
+    let color: Color
+
+    var body: some View {
+        Text(title)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(.white)
+            .lineLimit(1)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(color.opacity(0.85))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+// MARK: - Board Editor Sheet
+
+struct BoardEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let board: KanbanBoard?
+    let onSave: (String, String) -> Void
+
+    @State private var name: String = ""
+    @State private var selectedHex: String = "#03dbfc"
+
+    private let presetColors: [String] = [
+        "#03dbfc", "#7d19f7", "#e019d4", "#ec4899",
+        "#f6f684", "#02edd6", "#66b8ff", "#8000fe",
+        "#e2ed8a", "#dc3beb", "#ffffff", "#a92ce8"
+    ]
+
+    var body: some View {
+        ZStack {
+            LystariaBackground().ignoresSafeArea()
+
+            VStack(spacing: 24) {
+                HStack {
+                    GradientTitle(text: board == nil ? "New Board" : "Edit Board", size: 22)
+                    Spacer()
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(LColors.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.top, 24)
+
+                GlassTextField(placeholder: "Board name", text: $name)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("BOARD COLOR")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 6), spacing: 10) {
+                        ForEach(presetColors, id: \.self) { hex in
+                            let selected = selectedHex == hex
+                            Button { selectedHex = hex } label: {
+                                Circle()
+                                    .fill(Color(hex: hex))
+                                    .frame(width: 36, height: 36)
+                                    .overlay(
+                                        Circle()
+                                            .stroke(.white, lineWidth: selected ? 2.5 : 0)
+                                    )
+                                    .overlay(
+                                        Image(systemName: "checkmark")
+                                            .font(.system(size: 12, weight: .bold))
+                                            .foregroundStyle(.white)
+                                            .opacity(selected ? 1 : 0)
+                                    )
+                                    .shadow(color: Color(hex: hex).opacity(0.5), radius: selected ? 8 : 0)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .padding(16)
+                .background(LColors.glassSurface)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .overlay(RoundedRectangle(cornerRadius: 16).stroke(LColors.glassBorder, lineWidth: 1))
+
+                // Preview
+                HStack(spacing: 10) {
+                    Circle().fill(Color(hex: selectedHex)).frame(width: 12, height: 12)
+                    Text(name.isEmpty ? "Board preview" : name)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(LColors.textPrimary)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(Color(hex: selectedHex).opacity(0.15))
+                .clipShape(Capsule())
+                .overlay(Capsule().stroke(Color(hex: selectedHex), lineWidth: 1))
+
+                Spacer()
+
+                LButton(title: "Save Board", style: .gradient) {
+                    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmed.isEmpty else { return }
+                    onSave(trimmed, selectedHex)
+                    dismiss()
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 24)
+            }
+            .padding(.horizontal, 24)
+        }
+        .onAppear {
+            name = board?.name ?? ""
+            selectedHex = board?.colorHex ?? "#03dbfc"
+        }
+    }
+}
+
+// MARK: - Column Editor Sheet
+
+struct ColumnEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let column: KanbanColumn?
+    let onSave: (String, String) -> Void
+
+    @State private var name: String = ""
+    @State private var selectedHex: String = "#7d19f7"
+
+    private let presetColors: [String] = [
+        "#03dbfc", "#7d19f7", "#e019d4", "#ec4899",
+        "#f6f684", "#02edd6", "#66b8ff", "#8000fe",
+        "#e2ed8a", "#dc3beb", "#ffffff", "#a92ce8"
+    ]
+
+    private let statusSuggestions = ["To Do", "In Progress", "Review", "Done", "Blocked", "On Hold", "Testing", "Deployed"]
+
+    var body: some View {
+        ZStack {
+            LystariaBackground().ignoresSafeArea()
+
+            VStack(spacing: 20) {
+                HStack {
+                    GradientTitle(text: column == nil ? "New Column" : "Edit Column", size: 22)
+                    Spacer()
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(LColors.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.top, 24)
+
+                GlassTextField(placeholder: "Column name (e.g. In Progress)", text: $name)
+
+                // Quick suggestions
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("SUGGESTIONS")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(statusSuggestions, id: \.self) { s in
+                                Button { name = s } label: {
+                                    Text(s)
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(name == s ? .white : LColors.textPrimary)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 7)
+                                        .background(name == s ? LColors.accent : Color.white.opacity(0.08))
+                                        .clipShape(Capsule())
+                                        .overlay(Capsule().stroke(name == s ? LColors.accent : LColors.glassBorder, lineWidth: 1))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("COLUMN COLOR")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 6), spacing: 10) {
+                        ForEach(presetColors, id: \.self) { hex in
+                            let selected = selectedHex == hex
+                            Button { selectedHex = hex } label: {
+                                Circle()
+                                    .fill(Color(hex: hex))
+                                    .frame(width: 36, height: 36)
+                                    .overlay(Circle().stroke(.white, lineWidth: selected ? 2.5 : 0))
+                                    .overlay(
+                                        Image(systemName: "checkmark")
+                                            .font(.system(size: 12, weight: .bold))
+                                            .foregroundStyle(.white)
+                                            .opacity(selected ? 1 : 0)
+                                    )
+                                    .shadow(color: Color(hex: hex).opacity(0.5), radius: selected ? 8 : 0)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .padding(16)
+                .background(LColors.glassSurface)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .overlay(RoundedRectangle(cornerRadius: 16).stroke(LColors.glassBorder, lineWidth: 1))
+
+                Spacer()
+
+                LButton(title: "Save Column", style: .gradient) {
+                    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmed.isEmpty else { return }
+                    onSave(trimmed, selectedHex)
+                    dismiss()
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 24)
+            }
+            .padding(.horizontal, 24)
+        }
+        .onAppear {
+            name = column?.name ?? ""
+            selectedHex = column?.colorHex ?? "#7d19f7"
+        }
+    }
+}
+

@@ -85,23 +85,10 @@ struct ChecklistsView: View {
                             }
 
                             if canLoadMore {
-                                Button {
+                                LoadMoreButton {
                                     visibleCount += pageSize
-                                } label: {
-                                    Text("Load more")
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(.white)
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 12)
-                                        .background(LColors.accent)
-                                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 14)
-                                                .stroke(LColors.glassBorder, lineWidth: 1)
-                                        )
                                 }
-                                .buttonStyle(.plain)
-                                .padding(.top, 6)
+                                .padding(.top, 4)
                             }
                         }
                     }
@@ -153,18 +140,20 @@ struct ChecklistsView: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack(alignment: .center) {
-            GradientTitle(text: "Checklists", font: .title2.bold())
-            Spacer()
-            Button { dismiss() } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.title2)
-                    .foregroundStyle(LColors.textSecondary)
+        VStack(spacing: 0) {
+            HStack(alignment: .center) {
+                GradientTitle(text: "Checklists", font: .title2.bold())
+                Spacer()
             }
-            .buttonStyle(.plain)
+            .padding(.top, 20)
+            .padding(.horizontal, LSpacing.pageHorizontal)
+
+            Rectangle()
+                .fill(LColors.glassBorder)
+                .frame(height: 1)
+                .padding(.horizontal, LSpacing.pageHorizontal)
+                .padding(.top, 6)
         }
-        .padding(.top, 20)
-        .padding(.horizontal, LSpacing.pageHorizontal)
     }
 
     // MARK: - Tabs

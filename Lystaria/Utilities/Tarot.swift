@@ -190,7 +190,7 @@ let localDailyTarotTips: [DailyTarotTip] = [
     DailyTarotTip(
         id: "32",
         title: "Page Of Cups",
-        keywords: [],
+        keywords: ["intuition", "curiosity", "emotional messages", "creative inspiration", "gentle openness"],
         message: "The Page of Cups represents curiosity, emotional openness, and playful imagination. It encourages you to trust your intuition and welcome surprising messages from the heart."
     ),
     DailyTarotTip(

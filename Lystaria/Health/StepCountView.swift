@@ -333,18 +333,21 @@ struct StepCountView: View {
             .clipped()
 
             if showGoalPopup {
-                Color.black.opacity(0.35)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        isGoalFieldFocused = false
-                        showGoalPopup = false
-                    }
+                ZStack {
+                    Color.black.opacity(0.35)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            isGoalFieldFocused = false
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                showGoalPopup = false
+                            }
+                        }
 
-                VStack {
-                    Spacer()
-
-                    VStack(spacing: 18) {
-                        GradientTitle(text: "Set Goal", font: .title2.bold())
+                    VStack(spacing: 20) {
+                        GradientTitle(
+                            text: "Set Goal",
+                            font: .system(size: 22, weight: .bold)
+                        )
 
                         TextField("Goal", text: $goalText)
 #if os(iOS) || os(visionOS)
@@ -361,38 +364,67 @@ struct StepCountView: View {
                                     .stroke(LColors.glassBorder, lineWidth: 1)
                             )
 
-                        LButton(title: "Save Goal", style: .secondary) {
+                        Button {
                             let cleaned = goalText.trimmingCharacters(in: .whitespacesAndNewlines)
                             if let value = Double(cleaned), value > 0 {
                                 stepGoal = value
                                 isGoalFieldFocused = false
-                                showGoalPopup = false
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                    showGoalPopup = false
+                                }
                                 recalculateReachedGoalDates()
                             }
+                        } label: {
+                            Text("Save Goal")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(LGradients.blue)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
                         }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            isGoalFieldFocused = false
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                showGoalPopup = false
+                            }
+                        } label: {
+                            Text("Close")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Color.white.opacity(0.08))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .padding(20)
-                    .frame(maxWidth: 320)
-                    .background {
+                    .padding(24)
+                    .frame(maxWidth: 360)
+                    .background(
                         ZStack {
                             LGradients.blue
+                                .clipShape(RoundedRectangle(cornerRadius: 24))
+
                             GradientOverlayBackground()
                                 .clipShape(RoundedRectangle(cornerRadius: 24))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 24)
+                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                )
                         }
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: 24))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 24)
-                            .stroke(Color.white.opacity(0.14), lineWidth: 1)
+                        .shadow(color: .black.opacity(0.4), radius: 30, y: 12)
                     )
-                    .shadow(color: .black.opacity(0.25), radius: 16, y: 8)
-                    .contentShape(RoundedRectangle(cornerRadius: 24))
+                    .padding(.horizontal, 28)
                     .onTapGesture { }
-
-                    Spacer()
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-                .padding(.horizontal, 24)
-                .transition(.scale.combined(with: .opacity))
                 .zIndex(20)
             }
         }
@@ -424,11 +456,7 @@ struct StepCountView: View {
             recalculateReachedGoalDates()
         }
         .onChange(of: showGoalPopup) { _, isShowing in
-            if isShowing {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                    isGoalFieldFocused = true
-                }
-            } else {
+            if !isShowing {
                 isGoalFieldFocused = false
             }
         }

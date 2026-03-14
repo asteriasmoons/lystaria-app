@@ -67,7 +67,7 @@ struct JournalPreviewSheet: View {
                         LButton(title: "Edit", icon: "pencil", style: .secondary) {
                             onEdit(entry)
                         }
-                        LButton(title: "Delete", icon: "trash", style: .gradient) {
+                        GradientCapsuleButton(title: "Delete", icon: "trashfill") {
                             onDelete(entry)
                         }
                         Spacer()

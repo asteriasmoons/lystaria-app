@@ -33,16 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct LystariaApp: App {
 
-#if os(iOS)
-    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-#elseif os(macOS)
-    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-#endif
-
-    @StateObject private var notificationManager = NotificationManager.shared
-    @StateObject private var appState = AppState()
-
-    var sharedModelContainer: ModelContainer = {
+    static let sharedModelContainer: ModelContainer = {
         let schema = Schema([
             AuthUser.self,
             Book.self,
@@ -55,10 +46,10 @@ struct LystariaApp: App {
             UserSettings.self,
             Checklist.self,
             ChecklistItem.self,
+            KanbanBoard.self,
+            KanbanColumn.self,
         ])
 
-        // allowsSave + no migrationPlan = SwiftData handles lightweight
-        // migrations (new optional columns) automatically without wiping data.
         let modelConfiguration = ModelConfiguration(
             schema: schema,
             isStoredInMemoryOnly: false
@@ -70,6 +61,17 @@ struct LystariaApp: App {
             fatalError("Could not create ModelContainer: \(error)")
         }
     }()
+
+#if os(iOS)
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+#elseif os(macOS)
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+#endif
+
+    let sharedModelContainer = LystariaApp.sharedModelContainer
+
+    @StateObject private var notificationManager = NotificationManager.shared
+    @StateObject private var appState = AppState()
 
     var body: some Scene {
         WindowGroup {

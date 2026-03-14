@@ -6,11 +6,11 @@ import SwiftData
 
 struct ContentView: View {
     @AppStorage("hasSeenWelcome") private var hasSeenWelcome = false
-    // DEV MODE:
+    // WELCOME DEV MODE:
     // Set this to `true` while testing the welcome flow.
     // Resets the welcome flag on every fresh app launch so the flow always shows.
     // Change it back to `false` when you're done testing.
-    private let alwaysShowWelcomeForDev = true
+    private let alwaysShowWelcomeForDev = false
     @Query private var authUsers: [AuthUser]
 
     var body: some View {
@@ -41,5 +41,7 @@ struct ContentView: View {
             Habit.self, HabitLog.self, MoodLog.self,
             JournalEntry.self, LystariaReminder.self,
             UserSettings.self, Checklist.self, ChecklistItem.self,
+            KanbanBoard.self,
+            KanbanColumn.self,
         ], inMemory: true)
 }

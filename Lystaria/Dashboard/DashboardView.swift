@@ -20,16 +20,31 @@ struct DashboardView: View {
     @Query(sort: \MoodLog.createdAt, order: .reverse)
     private var moodLogs: [MoodLog]
 
-    @Query(sort: \CalendarEvent.startDate, order: .reverse)
-    private var calendarEvents: [CalendarEvent]
 
     @Query(sort: \HabitLog.dayStart, order: .reverse)
     private var habitLogs: [HabitLog]
 
     @StateObject private var stepHealth = HealthKitManager.shared
     @StateObject private var waterHealth = WaterHealthKitManager.shared
+    @StateObject private var onboarding = OnboardingManager()
     @AppStorage("waterGoalFlOz") private var waterGoal: Double = 80
     @AppStorage("stepGoal") private var stepGoal: Double = 5000
+
+    @State private var showToolbox = false
+
+    @AppStorage("dashboardTarotDayKey") private var tarotDayKey: String = ""
+    @AppStorage("dashboardTarotId") private var tarotStoredId: String = ""
+    @AppStorage("dashboardTarotTitle") private var tarotStoredTitle: String = ""
+    @AppStorage("dashboardTarotKeywords") private var tarotStoredKeywords: String = ""
+    @AppStorage("dashboardTarotMessage") private var tarotStoredMessage: String = ""
+
+    @State private var selectedZodiacSign: String = ""
+    @State private var isFetchingHoroscope = false
+    @State private var horoscopeError: String? = nil
+
+    @AppStorage("dashboardHoroscopeDayKey") private var horoscopeDayKey: String = ""
+    @AppStorage("dashboardHoroscopeSign") private var horoscopeStoredSign: String = ""
+    @AppStorage("dashboardHoroscopeMessage") private var horoscopeStoredMessage: String = ""
 
     private var dashboardCalendar: Calendar {
         Calendar.autoupdatingCurrent
@@ -46,6 +61,96 @@ struct DashboardView: View {
     private func isToday(_ date: Date) -> Bool {
         dashboardCalendar.isDate(date, inSameDayAs: Date())
     }
+
+    private var todayKey: String {
+        let formatter = DateFormatter()
+        formatter.calendar = dashboardCalendar
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: Date())
+    }
+
+    private let zodiacSigns = [
+        "Aries", "Taurus", "Gemini", "Cancer",
+        "Leo", "Virgo", "Libra", "Scorpio",
+        "Sagittarius", "Capricorn", "Aquarius", "Pisces"
+    ]
+
+    private var currentDailyHoroscope: DailyHoroscope? {
+        guard horoscopeDayKey == todayKey,
+              !horoscopeStoredSign.isEmpty,
+              !horoscopeStoredMessage.isEmpty else {
+            return nil
+        }
+
+        return DailyHoroscope(
+            sign: horoscopeStoredSign,
+            message: horoscopeStoredMessage
+        )
+    }
+
+    private func fetchDailyHoroscope() {
+        guard !selectedZodiacSign.isEmpty else { return }
+
+        if horoscopeDayKey == todayKey,
+           horoscopeStoredSign.caseInsensitiveCompare(selectedZodiacSign) == .orderedSame,
+           !horoscopeStoredMessage.isEmpty {
+            return
+        }
+
+        isFetchingHoroscope = true
+        horoscopeError = nil
+
+        Task {
+            do {
+                let horoscope = try await HoroscopeService.shared.fetchHoroscope(for: selectedZodiacSign)
+
+                await MainActor.run {
+                    horoscopeDayKey = todayKey
+                    horoscopeStoredSign = horoscope.sign
+                    horoscopeStoredMessage = horoscope.message
+                    isFetchingHoroscope = false
+                }
+            } catch {
+                await MainActor.run {
+                    horoscopeError = "Couldn’t load horoscope right now."
+                    isFetchingHoroscope = false
+                }
+            }
+        }
+    }
+
+    private var currentDailyTarotTip: DailyTarotTip? {
+        guard tarotDayKey == todayKey,
+              !tarotStoredTitle.isEmpty,
+              !tarotStoredMessage.isEmpty else {
+            return nil
+        }
+
+        let keywords = tarotStoredKeywords
+            .split(separator: "|")
+            .map { String($0) }
+            .filter { !$0.isEmpty }
+
+        return DailyTarotTip(
+            id: tarotStoredId.isEmpty ? todayKey : tarotStoredId,
+            title: tarotStoredTitle,
+            keywords: keywords,
+            message: tarotStoredMessage
+        )
+    }
+
+    private func drawDailyTarotTip() {
+        guard currentDailyTarotTip == nil, !localDailyTarotTips.isEmpty else { return }
+        guard let tip = localDailyTarotTips.randomElement() else { return }
+
+        tarotDayKey = todayKey
+        tarotStoredId = tip.id
+        tarotStoredTitle = tip.title
+        tarotStoredKeywords = tip.keywords.joined(separator: "|")
+        tarotStoredMessage = tip.message
+    }
+
 
     // MARK: - System Activation Checks
 
@@ -75,18 +180,6 @@ struct DashboardView: View {
         stepHealth.todaySteps > 0
     }
 
-    private var hasEventToday: Bool {
-        calendarEvents.contains { event in
-            let eventStart = event.startDate
-            let eventEnd = event.endDate ?? event.startDate
-
-            if event.allDay {
-                return eventStart < startOfTomorrow && eventEnd >= startOfToday
-            }
-
-            return eventStart < startOfTomorrow && eventEnd >= startOfToday
-        }
-    }
 
     private var activatedCount: Int {
         [
@@ -94,8 +187,7 @@ struct DashboardView: View {
             moodLoggedToday,
             habitCompletedToday,
             waterLoggedToday,
-            stepsLoggedToday,
-            hasEventToday
+            stepsLoggedToday
         ]
         .filter { $0 }
         .count
@@ -213,17 +305,34 @@ struct DashboardView: View {
                     VStack(spacing: 16) {
                         header
 
+                        Rectangle()
+                            .fill(LColors.glassBorder)
+                            .frame(height: 1)
+
                         DailyMomentumCard(
                             activatedCount: activatedCount,
-                            totalCount: 6,
+                            totalCount: 5,
                             items: [
                                 .init(title: "Journal", systemImage: "notesfill", isActive: journaledToday),
                                 .init(title: "Mood", systemImage: "facefill", isActive: moodLoggedToday),
                                 .init(title: "Habits", systemImage: "goalsparkle", isActive: habitCompletedToday),
                                 .init(title: "Water", systemImage: "dropfill", isActive: waterLoggedToday),
-                                .init(title: "Steps", systemImage: "shoefill", isActive: stepsLoggedToday),
-                                .init(title: "Events", systemImage: "fillcal", isActive: hasEventToday)
+                                .init(title: "Steps", systemImage: "shoefill", isActive: stepsLoggedToday)
                             ]
+                        )
+
+                        DashboardTarotCard(
+                            tip: currentDailyTarotTip,
+                            onDraw: drawDailyTarotTip
+                        )
+
+                        DashboardHoroscopeCard(
+                            selectedSign: $selectedZodiacSign,
+                            zodiacSigns: zodiacSigns,
+                            horoscope: currentDailyHoroscope,
+                            isLoading: isFetchingHoroscope,
+                            errorText: horoscopeError,
+                            onFetch: fetchDailyHoroscope
                         )
 
                         WellnessWallCard(items: wellnessInsights)
@@ -236,9 +345,25 @@ struct DashboardView: View {
                 .scrollIndicators(.hidden)
             }
             .toolbarBackground(.hidden, for: .navigationBar)
-            .task {
-                await stepHealth.fetchTodaySteps()
-                await waterHealth.fetchTodayWater()
+            .navigationDestination(isPresented: $showToolbox) {
+                ToolboxView()
+            }
+            .onAppear {
+                Task {
+                    await stepHealth.fetchTodaySteps()
+                    await waterHealth.fetchTodayWater()
+                }
+            }
+            .overlayPreferenceValue(OnboardingTargetKey.self) { anchors in
+                ZStack {
+                    OnboardingOverlay(anchors: anchors)
+                        .environmentObject(onboarding)
+                }
+                .task(id: anchors.count) {
+                    if anchors.count > 0 {
+                        onboarding.start(page: OnboardingPages.dashboard)
+                    }
+                }
             }
         }
     }
@@ -247,6 +372,255 @@ struct DashboardView: View {
         HStack {
             GradientTitle(text: "Dashboard", font: .title.bold())
             Spacer()
+
+            Button {
+                showToolbox = true
+            } label: {
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.08))
+                        .overlay(
+                            Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                        )
+                        .frame(width: 34, height: 34)
+
+                    Image("pausefill")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 16, height: 16)
+                        .foregroundStyle(.white)
+                }
+            }
+            .onboardingTarget("toolboxIcon")
+            .buttonStyle(.plain)
+        }
+    }
+}
+
+private struct DashboardHoroscopeCard: View {
+    @Binding var selectedSign: String
+    let zodiacSigns: [String]
+    let horoscope: DailyHoroscope?
+    let isLoading: Bool
+    let errorText: String?
+    let onFetch: () -> Void
+
+    var body: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .center, spacing: 10) {
+                    Image("wandfill")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 24, height: 24)
+                        .foregroundStyle(.white)
+                        .opacity(1)
+
+                    GradientTitle(text: "Daily Astrology", font: .system(size: 20, weight: .bold))
+                    Spacer()
+                }
+
+                if let horoscope {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(horoscope.sign)
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(.white)
+
+                        Text(horoscope.message)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(LColors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Menu {
+                            ForEach(zodiacSigns, id: \.self) { sign in
+                                Button(sign) {
+                                    selectedSign = sign
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 10) {
+                                Text(selectedSign.isEmpty ? "Select Zodiac Sign" : selectedSign)
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(.white)
+
+                                Spacer()
+
+                                Image("chevrondownfill")
+                                    .renderingMode(.template)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 24, height: 24)
+                                    .foregroundStyle(.white)
+                                    .opacity(1)
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                        }
+
+                        Button {
+                            onFetch()
+                        } label: {
+                            HStack {
+                                Spacer()
+
+                                if isLoading {
+                                    ProgressView()
+                                        .tint(.white)
+                                } else {
+                                    Text("Get Horoscope")
+                                        .font(.system(size: 14, weight: .bold))
+                                        .foregroundStyle(.white)
+                                }
+
+                                Spacer()
+                            }
+                            .padding(.vertical, 12)
+                            .background(LGradients.blue)
+                            .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(selectedSign.isEmpty || isLoading)
+
+                        if let errorText {
+                            Text(errorText)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(.red.opacity(0.9))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct DashboardTarotCard: View {
+    let tip: DailyTarotTip?
+    let onDraw: () -> Void
+
+    var body: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .center, spacing: 10) {
+                    Image("crystalballfill")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 24, height: 24)
+                        .foregroundStyle(.white)
+                        .opacity(1)
+
+                    GradientTitle(text: "Daily Tarot", font: .system(size: 20, weight: .bold))
+                    Spacer()
+                }
+
+                if let tip {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(tip.title)
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(.white)
+
+                        if !tip.keywords.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("KEYWORDS")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundStyle(LColors.textSecondary)
+                                    .tracking(0.5)
+
+                                FlexibleKeywordWrap(keywords: tip.keywords)
+                            }
+                        }
+
+                        Text(tip.message)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(LColors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Pull one locked daily tarot tip for today.")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(LColors.textSecondary)
+
+                        Button {
+                            onDraw()
+                        } label: {
+                            Text("Get Daily Tip")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 18)
+                                .padding(.vertical, 10)
+                                .background(LGradients.blue)
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct FlexibleKeywordWrap: View {
+    let keywords: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(chunkedKeywords, id: \.self) { row in
+                HStack(spacing: 8) {
+                    ForEach(row, id: \.self) { keyword in
+                        ZStack {
+                            Text(keyword)
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(LGradients.blue)
+                                .offset(x: 0.6, y: 0)
+
+                            Text(keyword)
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(LGradients.blue)
+                                .offset(x: -0.6, y: 0)
+
+                            Text(keyword)
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(LGradients.blue)
+                                .offset(x: 0, y: 0.6)
+
+                            Text(keyword)
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(LGradients.blue)
+                                .offset(x: 0, y: -0.6)
+
+                            Text(keyword)
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(.white)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(Capsule())
+                        .overlay(
+                            Capsule()
+                                .stroke(LGradients.blue, lineWidth: 1)
+                        )
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+    }
+
+    private var chunkedKeywords: [[String]] {
+        stride(from: 0, to: keywords.count, by: 3).map {
+            Array(keywords[$0..<min($0 + 3, keywords.count)])
         }
     }
 }

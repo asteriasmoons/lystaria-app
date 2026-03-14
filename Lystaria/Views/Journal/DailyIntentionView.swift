@@ -1,3 +1,10 @@
+//
+// DailyIntentionView.swift
+//
+// Created by Asteria Moon
+// THE REAL INTENTIONS PAGE
+//
+
 import SwiftUI
 import SwiftData
 import Combine
@@ -122,7 +129,7 @@ struct DailyIntentionView: View {
                             LButton(title: "Edit", icon: "pencil", style: .secondary) {
                                 isEditing = true
                             }
-                            LButton(title: "Clear", icon: "trash", style: .gradient) {
+                            GradientCapsuleButton(title: "Clear", icon: "trashfill") {
                                 clear()
                             }
                             Spacer()

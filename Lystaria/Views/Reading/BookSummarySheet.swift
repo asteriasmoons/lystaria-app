@@ -9,7 +9,7 @@ import SwiftUI
 import UIKit
 
 struct BookSummarySheet: View {
-    @Environment(\.dismiss) private var dismiss
+    @Binding var isPresented: Bool
 
     @State private var title: String = ""
     @State private var author: String = ""
@@ -30,43 +30,40 @@ struct BookSummarySheet: View {
         !generatedSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private func close() {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            isPresented = false
+        }
+    }
+
     var body: some View {
         ZStack {
-            LystariaBackground()
+            Color.black.opacity(0.55)
+                .ignoresSafeArea()
+                .onTapGesture { close() }
 
-            ScrollView {
-                VStack(spacing: 20) {
-                    HStack {
-                        GradientTitle(text: "Book Summary", font: .title2.bold())
-                        Spacer()
+            VStack(spacing: 20) {
+                GradientTitle(text: "Book Summary", font: .system(size: 22, weight: .bold))
 
-                        Button { dismiss() } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.title2)
-                                .foregroundStyle(LColors.textSecondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.top, 20)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("TITLE")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("TITLE")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(LColors.textSecondary)
-                            .tracking(0.5)
+                    LystariaTextField(placeholder: "Book title", text: $title)
+                }
 
-                        LystariaTextField(placeholder: "Book title", text: $title)
-                    }
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("AUTHOR (OPTIONAL)")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("AUTHOR (OPTIONAL)")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(LColors.textSecondary)
-                            .tracking(0.5)
+                    LystariaTextField(placeholder: "Author name", text: $author)
+                }
 
-                        LystariaTextField(placeholder: "Author name", text: $author)
-                    }
-
+                ScrollView {
                     GlassCard {
                         VStack(alignment: .leading, spacing: 12) {
                             if didCopy {
@@ -84,6 +81,7 @@ struct BookSummarySheet: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 10))
                                 .transition(.move(edge: .top).combined(with: .opacity))
                             }
+
                             if isLoading {
                                 HStack(spacing: 12) {
                                     ProgressView()
@@ -175,40 +173,64 @@ struct BookSummarySheet: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .animation(.easeInOut(duration: 0.25), value: didCopy)
                     }
-
-                    Button {
-                        Task {
-                            await generateSummary()
-                        }
-                    } label: {
-                        Text(isLoading ? "Generating..." : "Generate")
-                            .font(.headline)
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(
-                                titleTrimmed.isEmpty || isLoading
-                                ? AnyShapeStyle(Color.gray.opacity(0.3))
-                                : AnyShapeStyle(LGradients.blue)
-                            )
-                            .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
-                            .shadow(
-                                color: titleTrimmed.isEmpty || isLoading
-                                ? .clear
-                                : Color.black.opacity(0.18),
-                                radius: 12,
-                                y: 6
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(titleTrimmed.isEmpty || isLoading)
                 }
-                .padding(.horizontal, LSpacing.pageHorizontal)
-                .padding(.bottom, 40)
-                .frame(maxWidth: 560)
-                .frame(maxWidth: .infinity)
+                .frame(maxHeight: 260)
+
+                Button {
+                    Task { await generateSummary() }
+                } label: {
+                    Text(isLoading ? "Generating..." : "Generate")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(
+                            titleTrimmed.isEmpty || isLoading
+                            ? AnyShapeStyle(Color.gray.opacity(0.3))
+                            : AnyShapeStyle(LGradients.blue)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .buttonStyle(.plain)
+                .disabled(titleTrimmed.isEmpty || isLoading)
+
+                Button {
+                    close()
+                } label: {
+                    Text("Close")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(LColors.glassBorder, lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
             }
+            .padding(24)
+            .frame(maxWidth: 420)
+            .background(
+                ZStack {
+                    LGradients.blue
+                        .clipShape(RoundedRectangle(cornerRadius: 24))
+
+                    GradientOverlayBackground()
+                        .clipShape(RoundedRectangle(cornerRadius: 24))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 24)
+                                .stroke(LColors.glassBorder, lineWidth: 1)
+                        )
+                }
+                .shadow(color: .black.opacity(0.4), radius: 30, y: 12)
+            )
+            .padding(.horizontal, 28)
+            .onTapGesture { }  // absorb taps so they don't fall through to the dim layer
         }
+        .transition(.opacity.combined(with: .scale(scale: 0.96)))
     }
 
     @MainActor
@@ -236,9 +258,4 @@ struct BookSummarySheet: View {
 
         isLoading = false
     }
-}
-
-#Preview {
-    BookSummarySheet()
-        .preferredColorScheme(.dark)
 }

@@ -9,7 +9,7 @@ import SwiftUI
 import UIKit
 
 struct BookRecommendationsSheet: View {
-    @Environment(\.dismiss) private var dismiss
+    @Binding var isPresented: Bool
 
     @State private var genre: String = ""
 
@@ -44,126 +44,145 @@ struct BookRecommendationsSheet: View {
         !recommendations.isEmpty
     }
 
+    private func close() {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            isPresented = false
+        }
+    }
+
     var body: some View {
         ZStack {
-            LystariaBackground()
+            Color.black.opacity(0.55)
+                .ignoresSafeArea()
+                .onTapGesture { close() }
 
-            ScrollView {
-                VStack(spacing: 20) {
-                    HStack {
-                        GradientTitle(text: "Book Recommendations", font: .title2.bold())
-                        Spacer()
+            VStack(spacing: 20) {
+                GradientTitle(text: "Book Recommendations", font: .system(size: 22, weight: .bold))
 
-                        Button { dismiss() } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.title2)
-                                .foregroundStyle(LColors.textSecondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.top, 20)
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("GENRE")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("GENRE")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(LColors.textSecondary)
-                            .tracking(0.5)
+                    genrePills
+                }
 
-                        genrePills
-                    }
+                ScrollView {
+                    VStack(spacing: 16) {
+                        if didCopy {
+                            HStack(spacing: 8) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.white)
 
-                    if didCopy {
-                        HStack(spacing: 8) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.white)
-
-                            Text("Copied to clipboard!")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(.white)
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(LGradients.blue)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                    }
-
-                    if isLoading {
-                        GlassCard {
-                            HStack(spacing: 12) {
-                                ProgressView()
-                                    .tint(.white)
-
-                                Text("Generating recommendations...")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundStyle(LColors.textPrimary)
+                                Text("Copied to clipboard!")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(.white)
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 12)
                             .padding(.vertical, 8)
-                        }
-                    } else if !errorMessage.isEmpty {
-                        GlassCard {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("ERROR")
-                                    .font(.system(size: 12, weight: .bold))
-                                    .foregroundStyle(LColors.textSecondary)
-
-                                Text(errorMessage)
-                                    .font(.system(size: 14))
-                                    .foregroundStyle(LColors.textPrimary)
-                            }
+                            .background(LGradients.blue)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                    } else if hasResults {
-                        VStack(spacing: 16) {
+
+                        if isLoading {
+                            GlassCard {
+                                HStack(spacing: 12) {
+                                    ProgressView()
+                                        .tint(.white)
+
+                                    Text("Generating recommendations...")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(LColors.textPrimary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.vertical, 8)
+                            }
+                        } else if !errorMessage.isEmpty {
+                            GlassCard {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("ERROR")
+                                        .font(.system(size: 12, weight: .bold))
+                                        .foregroundStyle(LColors.textSecondary)
+
+                                    Text(errorMessage)
+                                        .font(.system(size: 14))
+                                        .foregroundStyle(LColors.textPrimary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        } else if hasResults {
                             ForEach(recommendations) { rec in
                                 recommendationCard(rec)
                             }
-                        }
-                    } else {
-                        GlassCard {
-                            Text("Choose a genre, then tap Generate to get book recommendations.")
-                                .font(.system(size: 14))
-                                .foregroundStyle(LColors.textSecondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                        } else {
+                            GlassCard {
+                                Text("Choose a genre, then tap Generate to get book recommendations.")
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(LColors.textSecondary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
                         }
                     }
-
-                    Button {
-                        Task {
-                            await generateRecommendations()
-                        }
-                    } label: {
-                        Text(isLoading ? "Generating..." : "Generate")
-                            .font(.headline)
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(
-                                genreTrimmed.isEmpty || isLoading
-                                ? AnyShapeStyle(Color.gray.opacity(0.3))
-                                : AnyShapeStyle(LGradients.blue)
-                            )
-                            .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
-                            .shadow(
-                                color: genreTrimmed.isEmpty || isLoading
-                                ? .clear
-                                : Color.black.opacity(0.18),
-                                radius: 12,
-                                y: 6
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(genreTrimmed.isEmpty || isLoading)
                 }
-                .padding(.horizontal, LSpacing.pageHorizontal)
-                .padding(.bottom, 40)
-                .frame(maxWidth: 560)
-                .frame(maxWidth: .infinity)
-                .animation(.easeInOut(duration: 0.25), value: didCopy)
+                .frame(maxHeight: 260)
+
+                Button {
+                    Task { await generateRecommendations() }
+                } label: {
+                    Text(isLoading ? "Generating..." : "Generate")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(
+                            genreTrimmed.isEmpty || isLoading
+                            ? AnyShapeStyle(Color.gray.opacity(0.3))
+                            : AnyShapeStyle(LGradients.blue)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .buttonStyle(.plain)
+                .disabled(genreTrimmed.isEmpty || isLoading)
+
+                Button {
+                    close()
+                } label: {
+                    Text("Close")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(LColors.glassBorder, lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
             }
+            .padding(24)
+            .frame(maxWidth: 420)
+            .background(
+                ZStack {
+                    LGradients.blue
+                        .clipShape(RoundedRectangle(cornerRadius: 24))
+
+                    GradientOverlayBackground()
+                        .clipShape(RoundedRectangle(cornerRadius: 24))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 24)
+                                .stroke(LColors.glassBorder, lineWidth: 1)
+                        )
+                }
+                .shadow(color: .black.opacity(0.4), radius: 30, y: 12)
+            )
+            .padding(.horizontal, 28)
+            .onTapGesture { }  // absorb taps so they don't fall through to the dim layer
         }
+        .transition(.opacity.combined(with: .scale(scale: 0.96)))
     }
 
     private var genrePills: some View {
@@ -308,9 +327,4 @@ struct BookRecommendationsSheet: View {
 
         isLoading = false
     }
-}
-
-#Preview {
-    BookRecommendationsSheet()
-        .preferredColorScheme(.dark)
 }

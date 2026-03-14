@@ -27,15 +27,15 @@ struct HabitsView: View {
                     HStack {
                         GradientTitle(text: "Habits", size: 26)
                         Spacer()
-                        Button { dismiss() } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.title2)
-                                .foregroundStyle(LColors.textSecondary)
-                        }
-                        .buttonStyle(.plain)
                     }
                     .padding(.top, 20)
                     .padding(.horizontal, LSpacing.pageHorizontal)
+
+                    Rectangle()
+                        .fill(LColors.glassBorder)
+                        .frame(height: 1)
+                        .padding(.horizontal, LSpacing.pageHorizontal)
+                        .padding(.top, 6)
 
                     if habits.isEmpty {
                         GlassCard {
@@ -406,11 +406,13 @@ struct HabitCard: View {
 
     private var nextReminderLabel: String {
         guard let d = nextReminderRunAt else { return "—" }
+
         let df = DateFormatter()
         df.locale = .current
         df.timeZone = .current
-        df.dateStyle = .none
+        df.dateStyle = .medium
         df.timeStyle = .short
+
         return df.string(from: d)
     }
 
@@ -474,8 +476,8 @@ struct HabitCard: View {
                                     .font(.system(size: 10, weight: .bold))
                                     .foregroundStyle(
                                         i < todaysCount
-                                        ? (progress >= 1.0 ? LColors.success : LColors.accent)
-                                        : LColors.textSecondary
+                                        ? AnyShapeStyle(LGradients.blue)
+                                        : AnyShapeStyle(LColors.textSecondary)
                                     )
                                     .opacity(i < todaysCount ? 1.0 : 0.55)
                             }
@@ -514,9 +516,7 @@ struct HabitCard: View {
 
                         GlassProgressBar(
                             progress: progress,
-                            gradient: progress >= 1.0
-                                ? LinearGradient(colors: [LColors.success], startPoint: .leading, endPoint: .trailing)
-                                : LGradients.blue
+                            gradient: LGradients.blue
                         )
                     }
                 }
@@ -544,7 +544,7 @@ struct HabitCard: View {
                             habit.updatedAt = Date()
                         }
 
-                        LButton(title: "Delete", icon: "trash", style: .secondary) {
+                        GradientCapsuleButton(title: "Delete", icon: "trashfill") {
                             showDeleteConfirm = true
                         }
 
