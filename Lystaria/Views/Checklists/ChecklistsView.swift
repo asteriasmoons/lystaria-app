@@ -20,16 +20,24 @@ struct ChecklistsView: View {
     private var checklists: [Checklist]
 
     @State private var tab: ChecklistTab = .active
+    @State private var selectedChecklistID: PersistentIdentifier?
     @State private var draggedItem: ChecklistItem?
     // In-memory reorder buffer — mutated during drag, flushed to SwiftData on drop
     @State private var dragBuffer: [ChecklistItem] = []
+    @State private var renamingChecklistID: PersistentIdentifier?
+    @State private var renameDraft: String = ""
 
     // Pagination
     @State private var visibleCount: Int = 4
     private let pageSize: Int = 4
 
-    // Single default container for now.
-    private var activeChecklist: Checklist? { checklists.first }
+    private var activeChecklist: Checklist? {
+        if let selectedChecklistID,
+           let selected = checklists.first(where: { $0.persistentModelID == selectedChecklistID }) {
+            return selected
+        }
+        return checklists.first
+    }
 
     private var itemsSorted: [ChecklistItem] {
         // During a drag use the in-memory buffer so the UI reflects reordering
@@ -56,6 +64,21 @@ struct ChecklistsView: View {
 
     private var canLoadMore: Bool {
         filteredItems.count > visibleCount
+    }
+
+    private var checklistTabs: [Checklist] {
+        checklists.sorted { lhs, rhs in
+            if lhs.sortOrder == rhs.sortOrder {
+                return lhs.createdAt < rhs.createdAt
+            }
+            return lhs.sortOrder < rhs.sortOrder
+        }
+    }
+
+    private var selectedChecklistName: String {
+        activeChecklist?.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            ? (activeChecklist?.name ?? "Checklist")
+            : "Checklist"
     }
 
     var body: some View {
@@ -86,6 +109,7 @@ struct ChecklistsView: View {
         }
         .onChange(of: tab) { _, _ in
             visibleCount = pageSize
+            resetDragState()
         }
         .onChange(of: filteredItems.count) { _, newValue in
             // If the list shrinks (deletes / tab change), keep visibleCount in range.
@@ -96,11 +120,26 @@ struct ChecklistsView: View {
                 visibleCount = pageSize
             }
         }
+        .onAppear {
+            syncSelectedChecklistIfNeeded()
+        }
+        .onChange(of: checklists.count) { _, _ in
+            resetDragState()
+            syncSelectedChecklistIfNeeded()
+        }
+        .onChange(of: selectedChecklistID) { _, _ in
+            resetDragState()
+            if renamingChecklistID != selectedChecklistID {
+                renamingChecklistID = nil
+                renameDraft = ""
+            }
+        }
     }
 
     private var content: some View {
         VStack(spacing: 0) {
             header
+            checklistContainerTabs
 
             VStack(spacing: 14) {
                 tabs
@@ -121,7 +160,7 @@ struct ChecklistsView: View {
             GlassCard {
                 EmptyState(
                     icon: "checklist",
-                    message: "No checklist yet.\nTap + to add your first item.",
+                    message: "No checklist yet.\nTap + in the header to add your first checklist.",
                     actionLabel: "Add Item"
                 ) {
                     ensureDefaultChecklistIfNeeded()
@@ -194,6 +233,24 @@ struct ChecklistsView: View {
             HStack(alignment: .center) {
                 GradientTitle(text: "Checklists", font: .title2.bold())
                 Spacer()
+
+                Button {
+                    addNewChecklist()
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.08))
+                            .overlay(
+                                Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                            .frame(width: 34, height: 34)
+
+                        Image(systemName: "plus")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white)
+                    }
+                }
+                .buttonStyle(.plain)
             }
             .padding(.top, 20)
             .padding(.horizontal, LSpacing.pageHorizontal)
@@ -203,6 +260,74 @@ struct ChecklistsView: View {
                 .frame(height: 1)
                 .padding(.horizontal, LSpacing.pageHorizontal)
                 .padding(.top, 6)
+        }
+    }
+
+    private var checklistContainerTabs: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(checklistTabs, id: \.persistentModelID) { checklist in
+                    checklistContainerTab(for: checklist)
+                }
+            }
+            .padding(.horizontal, LSpacing.pageHorizontal)
+            .padding(.top, 12)
+        }
+    }
+
+    private func checklistContainerTab(for checklist: Checklist) -> some View {
+        let isSelected = activeChecklist?.persistentModelID == checklist.persistentModelID
+        let isRenaming = renamingChecklistID == checklist.persistentModelID
+        let title = checklist.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Checklist" : checklist.name
+
+        return VStack(spacing: 0) {
+            if isRenaming {
+                TextField("Checklist name", text: $renameDraft)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .textFieldStyle(.plain)
+                    .submitLabel(.done)
+                    .onSubmit {
+                        commitRename(for: checklist)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .frame(minWidth: 96)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(Color.white.opacity(0.14))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(Color.white.opacity(0.28), lineWidth: 1)
+                    )
+            } else {
+                Button {
+                    selectedChecklistID = checklist.persistentModelID
+                    visibleCount = pageSize
+                } label: {
+                    Text(title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(isSelected ? Color.white.opacity(0.14) : Color.white.opacity(0.06))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(isSelected ? Color.white.opacity(0.28) : LColors.glassBorder, lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .contextMenu {
+                    Button("Rename") {
+                        beginRenaming(checklist)
+                    }
+                }
+            }
         }
     }
 
@@ -220,15 +345,58 @@ struct ChecklistsView: View {
     private var emptyMessage: String {
         switch tab {
         case .active:
-            return "No active items.\nTap + to add one."
+            return "No active items in \(selectedChecklistName).\nTap + below to add one."
         case .done:
-            return "No completed items yet.\nFinish something first."
+            return "No completed items in \(selectedChecklistName) yet.\nFinish something first."
         case .all:
-            return "No items yet.\nTap + to add one."
+            return "No items in \(selectedChecklistName) yet.\nTap + below to add one."
         }
     }
 
     // MARK: - Actions
+
+    private func syncSelectedChecklistIfNeeded() {
+        if let selectedChecklistID,
+           checklists.contains(where: { $0.persistentModelID == selectedChecklistID }) {
+            return
+        }
+
+        selectedChecklistID = checklistTabs.first?.persistentModelID
+    }
+
+    private func addNewChecklist() {
+        let nextSortOrder = (checklistTabs.map { $0.sortOrder }.max() ?? -1) + 1
+        let checklistNumber = checklistTabs.count + 1
+        let newChecklist = Checklist(name: "Checklist \(checklistNumber)", sortOrder: nextSortOrder)
+        modelContext.insert(newChecklist)
+        try? modelContext.save()
+
+        selectedChecklistID = newChecklist.persistentModelID
+        visibleCount = pageSize
+        tab = .active
+        beginRenaming(newChecklist)
+    }
+    
+    private func beginRenaming(_ checklist: Checklist) {
+        renamingChecklistID = checklist.persistentModelID
+        let currentName = checklist.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        renameDraft = currentName.isEmpty ? "Checklist" : checklist.name
+    }
+
+    private func commitRename(for checklist: Checklist) {
+        let trimmed = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        checklist.name = trimmed.isEmpty ? "Checklist" : trimmed
+        checklist.updatedAt = Date()
+        checklist.needsSync = true
+        try? modelContext.save()
+        renamingChecklistID = nil
+        renameDraft = ""
+    }
+
+    private func resetDragState() {
+        draggedItem = nil
+        dragBuffer = []
+    }
 
     // Called on every dropEntered — pure in-memory swap, zero I/O.
     private func reorderInBuffer(_ item: ChecklistItem, before target: ChecklistItem) {
@@ -244,30 +412,55 @@ struct ChecklistsView: View {
         let movingItem = reordered.remove(at: fromIndex)
         let adjustedIndex = fromIndex < toIndex ? max(toIndex - 1, 0) : toIndex
         reordered.insert(movingItem, at: adjustedIndex)
-        dragBuffer = reordered
+        withAnimation(.interactiveSpring(response: 0.22, dampingFraction: 0.86)) {
+            dragBuffer = reordered
+        }
     }
 
     // Called once on performDrop — flushes sortOrder to SwiftData.
     private func commitDrop() {
+        guard !dragBuffer.isEmpty else {
+            draggedItem = nil
+            return
+        }
+
         for (index, item) in dragBuffer.enumerated() {
             item.sortOrder = index
         }
         activeChecklist?.updatedAt = Date()
         activeChecklist?.needsSync = true
         try? modelContext.save()
+        draggedItem = nil
         dragBuffer = []
     }
 
     private func ensureDefaultChecklistIfNeeded() {
         if activeChecklist == nil {
-            let c = Checklist(name: "My Checklist", sortOrder: 0)
+            let c = Checklist(name: "Checklist 1", sortOrder: 0)
             modelContext.insert(c)
             try? modelContext.save()
+            selectedChecklistID = c.persistentModelID
         }
     }
 
     private func addNewItem() {
-        guard let c = activeChecklist else { return }
+        guard let c = activeChecklist else {
+            ensureDefaultChecklistIfNeeded()
+            guard let checklist = activeChecklist else { return }
+            let nextOrder = (checklist.items.map { $0.sortOrder }.max() ?? -1) + 1
+
+            let item = ChecklistItem(
+                text: "",
+                sortOrder: nextOrder,
+                checklist: checklist
+            )
+            modelContext.insert(item)
+            checklist.updatedAt = Date()
+            checklist.needsSync = true
+            try? modelContext.save()
+            tab = .active
+            return
+        }
         let nextOrder = (c.items.map { $0.sortOrder }.max() ?? -1) + 1
 
         let item = ChecklistItem(
@@ -305,6 +498,7 @@ private enum ChecklistTab: CaseIterable {
 
 private struct ChecklistItemCard: View {
     @Environment(\.modelContext) private var modelContext
+    @Query(sort: \Checklist.sortOrder, order: .forward) private var allChecklists: [Checklist]
     @Bindable var item: ChecklistItem
     let isDragging: Bool
 
@@ -402,10 +596,26 @@ private struct ChecklistItemCard: View {
 
                     Spacer(minLength: 0)
 
-                    Button {
-                        deleteItem()
+                    Menu {
+                        if moveTargets.isEmpty {
+                            Text("No other checklists")
+                        } else {
+                            ForEach(moveTargets, id: \.persistentModelID) { checklist in
+                                Button(moveTitle(for: checklist)) {
+                                    moveItem(to: checklist)
+                                }
+                            }
+                        }
+
+                        Divider()
+
+                        Button(role: .destructive) {
+                            deleteItem()
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
                     } label: {
-                        Image(systemName: "trash")
+                        Image(systemName: "ellipsis")
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(LColors.textSecondary)
                             .frame(width: 34, height: 34)
@@ -431,6 +641,30 @@ private struct ChecklistItemCard: View {
                 }
             }
         }
+    }
+
+    private var moveTargets: [Checklist] {
+        allChecklists.filter { $0.persistentModelID != item.checklist?.persistentModelID }
+    }
+
+    private func moveTitle(for checklist: Checklist) -> String {
+        let name = checklist.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? "Move to Checklist" : "Move to \(name)"
+    }
+
+    private func moveItem(to checklist: Checklist) {
+        guard let currentChecklist = item.checklist else { return }
+
+        let nextOrder = (checklist.items.map { $0.sortOrder }.max() ?? -1) + 1
+        item.checklist = checklist
+        item.sortOrder = nextOrder
+
+        currentChecklist.updatedAt = Date()
+        currentChecklist.needsSync = true
+        checklist.updatedAt = Date()
+        checklist.needsSync = true
+
+        try? modelContext.save()
     }
 
     private func beginEditing() {

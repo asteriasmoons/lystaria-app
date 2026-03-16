@@ -23,6 +23,7 @@ struct ReadingTabView: View {
 
     @State private var showAddBook = false
     @State private var editingBook: Book? = nil
+    @State private var visibleBookCount: Int = 4
 
     @State private var showDeleteConfirm = false
     @State private var bookPendingDeletion: Book? = nil
@@ -134,11 +135,11 @@ struct ReadingTabView: View {
                         VStack(alignment: .leading, spacing: 10) {
                             HStack(alignment: .center, spacing: 12) {
                                 HStack(alignment: .firstTextBaseline, spacing: 10) {
-                                    Image("calendar")
+                                    Image("prizefill")
                                         .renderingMode(.template)
                                         .resizable()
                                         .scaledToFit()
-                                        .frame(width: 20, height: 20)
+                                        .frame(width: 24, height: 24)
                                         .foregroundStyle(.white)
                                         .padding(.top, 1)
 
@@ -301,8 +302,8 @@ struct ReadingTabView: View {
 
                     // Books list (basic example – keep your existing cards if you have them)
                     VStack(spacing: 14) {
-                        // Apply status and tag filters
-                        let filteredBooks: [Book] = books.filter { book in
+                        // Apply status and tag filters, sort so .reading status is always at the top
+                        let filteredBooks = books.filter { book in
                             guard book.deletedAt == nil else { return false }
                             let statusMatches = selectedStatus.map { book.status == $0 } ?? true
                             let tagMatches: Bool
@@ -318,7 +319,13 @@ struct ReadingTabView: View {
                             }
                             return statusMatches && tagMatches
                         }
+                        .sorted { a, b in
+                            if a.status == .reading && b.status != .reading { return true }
+                            if a.status != .reading && b.status == .reading { return false }
+                            return a.createdAt > b.createdAt
+                        }
 
+                        let visibleBooks = Array(filteredBooks.prefix(visibleBookCount))
                         if filteredBooks.isEmpty {
                             GlassCard {
                                 Text("No books yet.")
@@ -327,7 +334,7 @@ struct ReadingTabView: View {
                                     .padding(.vertical, 18)
                             }
                         } else {
-                            ForEach(filteredBooks) { book in
+                            ForEach(visibleBooks) { book in
                                 GlassCard {
                                     VStack(alignment: .leading, spacing: 6) {
                                         HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -372,7 +379,7 @@ struct ReadingTabView: View {
                                             Text(book.shortSummary)
                                                 .font(.subheadline)
                                                 .foregroundStyle(LColors.textSecondary)
-                                                .lineLimit(3)
+                                                .lineLimit(8)
                                         }
 
                                         // Progress bar: shows only if currentPage/totalPages available and valid
@@ -509,6 +516,17 @@ struct ReadingTabView: View {
                                 }
                             }
                         }
+
+                            if filteredBooks.count > visibleBooks.count {
+                                HStack {
+                                    Spacer()
+                                    LoadMoreButton {
+                                        visibleBookCount += 4
+                                    }
+                                    Spacer()
+                                }
+                                .padding(.top, 6)
+                            }
                     }
 
                     Spacer(minLength: 96)
@@ -539,14 +557,41 @@ struct ReadingTabView: View {
             .padding(.bottom, 26)
         }
         .zIndex(9999)
-        .sheet(isPresented: $showAddBook) {
-            AddBookSheet()
+        
+        .overlay {
+            if showAddBook {
+                AddBookSheet(
+                    onClose: {
+                        showAddBook = false
+                    }
+                )
                 .preferredColorScheme(.dark)
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                .zIndex(70)
+            }
         }
-        .sheet(item: $editingBook) { book in
-            EditBookSheet(book: book)
+        .overlay {
+            if let book = editingBook {
+                EditBookSheet(
+                    book: book,
+                    onClose: {
+                        editingBook = nil
+                    }
+                )
                 .preferredColorScheme(.dark)
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                .zIndex(70)
+            }
         }
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showAddBook)
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: editingBook != nil)
+        .onChange(of: selectedStatus) { _, _ in
+            visibleBookCount = 4
+        }
+        .onChange(of: tagFilter) { _, _ in
+            visibleBookCount = 4
+        }
+        
         .alert("Delete book?", isPresented: $showDeleteConfirm) {
             Button("Delete", role: .destructive) {
                 if let b = bookPendingDeletion {
@@ -567,6 +612,7 @@ struct ReadingTabView: View {
                 currentUserId = UUID().uuidString
             }
             loadOrCreateSyncRecord()
+            visibleBookCount = 4
         }
     }
 
@@ -634,7 +680,7 @@ struct ReadingTabView: View {
 // MARK: - Add Book Sheet
 struct AddBookSheet: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismiss
+    var onClose: (() -> Void)? = nil
 
     @State private var title = ""
     @State private var author = ""
@@ -644,158 +690,148 @@ struct AddBookSheet: View {
     @State private var shortSummary = ""
 
     private var titleTrimmed: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var closeAction: () -> Void {
+        onClose ?? {}
+    }
 
     var body: some View {
-        ZStack {
-            LystariaBackground()
-
-            ScrollView {
-                VStack(spacing: 20) {
-
-                    // Header
-                    HStack {
-                        GradientTitle(text: "Add Book", font: .title2.bold())
-                        Spacer()
-                        Button { dismiss() } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.title2)
-                                .foregroundStyle(LColors.textSecondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.top, 20)
-
-                    // TITLE
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("TITLE")
-                            .font(.system(size: 13, weight: .semibold))
+        LystariaOverlayPopup(
+            onClose: {
+                closeAction()
+            },
+            width: 640,
+            heightRatio: 0.70,
+            header: {
+                HStack {
+                    GradientTitle(text: "Add Book", font: .title2.bold())
+                    Spacer()
+                    Button { closeAction() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title2)
                             .foregroundStyle(LColors.textSecondary)
-                            .tracking(0.5)
-
-                        // ✅ FIXED: custom glass field, no macOS grey chrome
-                        LystariaTextField(placeholder: "Book title", text: $title)
-                    }
-
-                    // AUTHOR
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("AUTHOR")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(LColors.textSecondary)
-                            .tracking(0.5)
-
-                        // ✅ FIXED: same style as title
-                        LystariaTextField(placeholder: "Author name", text: $author)
-                    }
-
-                    // SUMMARY
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("SUMMARY")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(LColors.textSecondary)
-                            .tracking(0.5)
-
-                        LystariaTextArea(placeholder: "Short summary (optional)", text: $shortSummary)
-                    }
-
-                    // STATUS
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("STATUS")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(LColors.textSecondary)
-                            .tracking(0.5)
-
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 10) {
-                                ForEach(BookStatus.allCases, id: \.self) { s in
-                                    let isSelected = status == s
-
-                                    Button {
-                                        status = s
-                                    } label: {
-                                        Text(s.label)
-                                            .font(.system(size: 13, weight: .semibold))
-                                            .foregroundStyle(isSelected ? .white : LColors.textPrimary)
-                                            .lineLimit(1)
-                                            .fixedSize()   // prevents wrapping
-                                            .padding(.horizontal, 16)
-                                            .padding(.vertical, 10)
-                                            .background(
-                                                isSelected
-                                                ? LColors.accent
-                                                : Color.white.opacity(0.08)
-                                            )
-                                            .clipShape(Capsule())
-                                            .overlay(
-                                                Capsule()
-                                                    .stroke(
-                                                        isSelected
-                                                        ? LColors.accent
-                                                        : LColors.glassBorder,
-                                                        lineWidth: 1
-                                                    )
-                                            )
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                        }
-                    }
-
-                    // PAGES (only when Reading)
-                    if status == .reading {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("PAGES")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(LColors.textSecondary)
-                                .tracking(0.5)
-
-                            HStack(spacing: 12) {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("CURRENT")
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(LColors.textSecondary)
-
-                                    LystariaNumberField(placeholder: "0", text: $currentPageText)
-                                        .numericKeyboardIfAvailable()
-                                }
-
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("TOTAL")
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(LColors.textSecondary)
-
-                                    LystariaNumberField(placeholder: "0", text: $totalPagesText)
-                                        .numericKeyboardIfAvailable()
-                                }
-                            }
-                        }
-                    }
-
-                    // SAVE
-                    Button { save() } label: {
-                        Text("Done")
-                            .font(.headline)
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(titleTrimmed.isEmpty ? AnyShapeStyle(Color.gray.opacity(0.3)) : AnyShapeStyle(LGradients.blue))
-                            .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
-                            .shadow(color: titleTrimmed.isEmpty ? .clear : LColors.accent.opacity(0.3), radius: 12, y: 6)
                     }
                     .buttonStyle(.plain)
-                    .disabled(titleTrimmed.isEmpty)
-
                 }
-                .padding(.horizontal, LSpacing.pageHorizontal)
-                .padding(.bottom, 40)
-                .frame(maxWidth: 560)
-                .frame(maxWidth: .infinity)
-                .onChange(of: status) { _, newStatus in
-                    if newStatus != .reading {
-                        currentPageText = ""
-                        totalPagesText = ""
+            },
+            content: {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("TITLE")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+
+                    LystariaTextField(placeholder: "Book title", text: $title)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("AUTHOR")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+
+                    LystariaTextField(placeholder: "Author name", text: $author)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("SUMMARY")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+
+                    LystariaTextArea(placeholder: "Short summary (optional)", text: $shortSummary)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("STATUS")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(BookStatus.allCases, id: \.self) { s in
+                                let isSelected = status == s
+
+                                Button {
+                                    status = s
+                                } label: {
+                                    Text(s.label)
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(isSelected ? .white : LColors.textPrimary)
+                                        .lineLimit(1)
+                                        .fixedSize()
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 10)
+                                        .background(
+                                            isSelected
+                                            ? LColors.accent
+                                            : Color.white.opacity(0.08)
+                                        )
+                                        .clipShape(Capsule())
+                                        .overlay(
+                                            Capsule()
+                                                .stroke(
+                                                    isSelected
+                                                    ? LColors.accent
+                                                    : LColors.glassBorder,
+                                                    lineWidth: 1
+                                                )
+                                        )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
                     }
                 }
+
+                if status == .reading {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("PAGES")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(LColors.textSecondary)
+                            .tracking(0.5)
+
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("CURRENT")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(LColors.textSecondary)
+
+                                LystariaNumberField(placeholder: "0", text: $currentPageText)
+                                    .numericKeyboardIfAvailable()
+                            }
+
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("TOTAL")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(LColors.textSecondary)
+
+                                LystariaNumberField(placeholder: "0", text: $totalPagesText)
+                                    .numericKeyboardIfAvailable()
+                            }
+                        }
+                    }
+                }
+            },
+            footer: {
+                Button { save() } label: {
+                    Text("Done")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(titleTrimmed.isEmpty ? AnyShapeStyle(Color.gray.opacity(0.3)) : AnyShapeStyle(LGradients.blue))
+                        .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
+                        .shadow(color: titleTrimmed.isEmpty ? .clear : LColors.accent.opacity(0.3), radius: 12, y: 6)
+                }
+                .buttonStyle(.plain)
+                .disabled(titleTrimmed.isEmpty)
+            }
+        )
+        .onChange(of: status) { _, newStatus in
+            if newStatus != .reading {
+                currentPageText = ""
+                totalPagesText = ""
             }
         }
     }
@@ -834,7 +870,7 @@ struct AddBookSheet: View {
 
         modelContext.insert(book)
         try? modelContext.save()
-        dismiss()
+        closeAction()
     }
 
     private func markBookDirty(_ book: Book) {
@@ -847,7 +883,7 @@ struct AddBookSheet: View {
 struct EditBookSheet: View {
     let book: Book
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismiss
+    var onClose: (() -> Void)? = nil
 
     @State private var title: String
     @State private var author: String
@@ -857,9 +893,13 @@ struct EditBookSheet: View {
     @State private var shortSummary: String
 
     private var titleTrimmed: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var closeAction: () -> Void {
+        onClose ?? {}
+    }
 
-    init(book: Book) {
+    init(book: Book, onClose: (() -> Void)? = nil) {
         self.book = book
+        self.onClose = onClose
         _title = State(initialValue: book.title)
         _author = State(initialValue: book.author)
         _status = State(initialValue: book.status)
@@ -869,144 +909,133 @@ struct EditBookSheet: View {
     }
 
     var body: some View {
-        ZStack {
-            LystariaBackground()
-
-            ScrollView {
-                VStack(spacing: 20) {
-
-                    // Header
-                    HStack {
-                        GradientTitle(text: "Edit Book", font: .title2.bold())
-                        Spacer()
-                        Button { dismiss() } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.title2)
-                                .foregroundStyle(LColors.textSecondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.top, 20)
-
-                    // TITLE
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("TITLE")
-                            .font(.system(size: 13, weight: .semibold))
+        LystariaOverlayPopup(
+            onClose: {
+                closeAction()
+            },
+            width: 640,
+            heightRatio: 0.70,
+            header: {
+                HStack {
+                    GradientTitle(text: "Edit Book", font: .title2.bold())
+                    Spacer()
+                    Button { closeAction() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title2)
                             .foregroundStyle(LColors.textSecondary)
-                            .tracking(0.5)
-
-                        LystariaTextField(placeholder: "Book title", text: $title)
-                    }
-
-                    // AUTHOR
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("AUTHOR")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(LColors.textSecondary)
-                            .tracking(0.5)
-
-                        LystariaTextField(placeholder: "Author name", text: $author)
-                    }
-
-                    // SUMMARY
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("SUMMARY")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(LColors.textSecondary)
-                            .tracking(0.5)
-
-                        LystariaTextArea(placeholder: "Short summary (optional)", text: $shortSummary)
-                    }
-
-                    // STATUS
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("STATUS")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(LColors.textSecondary)
-                            .tracking(0.5)
-
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 10) {
-                                ForEach(BookStatus.allCases, id: \.self) { s in
-                                    let isSelected = status == s
-
-                                    Button {
-                                        status = s
-                                    } label: {
-                                        Text(s.label)
-                                            .font(.system(size: 13, weight: .semibold))
-                                            .foregroundStyle(isSelected ? .white : LColors.textPrimary)
-                                            .lineLimit(1)
-                                            .fixedSize()
-                                            .padding(.horizontal, 16)
-                                            .padding(.vertical, 10)
-                                            .background(isSelected ? LColors.accent : Color.white.opacity(0.08))
-                                            .clipShape(Capsule())
-                                            .overlay(
-                                                Capsule().stroke(isSelected ? LColors.accent : LColors.glassBorder, lineWidth: 1)
-                                            )
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                        }
-                    }
-
-                    // PAGES (only when Reading)
-                    if status == .reading {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("PAGES")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(LColors.textSecondary)
-                                .tracking(0.5)
-
-                            HStack(spacing: 12) {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("CURRENT")
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(LColors.textSecondary)
-
-                                    LystariaNumberField(placeholder: "0", text: $currentPageText)
-                                        .numericKeyboardIfAvailable()
-                                }
-
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("TOTAL")
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(LColors.textSecondary)
-
-                                    LystariaNumberField(placeholder: "0", text: $totalPagesText)
-                                        .numericKeyboardIfAvailable()
-                                }
-                            }
-                        }
-                    }
-
-                    // SAVE
-                    Button { save() } label: {
-                        Text("Save")
-                            .font(.headline)
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(titleTrimmed.isEmpty ? AnyShapeStyle(Color.gray.opacity(0.3)) : AnyShapeStyle(LGradients.blue))
-                            .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
-                            .shadow(color: titleTrimmed.isEmpty ? .clear : LColors.accent.opacity(0.3), radius: 12, y: 6)
                     }
                     .buttonStyle(.plain)
-                    .disabled(titleTrimmed.isEmpty)
-
                 }
-                .padding(.horizontal, LSpacing.pageHorizontal)
-                .padding(.bottom, 40)
-                .frame(maxWidth: 560)
-                .frame(maxWidth: .infinity)
-                .onChange(of: status) { _, newStatus in
-                    if newStatus != .reading {
-                        currentPageText = ""
-                        totalPagesText = ""
+            },
+            content: {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("TITLE")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+
+                    LystariaTextField(placeholder: "Book title", text: $title)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("AUTHOR")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+
+                    LystariaTextField(placeholder: "Author name", text: $author)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("SUMMARY")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+
+                    LystariaTextArea(placeholder: "Short summary (optional)", text: $shortSummary)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("STATUS")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(BookStatus.allCases, id: \.self) { s in
+                                let isSelected = status == s
+
+                                Button {
+                                    status = s
+                                } label: {
+                                    Text(s.label)
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(isSelected ? .white : LColors.textPrimary)
+                                        .lineLimit(1)
+                                        .fixedSize()
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 10)
+                                        .background(isSelected ? LColors.accent : Color.white.opacity(0.08))
+                                        .clipShape(Capsule())
+                                        .overlay(
+                                            Capsule().stroke(isSelected ? LColors.accent : LColors.glassBorder, lineWidth: 1)
+                                        )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
                     }
                 }
+
+                if status == .reading {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("PAGES")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(LColors.textSecondary)
+                            .tracking(0.5)
+
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("CURRENT")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(LColors.textSecondary)
+
+                                LystariaNumberField(placeholder: "0", text: $currentPageText)
+                                    .numericKeyboardIfAvailable()
+                            }
+
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("TOTAL")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(LColors.textSecondary)
+
+                                LystariaNumberField(placeholder: "0", text: $totalPagesText)
+                                    .numericKeyboardIfAvailable()
+                            }
+                        }
+                    }
+                }
+            },
+            footer: {
+                Button { save() } label: {
+                    Text("Save")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(titleTrimmed.isEmpty ? AnyShapeStyle(Color.gray.opacity(0.3)) : AnyShapeStyle(LGradients.blue))
+                        .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
+                        .shadow(color: titleTrimmed.isEmpty ? .clear : LColors.accent.opacity(0.3), radius: 12, y: 6)
+                }
+                .buttonStyle(.plain)
+                .disabled(titleTrimmed.isEmpty)
+            }
+        )
+        .onChange(of: status) { _, newStatus in
+            if newStatus != .reading {
+                currentPageText = ""
+                totalPagesText = ""
             }
         }
     }
@@ -1040,7 +1069,7 @@ struct EditBookSheet: View {
 
         markBookDirty(book)
         try? modelContext.save()
-        dismiss()
+        closeAction()
     }
 
     private func markBookDirty(_ book: Book) {

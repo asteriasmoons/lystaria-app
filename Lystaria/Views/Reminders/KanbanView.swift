@@ -39,15 +39,15 @@ struct KanbanView: View {
     var body: some View {
         ZStack {
             LystariaBackground().ignoresSafeArea()
-
+            
             VStack(spacing: 0) {
                 // MARK: Header
                 VStack(spacing: 0) {
                     HStack {
                         GradientTitle(text: "Kanban", size: 28)
-
+                        
                         Spacer()
-
+                        
                         Button { showNewBoard = true } label: {
                             ZStack {
                                 Circle()
@@ -56,7 +56,7 @@ struct KanbanView: View {
                                         Circle().stroke(LColors.glassBorder, lineWidth: 1)
                                     )
                                     .frame(width: 34, height: 34)
-
+                                
                                 Image(systemName: "plus")
                                     .font(.system(size: 15, weight: .semibold))
                                     .foregroundStyle(.white)
@@ -67,72 +67,114 @@ struct KanbanView: View {
                     .padding(.horizontal, LSpacing.pageHorizontal)
                     .padding(.top, 16)
                     .padding(.bottom, 14)
-
+                    
                     Rectangle()
                         .fill(LColors.glassBorder)
                         .frame(height: 1)
                         .padding(.horizontal, LSpacing.pageHorizontal)
                 }
                 .padding(.bottom, 14)
-
+                
                 // MARK: Board Selector
                 if boards.isEmpty {
                     emptyBoardsState
                 } else {
                     boardSelectorBar
-
+                    
                     if let board = selectedBoard {
                         boardContent(board: board)
                     }
                 }
             }
         }
-        .sheet(isPresented: $showNewBoard) {
-            BoardEditorSheet(board: nil) { name, hex in
-                let b = KanbanBoard(name: name, colorHex: hex, sortOrder: boards.count)
-                modelContext.insert(b)
-                try? modelContext.save()
-                selectedBoardID = b.id
-            }
-            .preferredColorScheme(.dark)
-        }
-        .sheet(item: $showEditBoard) { board in
-            BoardEditorSheet(board: board) { name, hex in
-                board.name = name
-                board.colorHex = hex
-                board.updatedAt = Date()
-                try? modelContext.save()
-            }
-            .preferredColorScheme(.dark)
-        }
-        .sheet(isPresented: $showNewColumn) {
-            if let board = selectedBoard {
-                ColumnEditorSheet(column: nil) { name, hex in
-                    let col = KanbanColumn(name: name, colorHex: hex, sortOrder: board.columns.count)
-                    col.board = board
-                    modelContext.insert(col)
-                    try? modelContext.save()
-                }
+        .overlay {
+            if showNewBoard {
+                BoardEditorSheet(
+                    board: nil,
+                    onSave: { name, hex in
+                        let b = KanbanBoard(name: name, colorHex: hex, sortOrder: boards.count)
+                        modelContext.insert(b)
+                        try? modelContext.save()
+                        selectedBoardID = b.id
+                    },
+                    onClose: {
+                        showNewBoard = false
+                    }
+                )
                 .preferredColorScheme(.dark)
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                .zIndex(70)
             }
         }
-        .sheet(item: $showEditColumn) { col in
-            ColumnEditorSheet(column: col) { name, hex in
-                col.name = name
-                col.colorHex = hex
-                col.updatedAt = Date()
-                try? modelContext.save()
+        .overlay {
+            if let board = showEditBoard {
+                BoardEditorSheet(
+                    board: board,
+                    onSave: { name, hex in
+                        board.name = name
+                        board.colorHex = hex
+                        board.updatedAt = Date()
+                        try? modelContext.save()
+                    },
+                    onClose: {
+                        showEditBoard = nil
+                    }
+                )
+                .preferredColorScheme(.dark)
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                .zIndex(71)
             }
-            .preferredColorScheme(.dark)
+        }
+        .overlay {
+            if showNewColumn, let board = selectedBoard {
+                ColumnEditorSheet(
+                    column: nil,
+                    onSave: { name, hex in
+                        let col = KanbanColumn(name: name, colorHex: hex, sortOrder: board.columns.count)
+                        col.board = board
+                        modelContext.insert(col)
+                        try? modelContext.save()
+                    },
+                    onClose: {
+                        showNewColumn = false
+                    }
+                )
+                .preferredColorScheme(.dark)
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                .zIndex(72)
+            }
+        }
+        .overlay {
+            if let col = showEditColumn {
+                ColumnEditorSheet(
+                    column: col,
+                    onSave: { name, hex in
+                        col.name = name
+                        col.colorHex = hex
+                        col.updatedAt = Date()
+                        try? modelContext.save()
+                    },
+                    onClose: {
+                        showEditColumn = nil
+                    }
+                )
+                .preferredColorScheme(.dark)
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                .zIndex(73)
+            }
         }
         .overlay(alignment: .bottom) {
             if let msg = toastMessage {
                 ToastView(message: msg)
             }
         }
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showNewBoard)
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showEditBoard != nil)
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showNewColumn)
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showEditColumn != nil)
         .animation(.spring(response: 0.4, dampingFraction: 0.8), value: toastMessage)
     }
-
+    
     // MARK: - Empty State
 
     private var emptyBoardsState: some View {
@@ -745,7 +787,7 @@ struct KanbanCard: View {
         case .weekly:
             return LColors.badgeWeekly
         case .monthly:
-            return LColors.badgeMonthly
+            return .yellow
         case .yearly:
             return LColors.gradientPurple
         case .interval:
@@ -854,37 +896,46 @@ struct KanbanDragPreview: View {
 // MARK: - Board Editor Sheet
 
 struct BoardEditorSheet: View {
-    @Environment(\.dismiss) private var dismiss
     let board: KanbanBoard?
     let onSave: (String, String) -> Void
+    var onClose: (() -> Void)? = nil
 
     @State private var name: String = ""
     @State private var selectedHex: String = "#03dbfc"
+    @State private var selectedColor: Color = Color(hex: "#03dbfc")
 
-    private let presetColors: [String] = [
-        "#03dbfc", "#7d19f7", "#e019d4", "#ec4899",
-        "#f6f684", "#02edd6", "#66b8ff", "#8000fe",
-        "#e2ed8a", "#dc3beb", "#ffffff", "#a92ce8"
-    ]
+    private var closeAction: () -> Void {
+        onClose ?? {}
+    }
 
     var body: some View {
-        ZStack {
-            LystariaBackground().ignoresSafeArea()
-
-            VStack(spacing: 24) {
+        LystariaOverlayPopup(
+            onClose: {
+                closeAction()
+            },
+            width: 620,
+            heightRatio: 0.70,
+            header: {
                 HStack {
                     GradientTitle(text: board == nil ? "New Board" : "Edit Board", size: 22)
                     Spacer()
-                    Button { dismiss() } label: {
+                    Button { closeAction() } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.title2)
                             .foregroundStyle(LColors.textSecondary)
                     }
                     .buttonStyle(.plain)
                 }
-                .padding(.top, 24)
+            },
+            content: {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("BOARD NAME")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
 
-                GlassTextField(placeholder: "Board name", text: $name)
+                    GlassTextField(placeholder: "Board name", text: $name)
+                }
 
                 VStack(alignment: .leading, spacing: 12) {
                     Text("BOARD COLOR")
@@ -892,63 +943,67 @@ struct BoardEditorSheet: View {
                         .foregroundStyle(LColors.textSecondary)
                         .tracking(0.5)
 
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 6), spacing: 10) {
-                        ForEach(presetColors, id: \.self) { hex in
-                            let selected = selectedHex == hex
-                            Button { selectedHex = hex } label: {
-                                Circle()
-                                    .fill(Color(hex: hex))
-                                    .frame(width: 36, height: 36)
-                                    .overlay(
-                                        Circle()
-                                            .stroke(.white, lineWidth: selected ? 2.5 : 0)
-                                    )
-                                    .overlay(
-                                        Image(systemName: "checkmark")
-                                            .font(.system(size: 12, weight: .bold))
-                                            .foregroundStyle(.white)
-                                            .opacity(selected ? 1 : 0)
-                                    )
-                                    .shadow(color: Color(hex: hex).opacity(0.5), radius: selected ? 8 : 0)
-                            }
-                            .buttonStyle(.plain)
-                        }
+                    HStack(spacing: 14) {
+                        Circle()
+                            .fill(selectedColor)
+                            .frame(width: 42, height: 42)
+                            .overlay(
+                                Circle().stroke(.white.opacity(0.8), lineWidth: 1.5)
+                            )
+
+                        ColorPicker("Choose board color", selection: $selectedColor, supportsOpacity: false)
+                            .labelsHidden()
+                            .scaleEffect(1.2)
+
+                        Spacer()
                     }
                 }
                 .padding(16)
                 .background(LColors.glassSurface)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
-                .overlay(RoundedRectangle(cornerRadius: 16).stroke(LColors.glassBorder, lineWidth: 1))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(LColors.glassBorder, lineWidth: 1)
+                )
 
-                // Preview
-                HStack(spacing: 10) {
-                    Circle().fill(Color(hex: selectedHex)).frame(width: 12, height: 12)
-                    Text(name.isEmpty ? "Board preview" : name)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(LColors.textPrimary)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("PREVIEW")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+
+                    HStack(spacing: 10) {
+                        Circle()
+                            .fill(selectedColor)
+                            .frame(width: 12, height: 12)
+
+                        Text(name.isEmpty ? "Board preview" : name)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(LColors.textPrimary)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(selectedColor.opacity(0.15))
+                    .clipShape(Capsule())
+                    .overlay(
+                        Capsule().stroke(selectedColor, lineWidth: 1)
+                    )
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(Color(hex: selectedHex).opacity(0.15))
-                .clipShape(Capsule())
-                .overlay(Capsule().stroke(Color(hex: selectedHex), lineWidth: 1))
-
-                Spacer()
-
+            },
+            footer: {
                 LButton(title: "Save Board", style: .gradient) {
                     let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !trimmed.isEmpty else { return }
-                    onSave(trimmed, selectedHex)
-                    dismiss()
+                    onSave(trimmed, selectedColor.toHex() ?? "#03dbfc")
+                    closeAction()
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.bottom, 24)
             }
-            .padding(.horizontal, 24)
-        }
+        )
         .onAppear {
             name = board?.name ?? ""
             selectedHex = board?.colorHex ?? "#03dbfc"
+            selectedColor = Color(hex: selectedHex)
         }
     }
 }
@@ -956,41 +1011,49 @@ struct BoardEditorSheet: View {
 // MARK: - Column Editor Sheet
 
 struct ColumnEditorSheet: View {
-    @Environment(\.dismiss) private var dismiss
     let column: KanbanColumn?
     let onSave: (String, String) -> Void
+    var onClose: (() -> Void)? = nil
 
     @State private var name: String = ""
     @State private var selectedHex: String = "#7d19f7"
-
-    private let presetColors: [String] = [
-        "#03dbfc", "#7d19f7", "#e019d4", "#ec4899",
-        "#f6f684", "#02edd6", "#66b8ff", "#8000fe",
-        "#e2ed8a", "#dc3beb", "#ffffff", "#a92ce8"
-    ]
+    @State private var selectedColor: Color = Color(hex: "#7d19f7")
 
     private let statusSuggestions = ["To Do", "In Progress", "Review", "Done", "Blocked", "On Hold", "Testing", "Deployed"]
 
-    var body: some View {
-        ZStack {
-            LystariaBackground().ignoresSafeArea()
+    private var closeAction: () -> Void {
+        onClose ?? {}
+    }
 
-            VStack(spacing: 20) {
+    var body: some View {
+        LystariaOverlayPopup(
+            onClose: {
+                closeAction()
+            },
+            width: 620,
+            heightRatio: 0.70,
+            header: {
                 HStack {
                     GradientTitle(text: column == nil ? "New Column" : "Edit Column", size: 22)
                     Spacer()
-                    Button { dismiss() } label: {
+                    Button { closeAction() } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.title2)
                             .foregroundStyle(LColors.textSecondary)
                     }
                     .buttonStyle(.plain)
                 }
-                .padding(.top, 24)
+            },
+            content: {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("COLUMN NAME")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
 
-                GlassTextField(placeholder: "Column name (e.g. In Progress)", text: $name)
+                    GlassTextField(placeholder: "Column name (e.g. In Progress)", text: $name)
+                }
 
-                // Quick suggestions
                 VStack(alignment: .leading, spacing: 10) {
                     Text("SUGGESTIONS")
                         .font(.system(size: 12, weight: .semibold))
@@ -1008,7 +1071,12 @@ struct ColumnEditorSheet: View {
                                         .padding(.vertical, 7)
                                         .background(name == s ? LColors.accent : Color.white.opacity(0.08))
                                         .clipShape(Capsule())
-                                        .overlay(Capsule().stroke(name == s ? LColors.accent : LColors.glassBorder, lineWidth: 1))
+                                        .overlay(
+                                            Capsule().stroke(
+                                                name == s ? LColors.accent : LColors.glassBorder,
+                                                lineWidth: 1
+                                            )
+                                        )
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -1022,48 +1090,45 @@ struct ColumnEditorSheet: View {
                         .foregroundStyle(LColors.textSecondary)
                         .tracking(0.5)
 
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 6), spacing: 10) {
-                        ForEach(presetColors, id: \.self) { hex in
-                            let selected = selectedHex == hex
-                            Button { selectedHex = hex } label: {
-                                Circle()
-                                    .fill(Color(hex: hex))
-                                    .frame(width: 36, height: 36)
-                                    .overlay(Circle().stroke(.white, lineWidth: selected ? 2.5 : 0))
-                                    .overlay(
-                                        Image(systemName: "checkmark")
-                                            .font(.system(size: 12, weight: .bold))
-                                            .foregroundStyle(.white)
-                                            .opacity(selected ? 1 : 0)
-                                    )
-                                    .shadow(color: Color(hex: hex).opacity(0.5), radius: selected ? 8 : 0)
-                            }
-                            .buttonStyle(.plain)
-                        }
+                    HStack(spacing: 14) {
+                        Circle()
+                            .fill(selectedColor)
+                            .frame(width: 42, height: 42)
+                            .overlay(
+                                Circle().stroke(.white.opacity(0.8), lineWidth: 1.5)
+                            )
+
+                        ColorPicker("Choose column color", selection: $selectedColor, supportsOpacity: false)
+                            .labelsHidden()
+                            .scaleEffect(1.2)
+
+                        Spacer()
                     }
                 }
                 .padding(16)
                 .background(LColors.glassSurface)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
-                .overlay(RoundedRectangle(cornerRadius: 16).stroke(LColors.glassBorder, lineWidth: 1))
-
-                Spacer()
-
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(LColors.glassBorder, lineWidth: 1)
+                )
+            },
+            footer: {
                 LButton(title: "Save Column", style: .gradient) {
                     let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !trimmed.isEmpty else { return }
-                    onSave(trimmed, selectedHex)
-                    dismiss()
+                    onSave(trimmed, selectedColor.toHex() ?? "#7d19f7")
+                    closeAction()
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.bottom, 24)
             }
-            .padding(.horizontal, 24)
-        }
+        )
         .onAppear {
             name = column?.name ?? ""
             selectedHex = column?.colorHex ?? "#7d19f7"
+            selectedColor = Color(hex: selectedHex)
         }
     }
 }
+
 

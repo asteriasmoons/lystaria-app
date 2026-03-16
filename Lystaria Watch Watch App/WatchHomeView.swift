@@ -192,7 +192,7 @@ struct WatchHomeIconButton: View {
             WatchPlaceholderView(title: "Books")
 
         case .journal:
-            WatchPlaceholderView(title: "Journal")
+            WatchJournalMainView()
 
         case .calendar:
             WatchPlaceholderView(title: "Calendar")

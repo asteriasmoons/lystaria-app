@@ -12,6 +12,63 @@ private extension NSAttributedString.Key {
     static let lystariaBlockquote = NSAttributedString.Key("lystariaBlockquote")
 }
 
+// MARK: - Pop Up Container (Reusable)
+
+struct LystariaOverlayPopup<Header: View, Content: View, Footer: View>: View {
+    let onClose: () -> Void
+    let width: CGFloat
+    let heightRatio: CGFloat
+    @ViewBuilder let header: () -> Header
+    @ViewBuilder let content: () -> Content
+    @ViewBuilder let footer: () -> Footer
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                Color.black.opacity(0.62)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                            onClose()
+                        }
+                    }
+
+                VStack(alignment: .leading, spacing: 18) {
+                    header()
+
+                    ScrollView(.vertical, showsIndicators: true) {
+                        VStack(alignment: .leading, spacing: 14) {
+                            content()
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .scrollBounceBehavior(.basedOnSize)
+
+                    footer()
+                }
+                .padding(22)
+                .frame(width: min(proxy.size.width - 40, width), alignment: .topLeading)
+                .frame(maxHeight: proxy.size.height * heightRatio, alignment: .topLeading)
+                .background(
+                    ZStack {
+                        LystariaBackground()
+                        Color.black.opacity(0.28)
+                    }
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 24))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24)
+                        .stroke(LColors.glassBorder, lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.25), radius: 24, x: 0, y: 10)
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        }
+    }
+}
+
 // MARK: - Load More Button (Reusable)
 
 struct LoadMoreButton: View {
@@ -135,6 +192,7 @@ struct GradientOverlayBackground: View {
         ZStack {
             // Dark veil to soften the gradients so they behave like an overlay
             Color.black.opacity(0.45)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .ignoresSafeArea()
 
             // Ambient glow layers sitting under the veil
@@ -1154,8 +1212,6 @@ struct GlassRichTextDisplay: UIViewRepresentable {
         textView.textContainer.heightTracksTextView = false
         textView.textContainer.lineBreakMode = .byWordWrapping
         textView.textContainer.maximumNumberOfLines = 0
-        // Must be false — true lets UIKit silently replace stored fonts with
-        // dynamic-type scaled variants, wiping bold/italic traits on display.
         textView.adjustsFontForContentSizeCategory = false
         textView.dataDetectorTypes = [.link]
         textView.linkTextAttributes = [
@@ -1163,44 +1219,36 @@ struct GlassRichTextDisplay: UIViewRepresentable {
             .underlineStyle: NSUnderlineStyle.single.rawValue
         ]
         textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        textView.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        textView.setContentHuggingPriority(.required, for: .vertical)
         textView.attributedText = sanitised(text)
-        DispatchQueue.main.async {
-            updateMeasuredHeight(for: textView)
-        }
         return textView
     }
 
-    func updateUIView(_ textView: UITextView, context: Context) {
-        // Always re-apply sanitised text. NSAttributedString.isEqual(to:) is unreliable
-        // with custom attributes (lystariaBlockquote) and causes SwiftUI to silently skip
-        // updates, leaving stale formatting.
-        textView.attributedText = sanitised(text)
-        textView.setNeedsDisplay()
-        DispatchQueue.main.async {
-            updateMeasuredHeight(for: textView)
-        }
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
+        // SwiftUI calls this with the real available width — use it to get the
+        // exact height the text needs, then return that so SwiftUI sizes us correctly.
+        let width = proposal.width ?? uiView.bounds.width
+        guard width > 0 else { return nil }
+        let insets = uiView.textContainerInset
+        let usable = width - insets.left - insets.right
+        let height = uiView.sizeThatFits(CGSize(width: usable, height: .greatestFiniteMagnitude)).height
+        let finalHeight = max(minHeight, height)
+        onHeightChange?(finalHeight)
+        return CGSize(width: width, height: finalHeight)
     }
 
-    private func updateMeasuredHeight(for textView: UITextView) {
-        let insets = textView.textContainerInset
-        let screenWidth = textView.window?.windowScene?.screen.bounds.width ?? textView.bounds.width
-        let width = max(textView.bounds.width, screenWidth - 64)
-        let fittingSize = CGSize(width: width - insets.left - insets.right, height: .greatestFiniteMagnitude)
-        let contentHeight = textView.sizeThatFits(CGSize(width: fittingSize.width, height: .greatestFiniteMagnitude)).height
-        let measured = max(minHeight, contentHeight)
-        onHeightChange?(measured)
+    func updateUIView(_ textView: UITextView, context: Context) {
+        textView.attributedText = sanitised(text)
+        textView.setNeedsDisplay()
     }
 }
 
 struct GlassRichTextViewer: View {
     let text: NSAttributedString
     var minHeight: CGFloat = 40
-    @State private var measuredHeight: CGFloat = 40
 
     var body: some View {
-        GlassRichTextDisplay(text: text, minHeight: minHeight, onHeightChange: { measuredHeight = $0 })
-            .frame(height: max(minHeight, measuredHeight))
+        GlassRichTextDisplay(text: text, minHeight: minHeight)
     }
 }
 

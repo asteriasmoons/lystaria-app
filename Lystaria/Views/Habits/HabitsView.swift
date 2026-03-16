@@ -6,7 +6,6 @@ import SwiftData
 
 struct HabitsView: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismiss
 
     @Query(sort: \Habit.createdAt)
     private var habits: [Habit]
@@ -88,23 +87,31 @@ struct HabitsView: View {
                 .padding(.trailing, 24)
                 .padding(.bottom, 90)
         }
-        .sheet(isPresented: $showNewHabit) {
-            NewHabitSheet()
-                .presentationDetents([.large])
+        .overlay {
+            if showNewHabit {
+                NewHabitSheet(onClose: {
+                    showNewHabit = false
+                })
                 .preferredColorScheme(.dark)
-        }
-        .sheet(
-            isPresented: Binding(
-                get: { editingHabit != nil },
-                set: { if !$0 { editingHabit = nil } }
-            )
-        ) {
-            if let h = editingHabit {
-                EditHabitSheet(habit: h)
-                    .presentationDetents([.large])
-                    .preferredColorScheme(.dark)
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                .zIndex(50)
             }
         }
+        .overlay {
+            if let h = editingHabit {
+                EditHabitSheet(
+                    habit: h,
+                    onClose: {
+                        editingHabit = nil
+                    }
+                )
+                .preferredColorScheme(.dark)
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                .zIndex(60)
+            }
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showNewHabit)
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: editingHabit != nil)
     }
 }
 
@@ -712,7 +719,7 @@ struct HabitCard: View {
 
 struct NewHabitSheet: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismiss
+    var onClose: (() -> Void)? = nil
     
     @State private var title = ""
     @State private var details = ""
@@ -730,6 +737,10 @@ struct NewHabitSheet: View {
     
     private var titleTrimmed: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
     
+    private var closeAction: () -> Void {
+        onClose ?? {}
+    }
+    
     private var canSave: Bool {
         if titleTrimmed.isEmpty { return false }
         if reminderEnabled, reminderKind == .weekly {
@@ -744,304 +755,289 @@ struct NewHabitSheet: View {
     }
     
     var body: some View {
-        ZStack {
-            LystariaBackground()
-            
-            ScrollView {
-                VStack(spacing: 20) {
-                    HStack {
-                        GradientTitle(text: "New Habit", size: 26)
-                        Spacer()
-                        Button { dismiss() } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.title2)
-                                .foregroundStyle(LColors.textSecondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.top, 20)
-                    
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("TITLE")
-                            .font(.system(size: 13, weight: .semibold))
+        LystariaOverlayPopup(
+            onClose: {
+                closeAction()
+            },
+            width: 720,
+            heightRatio: 0.70,
+            header: {
+                HStack {
+                    GradientTitle(text: "New Habit", size: 26)
+                    Spacer()
+                    Button { closeAction() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title2)
                             .foregroundStyle(LColors.textSecondary)
-                            .tracking(0.5)
-                        GlassTextField(placeholder: "Habit title", text: $title)
                     }
-                    
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("DESCRIPTION")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(LColors.textSecondary)
-                            .tracking(0.5)
-                        GlassTextField(placeholder: "Optional description", text: $details)
-                    }
-                    
-                    GlassCard(padding: 16) {
-                        VStack(spacing: 14) {
-                            Stepper("Days per week: \(daysPerWeek)", value: $daysPerWeek, in: 1...7)
-                                .foregroundStyle(LColors.textPrimary)
-                                .disabled(reminderEnabled && reminderKind == .daily)
-                                .opacity((reminderEnabled && reminderKind == .daily) ? 0.6 : 1.0)
-                            
-                            Stepper("Times per day: \(timesPerDay)", value: $timesPerDay, in: 1...20)
-                                .foregroundStyle(LColors.textPrimary)
-                                .onChange(of: timesPerDay) { _, newValue in
-                                    // Keep time pickers in sync with the selected times/day.
-                                    // Rule: if they pick N times/day, show N time pickers immediately.
-                                    if reminderTimes.isEmpty { reminderTimes = [Date()] }
-
-                                    if reminderTimes.count < newValue {
-                                        while reminderTimes.count < newValue {
-                                            reminderTimes.append(reminderTimes.last ?? Date())
-                                        }
-                                    } else if reminderTimes.count > newValue {
-                                        reminderTimes = Array(reminderTimes.prefix(newValue))
+                    .buttonStyle(.plain)
+                }
+            },
+            content: {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("TITLE")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+                    GlassTextField(placeholder: "Habit title", text: $title)
+                }
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("DESCRIPTION")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+                    GlassTextField(placeholder: "Optional description", text: $details)
+                }
+                
+                GlassCard(padding: 16) {
+                    VStack(spacing: 14) {
+                        Stepper("Days per week: \(daysPerWeek)", value: $daysPerWeek, in: 1...7)
+                            .foregroundStyle(LColors.textPrimary)
+                            .disabled(reminderEnabled && reminderKind == .daily)
+                            .opacity((reminderEnabled && reminderKind == .daily) ? 0.6 : 1.0)
+                        
+                        Stepper("Times per day: \(timesPerDay)", value: $timesPerDay, in: 1...20)
+                            .foregroundStyle(LColors.textPrimary)
+                            .onChange(of: timesPerDay) { _, newValue in
+                                if reminderTimes.isEmpty { reminderTimes = [Date()] }
+                                
+                                if reminderTimes.count < newValue {
+                                    while reminderTimes.count < newValue {
+                                        reminderTimes.append(reminderTimes.last ?? Date())
                                     }
-
-                                    // If reminders are enabled and Daily is selected, lock to 7 days.
-                                    if reminderEnabled && reminderKind == .daily {
+                                } else if reminderTimes.count > newValue {
+                                    reminderTimes = Array(reminderTimes.prefix(newValue))
+                                }
+                                
+                                if reminderEnabled && reminderKind == .daily {
+                                    daysPerWeek = 7
+                                    weeklyDays = []
+                                }
+                            }
+                    }
+                }
+                
+                GlassCard(padding: 16) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        HStack {
+                            Text("REMINDER")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(LColors.textSecondary)
+                                .tracking(0.5)
+                            
+                            Spacer()
+                            
+                            Toggle("", isOn: $reminderEnabled)
+                                .labelsHidden()
+                                .tint(LColors.accent)
+                                .onChange(of: reminderEnabled) { _, newValue in
+                                    guard newValue else { return }
+                                    
+                                    if reminderKind == .daily {
                                         daysPerWeek = 7
                                         weeklyDays = []
                                     }
+                                    
+                                    if reminderTimes.isEmpty { reminderTimes = [Date()] }
+                                    if reminderTimes.count < timesPerDay {
+                                        while reminderTimes.count < timesPerDay {
+                                            reminderTimes.append(reminderTimes.last ?? Date())
+                                        }
+                                    } else if reminderTimes.count > timesPerDay {
+                                        reminderTimes = Array(reminderTimes.prefix(timesPerDay))
+                                    }
                                 }
                         }
-                    }
-                    
-                    // Reminder
-                    GlassCard(padding: 16) {
-                        VStack(alignment: .leading, spacing: 14) {
-
-                            // Header row
-                            HStack {
-                                Text("REMINDER")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(LColors.textSecondary)
-                                    .tracking(0.5)
-
-                                Spacer()
-
-                                Toggle("", isOn: $reminderEnabled)
-                                    .labelsHidden()
-                                    .tint(LColors.accent)
-                                    .onChange(of: reminderEnabled) { _, newValue in
-                                        guard newValue else { return }
-
-                                        // Daily means every day.
-                                        if reminderKind == .daily {
+                        
+                        if reminderEnabled {
+                            LystariaControlRow(label: "Start") {
+                                DatePicker(
+                                    "",
+                                    selection: $reminderStartDate,
+                                    displayedComponents: .date
+                                )
+                                .labelsHidden()
+                                .datePickerStyle(.compact)
+                                .tint(LColors.accent)
+                            }
+                            
+                            HStack(spacing: 8) {
+                                ForEach([HabitReminderKind.daily, HabitReminderKind.weekly], id: \.self) { k in
+                                    let on = reminderKind == k
+                                    Button {
+                                        reminderKind = k
+                                        
+                                        if k == .daily {
                                             daysPerWeek = 7
                                             weeklyDays = []
                                         }
-
-                                        // Ensure we have exactly one time per `timesPerDay`.
-                                        if reminderTimes.isEmpty { reminderTimes = [Date()] }
-                                        if reminderTimes.count < timesPerDay {
-                                            while reminderTimes.count < timesPerDay {
-                                                reminderTimes.append(reminderTimes.last ?? Date())
-                                            }
-                                        } else if reminderTimes.count > timesPerDay {
-                                            reminderTimes = Array(reminderTimes.prefix(timesPerDay))
-                                        }
-                                    }
-                            }
-
-                            if reminderEnabled {
-
-                                // Start date (controls what day we consider the first occurrence)
-                                LystariaControlRow(label: "Start") {
-                                    DatePicker(
-                                        "",
-                                        selection: $reminderStartDate,
-                                        displayedComponents: .date
-                                    )
-                                    .labelsHidden()
-                                    .datePickerStyle(.compact)
-                                    .tint(LColors.accent)
-                                }
-
-                                // Kind (Daily / Weekly)
-                                HStack(spacing: 8) {
-                                    ForEach([HabitReminderKind.daily, HabitReminderKind.weekly], id: \.self) { k in
-                                        let on = reminderKind == k
-                                        Button {
-                                            reminderKind = k
-
-                                            if k == .daily {
-                                                daysPerWeek = 7
-                                                weeklyDays = []
-                                            }
-                                        } label: {
-                                            Text(k.label.uppercased())
-                                                .font(.system(size: 12, weight: .semibold))
-                                                .foregroundStyle(on ? .white : LColors.textPrimary)
-                                                .padding(.horizontal, 14)
-                                                .padding(.vertical, 8)
-                                                .background(on ? LColors.accent : Color.white.opacity(0.08))
-                                                .clipShape(Capsule())
-                                                .overlay(
-                                                    Capsule().stroke(on ? LColors.accent : LColors.glassBorder, lineWidth: 1)
-                                                )
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                }
-
-                                // Times (one per `timesPerDay`)
-                                VStack(alignment: .leading, spacing: 10) {
-                                    ForEach(Array(reminderTimes.indices), id: \.self) { idx in
-                                        LystariaControlRow(label: idx == 0 ? "Time" : "Time \(idx + 1)") {
-                                            DatePicker(
-                                                "",
-                                                selection: Binding(
-                                                    get: { reminderTimes[idx] },
-                                                    set: { reminderTimes[idx] = $0 }
-                                                ),
-                                                displayedComponents: .hourAndMinute
+                                    } label: {
+                                        Text(k.label.uppercased())
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundStyle(on ? .white : LColors.textPrimary)
+                                            .padding(.horizontal, 14)
+                                            .padding(.vertical, 8)
+                                            .background(on ? LColors.accent : Color.white.opacity(0.08))
+                                            .clipShape(Capsule())
+                                            .overlay(
+                                                Capsule().stroke(on ? LColors.accent : LColors.glassBorder, lineWidth: 1)
                                             )
-                                            .labelsHidden()
-                                            .datePickerStyle(.compact)
-                                            .tint(LColors.accent)
-                                        }
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 10) {
+                                ForEach(Array(reminderTimes.indices), id: \.self) { idx in
+                                    LystariaControlRow(label: idx == 0 ? "Time" : "Time \(idx + 1)") {
+                                        DatePicker(
+                                            "",
+                                            selection: Binding(
+                                                get: { reminderTimes[idx] },
+                                                set: { reminderTimes[idx] = $0 }
+                                            ),
+                                            displayedComponents: .hourAndMinute
+                                        )
+                                        .labelsHidden()
+                                        .datePickerStyle(.compact)
+                                        .tint(LColors.accent)
                                     }
                                 }
-
-                                if reminderKind == .weekly {
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        let picked = weeklyDays.count
-
-                                        Text("Pick exactly \(daysPerWeek) day\(daysPerWeek == 1 ? "" : "s") (\(picked)/\(daysPerWeek))")
-                                            .font(.system(size: 13, weight: .semibold))
-                                            .foregroundStyle(picked == daysPerWeek ? LColors.textPrimary : LColors.textSecondary)
-
-                                        HStack(spacing: 6) {
-                                            ForEach(0..<7, id: \.self) { d in
-                                                let on = weeklyDays.contains(d)
-                                                let atCap = (!on && weeklyDays.count >= daysPerWeek)
-
-                                                Button {
-                                                    if on {
-                                                        weeklyDays.remove(d)
-                                                    } else {
-                                                        guard weeklyDays.count < daysPerWeek else { return }
-                                                        weeklyDays.insert(d)
-                                                    }
-                                                } label: {
-                                                    Text(weekdays[d])
-                                                        .font(.system(size: 12, weight: .semibold))
-                                                        .frame(width: 36, height: 36)
-                                                        .background(on ? LColors.accent : Color.white.opacity(0.08))
-                                                        .foregroundStyle(on ? .white : LColors.textPrimary)
-                                                        .clipShape(Circle())
-                                                        .overlay(Circle().stroke(on ? .clear : LColors.glassBorder, lineWidth: 1))
-                                                        .opacity(atCap ? 0.5 : 1.0)
+                            }
+                            
+                            if reminderKind == .weekly {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    let picked = weeklyDays.count
+                                    
+                                    Text("Pick exactly \(daysPerWeek) day\(daysPerWeek == 1 ? "" : "s") (\(picked)/\(daysPerWeek))")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(picked == daysPerWeek ? LColors.textPrimary : LColors.textSecondary)
+                                    
+                                    HStack(spacing: 6) {
+                                        ForEach(0..<7, id: \.self) { d in
+                                            let on = weeklyDays.contains(d)
+                                            let atCap = (!on && weeklyDays.count >= daysPerWeek)
+                                            
+                                            Button {
+                                                if on {
+                                                    weeklyDays.remove(d)
+                                                } else {
+                                                    guard weeklyDays.count < daysPerWeek else { return }
+                                                    weeklyDays.insert(d)
                                                 }
-                                                .buttonStyle(.plain)
-                                                .disabled(atCap)
+                                            } label: {
+                                                Text(weekdays[d])
+                                                    .font(.system(size: 12, weight: .semibold))
+                                                    .frame(width: 36, height: 36)
+                                                    .background(on ? LColors.accent : Color.white.opacity(0.08))
+                                                    .foregroundStyle(on ? .white : LColors.textPrimary)
+                                                    .clipShape(Circle())
+                                                    .overlay(Circle().stroke(on ? .clear : LColors.glassBorder, lineWidth: 1))
+                                                    .opacity(atCap ? 0.5 : 1.0)
                                             }
+                                            .buttonStyle(.plain)
+                                            .disabled(atCap)
                                         }
                                     }
                                 }
-
-                            } else {
-                                Text("Toggle on to get habit nudges.")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(LColors.textSecondary)
                             }
+                        } else {
+                            Text("Toggle on to get habit nudges.")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(LColors.textSecondary)
                         }
                     }
-                        
-                        Button {
-                            // If Daily + reminders enabled, force 7 days/week.
-                            if reminderEnabled && reminderKind == .daily {
-                                daysPerWeek = 7
-                                weeklyDays = []
-                            }
-                            
-                            let habit = Habit(
-                                title: titleTrimmed,
-                                details: details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : details,
-                                daysPerWeek: daysPerWeek,
-                                timesPerDay: timesPerDay,
-                                reminderEnabled: reminderEnabled,
-                                reminderKind: reminderEnabled ? reminderKind : .none,
-                                reminderTimeOfDay: reminderEnabled ? timeStr24(from: reminderTimes.first ?? Date()) : nil,
-                                reminderDaysOfWeek: reminderEnabled && reminderKind == .weekly ? Array(weeklyDays).sorted() : [],
-                                reminderStartDate: reminderEnabled ? Calendar.current.startOfDay(for: reminderStartDate) : nil
-                            )
-                            modelContext.insert(habit)
-                            
-                            // Create linked reminders (one per time) that log the habit when completed.
-                            if reminderEnabled {
-                                let scheduleKind: ReminderScheduleKind = (reminderKind == .weekly) ? .weekly : .daily
-                                let selectedDays = Array(weeklyDays).sorted()
-                                
-                                for (idx, t) in reminderTimes.enumerated() {
-                                    let (hh, mm) = ReminderCompute.hourMinute(from: t)
-                                    let timeStr = String(format: "%02d:%02d", hh, mm)
-                                    
-                                    let schedule = ReminderSchedule(
-                                        kind: scheduleKind,
-                                        timeOfDay: timeStr,
-                                        timesOfDay: [timeStr],
-                                        interval: nil,
-                                        daysOfWeek: scheduleKind == .weekly ? selectedDays : nil,
-                                        dayOfMonth: nil,
-                                        anchorMonth: nil,
-                                        anchorDay: nil,
-                                        intervalMinutes: nil
-                                    )
-                                    
-                                    let firstRun = ReminderCompute.firstRun(
-                                        kind: scheduleKind,
-                                        startDay: Calendar.current.startOfDay(for: reminderStartDate),
-                                        timesOfDay: [timeStr],
-                                        daysOfWeek: scheduleKind == .weekly ? selectedDays : nil,
-                                        intervalMinutes: nil
-                                    )
-                                    
-                                    let suffix = reminderTimes.count > 1 ? " (\(idx + 1)/\(reminderTimes.count))" : ""
-                                    
-                                    let r = LystariaReminder(
-                                        title: habit.title + suffix,
-                                        details: habit.details,
-                                        nextRunAt: firstRun,
-                                        schedule: schedule,
-                                        timezone: TimeZone.current.identifier,
-                                        serverId: nil,
-                                        linkedKind: .habit,
-                                        linkedHabitId: habit.id
-                                    )
-                                    modelContext.insert(r)
-                                    NotificationManager.shared.scheduleReminder(r)
-                                }
-                            }
-                            
-                            dismiss()
-                        } label: {
-                            Text("Create Habit")
-                                .font(.headline)
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                                .background(!canSave ? AnyShapeStyle(Color.gray.opacity(0.3)) : AnyShapeStyle(LGradients.blue))
-                                .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
-                                .shadow(color: !canSave ? .clear : LColors.accent.opacity(0.3), radius: 12, y: 6)
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(!canSave)
-                    }
-                    .padding(.horizontal, LSpacing.pageHorizontal)
-                    .padding(.bottom, 40)
                 }
+            },
+            footer: {
+                Button {
+                    if reminderEnabled && reminderKind == .daily {
+                        daysPerWeek = 7
+                        weeklyDays = []
+                    }
+                    
+                    let habit = Habit(
+                        title: titleTrimmed,
+                        details: details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : details,
+                        daysPerWeek: daysPerWeek,
+                        timesPerDay: timesPerDay,
+                        reminderEnabled: reminderEnabled,
+                        reminderKind: reminderEnabled ? reminderKind : .none,
+                        reminderTimeOfDay: reminderEnabled ? timeStr24(from: reminderTimes.first ?? Date()) : nil,
+                        reminderDaysOfWeek: reminderEnabled && reminderKind == .weekly ? Array(weeklyDays).sorted() : [],
+                        reminderStartDate: reminderEnabled ? Calendar.current.startOfDay(for: reminderStartDate) : nil
+                    )
+                    modelContext.insert(habit)
+                    
+                    if reminderEnabled {
+                        let scheduleKind: ReminderScheduleKind = (reminderKind == .weekly) ? .weekly : .daily
+                        let selectedDays = Array(weeklyDays).sorted()
+                        
+                        for (idx, t) in reminderTimes.enumerated() {
+                            let (hh, mm) = ReminderCompute.hourMinute(from: t)
+                            let timeStr = String(format: "%02d:%02d", hh, mm)
+                            
+                            let schedule = ReminderSchedule(
+                                kind: scheduleKind,
+                                timeOfDay: timeStr,
+                                timesOfDay: [timeStr],
+                                interval: nil,
+                                daysOfWeek: scheduleKind == .weekly ? selectedDays : nil,
+                                dayOfMonth: nil,
+                                anchorMonth: nil,
+                                anchorDay: nil,
+                                intervalMinutes: nil
+                            )
+                            
+                            let firstRun = ReminderCompute.firstRun(
+                                kind: scheduleKind,
+                                startDay: Calendar.current.startOfDay(for: reminderStartDate),
+                                timesOfDay: [timeStr],
+                                daysOfWeek: scheduleKind == .weekly ? selectedDays : nil,
+                                intervalMinutes: nil
+                            )
+                            
+                            let suffix = reminderTimes.count > 1 ? " (\(idx + 1)/\(reminderTimes.count))" : ""
+                            
+                            let r = LystariaReminder(
+                                title: habit.title + suffix,
+                                details: habit.details,
+                                nextRunAt: firstRun,
+                                schedule: schedule,
+                                timezone: TimeZone.current.identifier,
+                                serverId: nil,
+                                linkedKind: .habit,
+                                linkedHabitId: habit.id
+                            )
+                            modelContext.insert(r)
+                            NotificationManager.shared.scheduleReminder(r)
+                        }
+                    }
+                    
+                    closeAction()
+                } label: {
+                    Text("Create Habit")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(!canSave ? AnyShapeStyle(Color.gray.opacity(0.3)) : AnyShapeStyle(LGradients.blue))
+                        .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
+                        .shadow(color: !canSave ? .clear : LColors.accent.opacity(0.3), radius: 12, y: 6)
+                }
+                .buttonStyle(.plain)
+                .disabled(!canSave)
             }
-        }
+        )
     }
+}
 
 // MARK: - Edit Habit Sheet
 
 struct EditHabitSheet: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismiss
+    var onClose: (() -> Void)? = nil
 
     @Bindable var habit: Habit
 
@@ -1061,11 +1057,16 @@ struct EditHabitSheet: View {
 
     @Query(sort: \LystariaReminder.nextRunAt) private var allReminders: [LystariaReminder]
 
-    init(habit: Habit) {
+    init(habit: Habit, onClose: (() -> Void)? = nil) {
         self._habit = Bindable(wrappedValue: habit)
+        self.onClose = onClose
     }
 
     private var titleTrimmed: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
+    
+    private var closeAction: () -> Void {
+        onClose ?? {}
+    }
 
     private var canSave: Bool {
         if titleTrimmed.isEmpty { return false }
@@ -1094,221 +1095,213 @@ struct EditHabitSheet: View {
     }
 
     var body: some View {
-        ZStack {
-            LystariaBackground()
+        LystariaOverlayPopup(
+            onClose: {
+                closeAction()
+            },
+            width: 720,
+            heightRatio: 0.70,
+            header: {
+                HStack {
+                    GradientTitle(text: "Edit Habit", size: 26)
+                    Spacer()
+                    Button { closeAction() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(LColors.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            },
+            content: {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("TITLE")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+                    GlassTextField(placeholder: "Habit title", text: $title)
+                }
 
-            ScrollView {
-                VStack(spacing: 20) {
-                    HStack {
-                        GradientTitle(text: "Edit Habit", size: 26)
-                        Spacer()
-                        Button { dismiss() } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.title2)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("DESCRIPTION")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+                    GlassTextField(placeholder: "Optional description", text: $details)
+                }
+
+                GlassCard(padding: 16) {
+                    VStack(spacing: 14) {
+                        Stepper("Days per week: \(daysPerWeek)", value: $daysPerWeek, in: 1...7)
+                            .foregroundStyle(LColors.textPrimary)
+                            .disabled(reminderEnabled && reminderKind == .daily)
+                            .opacity((reminderEnabled && reminderKind == .daily) ? 0.6 : 1.0)
+
+                        Stepper("Times per day: \(timesPerDay)", value: $timesPerDay, in: 1...20)
+                            .foregroundStyle(LColors.textPrimary)
+                            .onChange(of: timesPerDay) { _, newValue in
+                                guard reminderEnabled else { return }
+                                if reminderTimes.isEmpty { reminderTimes = [Date()] }
+                                if reminderTimes.count < newValue {
+                                    while reminderTimes.count < newValue {
+                                        reminderTimes.append(reminderTimes.last ?? Date())
+                                    }
+                                } else if reminderTimes.count > newValue {
+                                    reminderTimes = Array(reminderTimes.prefix(newValue))
+                                }
+                            }
+                    }
+                }
+
+                GlassCard(padding: 16) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        HStack {
+                            Text("REMINDER")
+                                .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(LColors.textSecondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.top, 20)
+                                .tracking(0.5)
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("TITLE")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(LColors.textSecondary)
-                            .tracking(0.5)
-                        GlassTextField(placeholder: "Habit title", text: $title)
-                    }
+                            Spacer()
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("DESCRIPTION")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(LColors.textSecondary)
-                            .tracking(0.5)
-                        GlassTextField(placeholder: "Optional description", text: $details)
-                    }
+                            Toggle("", isOn: $reminderEnabled)
+                                .labelsHidden()
+                                .tint(LColors.accent)
+                                .onChange(of: reminderEnabled) { _, newValue in
+                                    guard newValue else { return }
 
-                    GlassCard(padding: 16) {
-                        VStack(spacing: 14) {
-                            Stepper("Days per week: \(daysPerWeek)", value: $daysPerWeek, in: 1...7)
-                                .foregroundStyle(LColors.textPrimary)
-                                .disabled(reminderEnabled && reminderKind == .daily)
-                                .opacity((reminderEnabled && reminderKind == .daily) ? 0.6 : 1.0)
+                                    if reminderKind == .daily {
+                                        daysPerWeek = 7
+                                        weeklyDays = []
+                                    }
 
-                            Stepper("Times per day: \(timesPerDay)", value: $timesPerDay, in: 1...20)
-                                .foregroundStyle(LColors.textPrimary)
-                                .onChange(of: timesPerDay) { _, newValue in
-                                    guard reminderEnabled else { return }
                                     if reminderTimes.isEmpty { reminderTimes = [Date()] }
-                                    if reminderTimes.count < newValue {
-                                        while reminderTimes.count < newValue {
+                                    if reminderTimes.count < timesPerDay {
+                                        while reminderTimes.count < timesPerDay {
                                             reminderTimes.append(reminderTimes.last ?? Date())
                                         }
-                                    } else if reminderTimes.count > newValue {
-                                        reminderTimes = Array(reminderTimes.prefix(newValue))
+                                    } else if reminderTimes.count > timesPerDay {
+                                        reminderTimes = Array(reminderTimes.prefix(timesPerDay))
                                     }
                                 }
                         }
-                    }
 
-                    // Reminder (matches NewHabitSheet)
-                    GlassCard(padding: 16) {
-                        VStack(alignment: .leading, spacing: 14) {
+                        if reminderEnabled {
+                            LystariaControlRow(label: "Start") {
+                                DatePicker(
+                                    "",
+                                    selection: $reminderStartDate,
+                                    displayedComponents: .date
+                                )
+                                .labelsHidden()
+                                .datePickerStyle(.compact)
+                                .tint(LColors.accent)
+                            }
 
-                            // Header row
-                            HStack {
-                                Text("REMINDER")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(LColors.textSecondary)
-                                    .tracking(0.5)
+                            HStack(spacing: 8) {
+                                ForEach([HabitReminderKind.daily, HabitReminderKind.weekly], id: \.self) { k in
+                                    let on = reminderKind == k
+                                    Button {
+                                        reminderKind = k
 
-                                Spacer()
-
-                                Toggle("", isOn: $reminderEnabled)
-                                    .labelsHidden()
-                                    .tint(LColors.accent)
-                                    .onChange(of: reminderEnabled) { _, newValue in
-                                        guard newValue else { return }
-
-                                        if reminderKind == .daily {
+                                        if k == .daily {
                                             daysPerWeek = 7
                                             weeklyDays = []
                                         }
-
-                                        if reminderTimes.isEmpty { reminderTimes = [Date()] }
-                                        if reminderTimes.count < timesPerDay {
-                                            while reminderTimes.count < timesPerDay {
-                                                reminderTimes.append(reminderTimes.last ?? Date())
-                                            }
-                                        } else if reminderTimes.count > timesPerDay {
-                                            reminderTimes = Array(reminderTimes.prefix(timesPerDay))
-                                        }
-                                    }
-                            }
-
-                            if reminderEnabled {
-
-                                // Start date (controls what day we consider the first occurrence)
-                                LystariaControlRow(label: "Start") {
-                                    DatePicker(
-                                        "",
-                                        selection: $reminderStartDate,
-                                        displayedComponents: .date
-                                    )
-                                    .labelsHidden()
-                                    .datePickerStyle(.compact)
-                                    .tint(LColors.accent)
-                                }
-
-                                // Kind (Daily / Weekly)
-                                HStack(spacing: 8) {
-                                    ForEach([HabitReminderKind.daily, HabitReminderKind.weekly], id: \.self) { k in
-                                        let on = reminderKind == k
-                                        Button {
-                                            reminderKind = k
-
-                                            if k == .daily {
-                                                daysPerWeek = 7
-                                                weeklyDays = []
-                                            }
-                                        } label: {
-                                            Text(k.label.uppercased())
-                                                .font(.system(size: 12, weight: .semibold))
-                                                .foregroundStyle(on ? .white : LColors.textPrimary)
-                                                .padding(.horizontal, 14)
-                                                .padding(.vertical, 8)
-                                                .background(on ? LColors.accent : Color.white.opacity(0.08))
-                                                .clipShape(Capsule())
-                                                .overlay(
-                                                    Capsule().stroke(on ? LColors.accent : LColors.glassBorder, lineWidth: 1)
-                                                )
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                }
-
-                                // Times (one per `timesPerDay`)
-                                VStack(alignment: .leading, spacing: 10) {
-                                    ForEach(Array(reminderTimes.indices), id: \.self) { idx in
-                                        LystariaControlRow(label: idx == 0 ? "Time" : "Time \(idx + 1)") {
-                                            DatePicker(
-                                                "",
-                                                selection: Binding(
-                                                    get: { reminderTimes[idx] },
-                                                    set: { reminderTimes[idx] = $0 }
-                                                ),
-                                                displayedComponents: .hourAndMinute
+                                    } label: {
+                                        Text(k.label.uppercased())
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundStyle(on ? .white : LColors.textPrimary)
+                                            .padding(.horizontal, 14)
+                                            .padding(.vertical, 8)
+                                            .background(on ? LColors.accent : Color.white.opacity(0.08))
+                                            .clipShape(Capsule())
+                                            .overlay(
+                                                Capsule().stroke(on ? LColors.accent : LColors.glassBorder, lineWidth: 1)
                                             )
-                                            .labelsHidden()
-                                            .datePickerStyle(.compact)
-                                            .tint(LColors.accent)
-                                        }
                                     }
+                                    .buttonStyle(.plain)
                                 }
-
-                                if reminderKind == .weekly {
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        let picked = weeklyDays.count
-
-                                        Text("Pick exactly \(daysPerWeek) day\(daysPerWeek == 1 ? "" : "s") (\(picked)/\(daysPerWeek))")
-                                            .font(.system(size: 13, weight: .semibold))
-                                            .foregroundStyle(picked == daysPerWeek ? LColors.textPrimary : LColors.textSecondary)
-
-                                        HStack(spacing: 6) {
-                                            ForEach(0..<7, id: \.self) { d in
-                                                let on = weeklyDays.contains(d)
-                                                let atCap = (!on && weeklyDays.count >= daysPerWeek)
-
-                                                Button {
-                                                    if on {
-                                                        weeklyDays.remove(d)
-                                                    } else {
-                                                        guard weeklyDays.count < daysPerWeek else { return }
-                                                        weeklyDays.insert(d)
-                                                    }
-                                                } label: {
-                                                    Text(weekdays[d])
-                                                        .font(.system(size: 12, weight: .semibold))
-                                                        .frame(width: 36, height: 36)
-                                                        .background(on ? LColors.accent : Color.white.opacity(0.08))
-                                                        .foregroundStyle(on ? .white : LColors.textPrimary)
-                                                        .clipShape(Circle())
-                                                        .overlay(Circle().stroke(on ? .clear : LColors.glassBorder, lineWidth: 1))
-                                                        .opacity(atCap ? 0.5 : 1.0)
-                                                }
-                                                .buttonStyle(.plain)
-                                                .disabled(atCap)
-                                            }
-                                        }
-                                    }
-                                }
-
-                            } else {
-                                Text("Toggle on to get habit nudges.")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(LColors.textSecondary)
                             }
+
+                            VStack(alignment: .leading, spacing: 10) {
+                                ForEach(Array(reminderTimes.indices), id: \.self) { idx in
+                                    LystariaControlRow(label: idx == 0 ? "Time" : "Time \(idx + 1)") {
+                                        DatePicker(
+                                            "",
+                                            selection: Binding(
+                                                get: { reminderTimes[idx] },
+                                                set: { reminderTimes[idx] = $0 }
+                                            ),
+                                            displayedComponents: .hourAndMinute
+                                        )
+                                        .labelsHidden()
+                                        .datePickerStyle(.compact)
+                                        .tint(LColors.accent)
+                                    }
+                                }
+                            }
+
+                            if reminderKind == .weekly {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    let picked = weeklyDays.count
+
+                                    Text("Pick exactly \(daysPerWeek) day\(daysPerWeek == 1 ? "" : "s") (\(picked)/\(daysPerWeek))")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(picked == daysPerWeek ? LColors.textPrimary : LColors.textSecondary)
+
+                                    HStack(spacing: 6) {
+                                        ForEach(0..<7, id: \.self) { d in
+                                            let on = weeklyDays.contains(d)
+                                            let atCap = (!on && weeklyDays.count >= daysPerWeek)
+
+                                            Button {
+                                                if on {
+                                                    weeklyDays.remove(d)
+                                                } else {
+                                                    guard weeklyDays.count < daysPerWeek else { return }
+                                                    weeklyDays.insert(d)
+                                                }
+                                            } label: {
+                                                Text(weekdays[d])
+                                                    .font(.system(size: 12, weight: .semibold))
+                                                    .frame(width: 36, height: 36)
+                                                    .background(on ? LColors.accent : Color.white.opacity(0.08))
+                                                    .foregroundStyle(on ? .white : LColors.textPrimary)
+                                                    .clipShape(Circle())
+                                                    .overlay(Circle().stroke(on ? .clear : LColors.glassBorder, lineWidth: 1))
+                                                    .opacity(atCap ? 0.5 : 1.0)
+                                            }
+                                            .buttonStyle(.plain)
+                                            .disabled(atCap)
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            Text("Toggle on to get habit nudges.")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(LColors.textSecondary)
                         }
                     }
-
-                    Button {
-                        applyChanges()
-                    } label: {
-                        Text("Save Changes")
-                            .font(.headline)
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(!canSave ? AnyShapeStyle(Color.gray.opacity(0.3)) : AnyShapeStyle(LGradients.blue))
-                            .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
-                            .shadow(color: !canSave ? .clear : LColors.accent.opacity(0.3), radius: 12, y: 6)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!canSave)
                 }
-                .padding(.horizontal, LSpacing.pageHorizontal)
-                .padding(.bottom, 40)
+            },
+            footer: {
+                Button {
+                    applyChanges()
+                } label: {
+                    Text("Save Changes")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(!canSave ? AnyShapeStyle(Color.gray.opacity(0.3)) : AnyShapeStyle(LGradients.blue))
+                        .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
+                        .shadow(color: !canSave ? .clear : LColors.accent.opacity(0.3), radius: 12, y: 6)
+                }
+                .buttonStyle(.plain)
+                .disabled(!canSave)
             }
-        }
+        )
         .onAppear { loadFromModel() }
     }
 
@@ -1419,6 +1412,6 @@ struct EditHabitSheet: View {
             }
         }
 
-        dismiss()
+        closeAction()
     }
 }

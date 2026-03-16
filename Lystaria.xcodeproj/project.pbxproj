@@ -28,6 +28,15 @@
 		CF13B6352F65B582008D3CE9 /* SetDailyIntentionIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B6342F65B57A008D3CE9 /* SetDailyIntentionIntent.swift */; };
 		CF13B6372F65C044008D3CE9 /* ChecklistItemWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B6362F65C03B008D3CE9 /* ChecklistItemWriter.swift */; };
 		CF13B6392F65C064008D3CE9 /* ChecklistItemIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B6382F65C05E008D3CE9 /* ChecklistItemIntent.swift */; };
+		CF13B63B2F65C70B008D3CE9 /* LocationPickerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B63A2F65C703008D3CE9 /* LocationPickerManager.swift */; };
+		CF13B63E2F65C73F008D3CE9 /* LocationSearchSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B63D2F65C736008D3CE9 /* LocationSearchSheet.swift */; };
+		CF13B6402F65CECB008D3CE9 /* CalendarEventDetailOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B63F2F65CEC2008D3CE9 /* CalendarEventDetailOverlay.swift */; };
+		CF13B6422F671AA6008D3CE9 /* MoonPhaseCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B6412F671AA6008D3CE9 /* MoonPhaseCalculator.swift */; };
+		CF13B6442F671ACE008D3CE9 /* MoonPhaseData.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B6432F671ACE008D3CE9 /* MoonPhaseData.swift */; };
+		CF13B6462F675D8A008D3CE9 /* DashboardConsistencyModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B6452F675D74008D3CE9 /* DashboardConsistencyModels.swift */; };
+		CF13B6482F675DC4008D3CE9 /* DashboardConsistencyAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B6472F675DBA008D3CE9 /* DashboardConsistencyAnalyzer.swift */; };
+		CF13B6522F678C27008D3CE9 /* JournalEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83282F50A4940092FC98 /* JournalEntry.swift */; };
+		CF13B6562F678D53008D3CE9 /* JournalBook.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF20513D2F5787D9006B71AA /* JournalBook.swift */; };
 		CF20513E2F5787DD006B71AA /* JournalBook.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF20513D2F5787D9006B71AA /* JournalBook.swift */; };
 		CF2051402F5788CE006B71AA /* JournalBookEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF20513F2F5788C6006B71AA /* JournalBookEditorSheet.swift */; };
 		CF2051422F5788F9006B71AA /* Color+Hex.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF2051412F5788F3006B71AA /* Color+Hex.swift */; };
@@ -164,6 +173,13 @@
 		CF13B6342F65B57A008D3CE9 /* SetDailyIntentionIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetDailyIntentionIntent.swift; sourceTree = "<group>"; };
 		CF13B6362F65C03B008D3CE9 /* ChecklistItemWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChecklistItemWriter.swift; sourceTree = "<group>"; };
 		CF13B6382F65C05E008D3CE9 /* ChecklistItemIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChecklistItemIntent.swift; sourceTree = "<group>"; };
+		CF13B63A2F65C703008D3CE9 /* LocationPickerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationPickerManager.swift; sourceTree = "<group>"; };
+		CF13B63D2F65C736008D3CE9 /* LocationSearchSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationSearchSheet.swift; sourceTree = "<group>"; };
+		CF13B63F2F65CEC2008D3CE9 /* CalendarEventDetailOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarEventDetailOverlay.swift; sourceTree = "<group>"; };
+		CF13B6412F671AA6008D3CE9 /* MoonPhaseCalculator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoonPhaseCalculator.swift; sourceTree = "<group>"; };
+		CF13B6432F671ACE008D3CE9 /* MoonPhaseData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoonPhaseData.swift; sourceTree = "<group>"; };
+		CF13B6452F675D74008D3CE9 /* DashboardConsistencyModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardConsistencyModels.swift; sourceTree = "<group>"; };
+		CF13B6472F675DBA008D3CE9 /* DashboardConsistencyAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardConsistencyAnalyzer.swift; sourceTree = "<group>"; };
 		CF20513D2F5787D9006B71AA /* JournalBook.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalBook.swift; sourceTree = "<group>"; };
 		CF20513F2F5788C6006B71AA /* JournalBookEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalBookEditorSheet.swift; sourceTree = "<group>"; };
 		CF2051412F5788F3006B71AA /* Color+Hex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Hex.swift"; sourceTree = "<group>"; };
@@ -351,6 +367,7 @@
 		CF4790AD2F5B676E0026696B /* Managers */ = {
 			isa = PBXGroup;
 			children = (
+				CF13B63A2F65C703008D3CE9 /* LocationPickerManager.swift */,
 				CF8421B02F61E7500069F12F /* CalendarSyncManager.swift */,
 				CF8421882F6079E60069F12F /* OnboardingManager.swift */,
 				CF8421812F5FBD820069F12F /* WaterHealthKitManager.swift */,
@@ -433,6 +450,8 @@
 		CF8D83052F50A4640092FC98 /* Calendar */ = {
 			isa = PBXGroup;
 			children = (
+				CF13B63F2F65CEC2008D3CE9 /* CalendarEventDetailOverlay.swift */,
+				CF13B63D2F65C736008D3CE9 /* LocationSearchSheet.swift */,
 				CF8D835B2F5129B10092FC98 /* CalendarTabView.swift */,
 			);
 			path = Calendar;
@@ -536,6 +555,8 @@
 		CF8D831F2F50A4770092FC98 /* Utilities */ = {
 			isa = PBXGroup;
 			children = (
+				CF13B6472F675DBA008D3CE9 /* DashboardConsistencyAnalyzer.swift */,
+				CF13B6412F671AA6008D3CE9 /* MoonPhaseCalculator.swift */,
 				CF13B61F2F63BAD3008D3CE9 /* LystariaShortcuts.swift */,
 				CF13B6172F63B98F008D3CE9 /* MoodIntentEnum.swift */,
 				CF8421BD2F6320590069F12F /* Tarot.swift */,
@@ -548,6 +569,8 @@
 		CF8D832C2F50A4940092FC98 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				CF13B6452F675D74008D3CE9 /* DashboardConsistencyModels.swift */,
+				CF13B6432F671ACE008D3CE9 /* MoonPhaseData.swift */,
 				CF8421CA2F638EDB0069F12F /* KanbanBoard.swift */,
 				CF8421C12F6329740069F12F /* StoredHoroscope.swift */,
 				CF8421BF2F63295B0069F12F /* DailyHoroscope.swift */,
@@ -776,6 +799,8 @@
 				CF0A09F22F5F1C5800401658 /* MoodLog.swift in Sources */,
 				CF84214B2F5F4D3E0069F12F /* SupabaseManager.swift in Sources */,
 				CF84217D2F5FA7580069F12F /* HealthKitManager.swift in Sources */,
+				CF13B6522F678C27008D3CE9 /* JournalEntry.swift in Sources */,
+				CF13B6562F678D53008D3CE9 /* JournalBook.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -786,6 +811,7 @@
 				CF13B61B2F63B9EC008D3CE9 /* MoodLogWriter.swift in Sources */,
 				CF8D836C2F53AA600092FC98 /* DailyIntention.swift in Sources */,
 				CF8D83412F50D75D0092FC98 /* AuthService.swift in Sources */,
+				CF13B63B2F65C70B008D3CE9 /* LocationPickerManager.swift in Sources */,
 				CF8D83502F5125590092FC98 /* MoodLoggerView.swift in Sources */,
 				CF8421C22F63297A0069F12F /* StoredHoroscope.swift in Sources */,
 				CF8421892F6079EC0069F12F /* OnboardingManager.swift in Sources */,
@@ -808,6 +834,7 @@
 				CF8D831C2F50A4640092FC98 /* MainTabView.swift in Sources */,
 				CF13B61E2F63BA59008D3CE9 /* LogMoodIntent.swift in Sources */,
 				CF2051422F5788F9006B71AA /* Color+Hex.swift in Sources */,
+				CF13B6462F675D8A008D3CE9 /* DashboardConsistencyModels.swift in Sources */,
 				CF8D837C2F53E1E60092FC98 /* SignInView.swift in Sources */,
 				CF4790AC2F5B64680026696B /* SupabaseManager.swift in Sources */,
 				CF8D833D2F50B0620092FC98 /* APIClient.swift in Sources */,
@@ -835,6 +862,7 @@
 				CF8D83542F5125820092FC98 /* ChecklistsView.swift in Sources */,
 				CF0A09D32F5C987300401658 /* BookRecommendationsService.swift in Sources */,
 				CF0A09D52F5C989400401658 /* BookRecommendationsSheet.swift in Sources */,
+				CF13B6442F671ACE008D3CE9 /* MoonPhaseData.swift in Sources */,
 				CF20514A2F578DFB006B71AA /* JournalCard.swift in Sources */,
 				CF13B6372F65C044008D3CE9 /* ChecklistItemWriter.swift in Sources */,
 				CF8D83392F50A4A40092FC98 /* LystariaApp.swift in Sources */,
@@ -844,18 +872,22 @@
 				CF8D833F2F50D5EE0092FC98 /* AppState.swift in Sources */,
 				CF0A09D72F5CA7A200401658 /* JournalPromptService.swift in Sources */,
 				CF8D83332F50A4940092FC98 /* HabitLog.swift in Sources */,
+				CF13B63E2F65C73F008D3CE9 /* LocationSearchSheet.swift in Sources */,
 				CF13B6392F65C064008D3CE9 /* ChecklistItemIntent.swift in Sources */,
 				CF8421832F5FBD8B0069F12F /* WaterHealthKitManager.swift in Sources */,
 				CF8421962F607B100069F12F /* BookSyncTest.swift in Sources */,
 				CF8421C72F636DD00069F12F /* ToolboxView.swift in Sources */,
 				CF8421972F607B100069F12F /* SyncService.swift in Sources */,
 				CF8D834C2F5124EB0092FC98 /* LystariaTheme.swift in Sources */,
+				CF13B6402F65CECB008D3CE9 /* CalendarEventDetailOverlay.swift in Sources */,
+				CF13B6422F671AA6008D3CE9 /* MoonPhaseCalculator.swift in Sources */,
 				CF8D83342F50A4940092FC98 /* Reminder.swift in Sources */,
 				CF8421BC2F631C090069F12F /* StoredTarot.swift in Sources */,
 				CF8D835A2F5129A50092FC98 /* JournalTabView.swift in Sources */,
 				CF8D838A2F560F700092FC98 /* RemindersView.swift in Sources */,
 				CF8D83352F50A4940092FC98 /* Book.swift in Sources */,
 				CF8421CB2F638EE00069F12F /* KanbanBoard.swift in Sources */,
+				CF13B6482F675DC4008D3CE9 /* DashboardConsistencyAnalyzer.swift in Sources */,
 				CF8D83362F50A4940092FC98 /* CalendarEvent.swift in Sources */,
 				CF8421B12F61E7570069F12F /* CalendarSyncManager.swift in Sources */,
 				CF84219A2F607B2D0069F12F /* OnboardingTarget.swift in Sources */,

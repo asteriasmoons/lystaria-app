@@ -10,78 +10,82 @@ import SwiftData
 
 struct JournalBookEditorSheet: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismiss
 
     let book: JournalBook?
+    var onClose: (() -> Void)? = nil
 
     @State private var title: String = ""
     @State private var coverColor: Color = Color(hex: "#6A5CFF")
 
+    private var closeAction: () -> Void {
+        onClose ?? {}
+    }
+
     var body: some View {
-        ZStack {
-            LystariaBackground()
-
-            ScrollView {
-                VStack(spacing: 20) {
-                    HStack {
-                        GradientTitle(text: book != nil ? "Edit Book" : "New Book", font: .title2.bold())
-                        Spacer()
-                        Button { dismiss() } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.title2)
-                                .foregroundStyle(LColors.textSecondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.top, 20)
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("TITLE")
-                            .font(.system(size: 13, weight: .semibold))
+        LystariaOverlayPopup(
+            onClose: {
+                closeAction()
+            },
+            width: 640,
+            heightRatio: 0.78,
+            header: {
+                HStack {
+                    GradientTitle(text: book != nil ? "Edit Book" : "New Book", font: .title2.bold())
+                    Spacer()
+                    Button { closeAction() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title2)
                             .foregroundStyle(LColors.textSecondary)
-                            .tracking(0.5)
-
-                        LystariaTextField(placeholder: "Book title", text: $title)
-                    }
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("COVER COLOR")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(LColors.textSecondary)
-                            .tracking(0.5)
-
-                        GlassCard {
-                            HStack {
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(coverColor)
-                                    .frame(width: 48, height: 48)
-                                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(LColors.glassBorder, lineWidth: 1))
-
-                                ColorPicker("Choose color", selection: $coverColor, supportsOpacity: false)
-                                    .foregroundStyle(LColors.textPrimary)
-
-                                Spacer()
-                            }
-                        }
-                    }
-
-                    Button { saveBook() } label: {
-                        Text(book != nil ? "Save Changes" : "Create Book")
-                            .font(.headline)
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(title.trimmed.isEmpty ? AnyShapeStyle(Color.gray.opacity(0.3)) : AnyShapeStyle(LGradients.blue))
-                            .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
-                            .shadow(color: title.trimmed.isEmpty ? .clear : LColors.accent.opacity(0.3), radius: 12, y: 6)
                     }
                     .buttonStyle(.plain)
-                    .disabled(title.trimmed.isEmpty)
                 }
-                .padding(.horizontal, LSpacing.pageHorizontal)
-                .padding(.bottom, 40)
+            },
+            content: {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("TITLE")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+
+                    LystariaTextField(placeholder: "Book title", text: $title)
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("COVER COLOR")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+
+                    GlassCard {
+                        HStack {
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(coverColor)
+                                .frame(width: 48, height: 48)
+                                .overlay(RoundedRectangle(cornerRadius: 12).stroke(LColors.glassBorder, lineWidth: 1))
+
+                            ColorPicker("Choose color", selection: $coverColor, supportsOpacity: false)
+                                .foregroundStyle(LColors.textPrimary)
+
+                            Spacer()
+                        }
+                    }
+                }
+            },
+            footer: {
+                Button { saveBook() } label: {
+                    Text(book != nil ? "Save Changes" : "Create Book")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(title.trimmed.isEmpty ? AnyShapeStyle(Color.gray.opacity(0.3)) : AnyShapeStyle(LGradients.blue))
+                        .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
+                        .shadow(color: title.trimmed.isEmpty ? .clear : LColors.accent.opacity(0.3), radius: 12, y: 6)
+                }
+                .buttonStyle(.plain)
+                .disabled(title.trimmed.isEmpty)
             }
-        }
+        )
         .onAppear {
             if let book {
                 title = book.title
@@ -106,7 +110,7 @@ struct JournalBookEditorSheet: View {
             modelContext.insert(newBook)
         }
 
-        dismiss()
+        closeAction()
     }
 }
 
@@ -124,9 +128,6 @@ private extension String {
     let sampleBook = JournalBook(title: "General Journal", coverHex: "#6A5CFF")
     ctx.insert(sampleBook)
 
-    return ZStack {
-        LystariaBackground()
-        JournalBookEditorSheet(book: sampleBook)
-    }
-    .modelContainer(container)
+    return JournalBookEditorSheet(book: sampleBook)
+        .modelContainer(container)
 }

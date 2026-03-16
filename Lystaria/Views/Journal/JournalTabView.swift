@@ -54,9 +54,19 @@ struct JournalTabView: View {
                 .padding(.trailing, 24)
                 .padding(.bottom, 96)
             }
-            .sheet(isPresented: $showBookEditor) {
-                JournalBookEditorSheet(book: editingBook)
+            .overlay {
+                if showBookEditor {
+                    JournalBookEditorSheet(
+                        book: editingBook,
+                        onClose: {
+                            showBookEditor = false
+                            editingBook = nil
+                        }
+                    )
                     .preferredColorScheme(.dark)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .zIndex(50)
+                }
             }
             .overlayPreferenceValue(OnboardingTargetKey.self) { anchors in
                 ZStack {
@@ -72,6 +82,7 @@ struct JournalTabView: View {
             .onAppear {
                 migrateEntriesIntoDefaultBookIfNeeded()
             }
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showBookEditor)
             // Prevent the NavigationStack default backgrounds from covering the custom background
             .toolbarBackground(.hidden, for: .navigationBar)
             .toolbarBackground(.hidden, for: .tabBar)
@@ -667,30 +678,49 @@ struct JournalBookDetailView: View {
                 .padding(.bottom, 96)
             }
             .navigationBarTitleDisplayMode(.inline)
-            .sheet(isPresented: $showEditor) {
-                JournalEditorSheet(entry: editingEntry, book: book)
+            .overlay {
+                if showEditor {
+                    JournalEditorSheet(
+                        entry: editingEntry,
+                        book: book,
+                        onClose: {
+                            showEditor = false
+                            editingEntry = nil
+                        }
+                    )
                     .preferredColorScheme(.dark)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .zIndex(60)
+                }
             }
             
-            .sheet(item: $viewerEntry) { entry in
-                JournalPreviewSheet(
-                    entry: entry,
-                    onEdit: { e in
-                        viewerEntry = nil
-                        editingEntry = e
-                        showEditor = true
-                    },
-                    onDelete: { e in
-                        viewerEntry = nil
-                        // Soft-delete: set deletedAt so pushJournalEntries syncs
-                        // the deletion to Supabase. pullJournalEntries will then
-                        // hard-delete the local record after confirming remote deletion.
-                        e.deletedAt = Date()
-                        e.needsSync = true
-                        try? modelContext.save()
-                    }
-                )
-                .preferredColorScheme(.dark)
+            .overlay {
+                if let entry = viewerEntry {
+                    JournalPreviewSheet(
+                        entry: entry,
+                        onClose: {
+                            viewerEntry = nil
+                        },
+                        onEdit: { e in
+                            viewerEntry = nil
+                            editingEntry = e
+                            showEditor = true
+                        },
+                        onDelete: { e in
+                            viewerEntry = nil
+
+                            // Soft-delete: set deletedAt so pushJournalEntries syncs
+                            // the deletion to Supabase. pullJournalEntries will then
+                            // hard-delete the local record after confirming remote deletion.
+                            e.deletedAt = Date()
+                            e.needsSync = true
+                            try? modelContext.save()
+                        }
+                    )
+                    .preferredColorScheme(.dark)
+                    .transition(.opacity.combined(with: .scale))
+                    .zIndex(50)
+                }
             }
             
             // MARK: - Journal Prompt Overlay
@@ -701,6 +731,7 @@ struct JournalBookDetailView: View {
             }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showPromptSheet)
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showEditor)
     }
     
     private var header: some View {

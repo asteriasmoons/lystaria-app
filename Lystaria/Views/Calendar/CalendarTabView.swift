@@ -21,6 +21,7 @@ struct CalendarTabView: View {
     @State private var currentMonth = Date()
     @State private var sheetConfig: EventSheetConfig? = nil
     @State private var showingSettingsSheet = false
+    @State private var detailOverlayPayload: EventDetailOverlayPayload?
     // Onboarding for hidden header icons
     @StateObject private var onboarding = OnboardingManager()
 
@@ -338,6 +339,22 @@ struct CalendarTabView: View {
                     }
                 }
                 .scrollIndicators(.hidden)
+
+                // Detail overlay as a true full-screen ZStack sibling
+                if let payload = detailOverlayPayload {
+                    CalendarEventDetailOverlay(
+                        event: payload.event,
+                        occurrenceStart: payload.occurrenceStart,
+                        occurrenceEnd: payload.occurrenceEnd,
+                        onClose: {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                detailOverlayPayload = nil
+                            }
+                        }
+                    )
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    .zIndex(100)
+                }
             }
             // FIX 5: Build the map on appear and whenever allEvents or the month changes.
             .onAppear {
@@ -349,16 +366,23 @@ struct CalendarTabView: View {
             .onChange(of: currentMonth) { _, _ in
                 rebuildEventsByDay()
             }
-            .sheet(item: $sheetConfig, onDismiss: {
-                // Ensure UI refreshes after add/edit.
-                rebuildEventsByDay()
-            }) { config in
-                EventSheet(
-                    selectedDate: config.selectedDate,
-                    editingEvent: config.editingEvent
-                )
-                .preferredColorScheme(.dark)
+            .overlay {
+                if let config = sheetConfig {
+                    EventSheet(
+                        onClose: {
+                            sheetConfig = nil
+                            rebuildEventsByDay()
+                        },
+                        selectedDate: config.selectedDate,
+                        editingEvent: config.editingEvent
+                    )
+                    .preferredColorScheme(.dark)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .zIndex(70)
+                }
             }
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: sheetConfig != nil)
+            
             .overlayPreferenceValue(OnboardingTargetKey.self) { anchors in
                 ZStack {
                     OnboardingOverlay(anchors: anchors)
@@ -527,13 +551,13 @@ struct CalendarTabView: View {
         let event = instance.event
         let eventColor = Color(ly_hex: event.displayColor)
         let hasReminder = (event.reminderServerId != nil)
-
+        
         return HStack(spacing: 0) {
             RoundedRectangle(cornerRadius: 2)
                 .fill(eventColor)
                 .frame(width: 4)
                 .padding(.vertical, 2)
-
+            
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     if hasReminder {
@@ -545,7 +569,7 @@ struct CalendarTabView: View {
                             .background(LColors.accent.opacity(0.12))
                             .clipShape(Capsule())
                     }
-
+                    
                     if event.allDay {
                         Text("All day")
                             .font(.system(size: 11, weight: .bold))
@@ -556,11 +580,11 @@ struct CalendarTabView: View {
                             .clipShape(Capsule())
                     }
                 }
-
+                
                 Text(event.title)
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(LColors.textPrimary)
-
+                
                 if let desc = event.eventDescription?.trimmingCharacters(in: .whitespacesAndNewlines), !desc.isEmpty {
                     Text(desc)
                         .font(.system(size: 12))
@@ -570,13 +594,13 @@ struct CalendarTabView: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .lineLimit(4)
                 }
-
+                
                 if !event.allDay {
                     Text(formatEventTime(event, occurrenceStart: instance.occurrenceStart, occurrenceEnd: instance.occurrenceEnd))
                         .font(.system(size: 12))
                         .foregroundStyle(.white)
                 }
-
+                
                 // FIX 7: Snapshot recurrence before using in view expression.
                 // The original `event.recurrence != nil` check inside a ViewBuilder
                 // was one of the direct triggers of the faulted-object SIGABRT.
@@ -593,7 +617,7 @@ struct CalendarTabView: View {
                                 .padding(.vertical, 4)
                                 .background(Color.white.opacity(0.08))
                                 .clipShape(Capsule())
-
+                            
                             if let parsedRecurrence, parsedRecurrence.freq == .weekly {
                                 Text("\(max(1, parsedRecurrence.interval))/W")
                                     .font(.system(size: 11, weight: .bold))
@@ -610,21 +634,13 @@ struct CalendarTabView: View {
                         }
                     }
                 }
-
-                if let loc = event.location, !loc.isEmpty {
-                    HStack(spacing: 4) {
-                        Image(systemName: "mappin").font(.system(size: 10))
-                        Text(loc)
-                    }
-                    .font(.system(size: 12))
-                    .foregroundStyle(LColors.textSecondary)
-                }
+                
             }
             .padding(.leading, 10)
-
+            
             Spacer()
-
-            HStack(spacing: 8) {
+            
+            VStack(spacing: 8) {
                 Button {
                     sheetConfig = EventSheetConfig(selectedDate: instance.occurrenceStart, editingEvent: event)
                 } label: {
@@ -637,7 +653,7 @@ struct CalendarTabView: View {
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(LColors.glassBorder, lineWidth: 1))
                 }
                 .buttonStyle(.plain)
-
+                
                 Button {
                     if let rid = event.reminderServerId {
                         NotificationManager.shared.cancelAllCalendarNotifications(id: rid)
@@ -660,6 +676,14 @@ struct CalendarTabView: View {
         .background(LColors.glassSurface)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(LColors.glassBorder, lineWidth: 1))
+        .contentShape(RoundedRectangle(cornerRadius: 12))
+        .onTapGesture {
+            detailOverlayPayload = EventDetailOverlayPayload(
+                event: event,
+                occurrenceStart: instance.occurrenceStart,
+                occurrenceEnd: instance.occurrenceEnd
+            )
+        }
     }
 
     private func deleteReminder(withServerId id: String) {
@@ -696,11 +720,18 @@ struct CalendarTabView: View {
     }
 }
 
+private struct EventDetailOverlayPayload: Identifiable {
+    let id = UUID()
+    let event: CalendarEvent
+    let occurrenceStart: Date
+    let occurrenceEnd: Date?
+}
+
 // MARK: - Event Sheet (New/Edit)
 
 struct EventSheet: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismiss
+    var onClose: (() -> Void)? = nil
 
     let selectedDate: Date
     let editingEvent: CalendarEvent?
@@ -714,6 +745,8 @@ struct EventSheet: View {
     @State private var endTime = Date()
 
     @State private var location = ""
+    @State private var meetingUrl = ""
+    @State private var showLocationSearchSheet = false
     @State private var eventDescription = ""
     @State private var eventColor = "#5b8def"
     @State private var eventColorUI: Color = Color(ly_hex: "#5b8def")
@@ -798,6 +831,9 @@ struct EventSheet: View {
     }
 
     private var titleTrimmed: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var closeAction: () -> Void {
+        onClose ?? {}
+    }
 
     private var displayTimeZone: TimeZone {
         TimeZone(identifier: NotificationManager.shared.effectiveTimezoneID) ?? .current
@@ -809,335 +845,275 @@ struct EventSheet: View {
     }
 
     var body: some View {
-        ZStack {
-            LystariaBackground()
+        LystariaOverlayPopup(
+            onClose: {
+                closeAction()
+            },
+            width: 760,
+            heightRatio: 0.70,
+            header: {
+                HStack {
+                    GradientTitle(
+                        text: editingEvent != nil ? "Edit Event" : "New Event",
+                        font: .title2.bold()
+                    )
+                    Spacer()
 
-            ScrollView {
-                VStack(spacing: 20) {
+                    Button { closeAction() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(LColors.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            },
+            content: {
+                CalendarLabeledGlassField(label: "TITLE") {
+                    TextField("Event title", text: $title)
+                        .textFieldStyle(.plain)
+                        .foregroundStyle(LColors.textPrimary)
+                }
 
-                    HStack {
-                        GradientTitle(
-                            text: editingEvent != nil ? "Edit Event" : "New Event",
-                            font: .title2.bold()
-                        )
-                        Spacer()
+                GlassCard(padding: 16) {
+                    VStack(spacing: 12) {
+                        Toggle("All Day", isOn: $allDay)
+                            .foregroundStyle(LColors.textPrimary)
+                            .tint(LColors.accent)
 
-                        Button { dismiss() } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.title2)
+                        if allDay {
+                            #if os(macOS)
+                            DateStepperRow(label: "Day", dateTime: $startDay)
+                            #else
+                            CalendarControlRow(label: "Day") {
+                                DatePicker("", selection: $startDay, displayedComponents: .date)
+                                    .labelsHidden()
+                                    .datePickerStyle(.compact)
+                                    .tint(LColors.accent)
+                            }
+                            #endif
+                        } else {
+                            #if os(macOS)
+                            DateStepperRow(label: "Start Day", dateTime: $startDay)
+                            TimeEntryRow(label: "Start Time", dateTime: $startTime)
+                            DateStepperRow(label: "End Day", dateTime: $endDay)
+                            TimeEntryRow(label: "End Time", dateTime: $endTime)
+                            #else
+                            CalendarControlRow(label: "Start") {
+                                DatePicker("", selection: Binding(
+                                    get: { CalendarCompute.merge(day: startDay, time: startTime) },
+                                    set: { newValue in
+                                        startDay = newValue
+                                        startTime = newValue
+                                    }
+                                ), displayedComponents: [.date, .hourAndMinute])
+                                .labelsHidden()
+                                .datePickerStyle(.compact)
+                                .tint(LColors.accent)
+                            }
+
+                            CalendarControlRow(label: "End") {
+                                DatePicker("", selection: Binding(
+                                    get: { CalendarCompute.merge(day: endDay, time: endTime) },
+                                    set: { newValue in
+                                        endDay = newValue
+                                        endTime = newValue
+                                    }
+                                ), displayedComponents: [.date, .hourAndMinute])
+                                .labelsHidden()
+                                .datePickerStyle(.compact)
+                                .tint(LColors.accent)
+                            }
+                            #endif
+                        }
+                    }
+                }
+
+                GlassCard(padding: 16) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Toggle("Event Reminder", isOn: $reminderEnabled)
+                            .foregroundStyle(LColors.textPrimary)
+                            .tint(LColors.accent)
+
+                        if reminderEnabled {
+                            CalendarControlRow(label: "Remind") {
+                                Stepper(value: $minutesBefore, in: 0...240, step: 5) {
+                                    Text(minutesBefore == 0 ? "At time" : "\(minutesBefore) min before")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(LColors.textPrimary)
+                                }
+                                .labelsHidden()
+                            }
+                        } else {
+                            Text("Turn on to add this event into Reminders.")
+                                .font(.system(size: 13))
                                 .foregroundStyle(LColors.textSecondary)
                         }
-                        .buttonStyle(.plain)
                     }
-                    .padding(.top, 20)
+                }
 
-                    CalendarLabeledGlassField(label: "TITLE") {
-                        TextField("Event title", text: $title)
-                            .textFieldStyle(.plain)
+                GlassCard(padding: 16) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Toggle("Repeat", isOn: $recurrenceEnabled)
                             .foregroundStyle(LColors.textPrimary)
-                    }
+                            .tint(LColors.accent)
 
-                    GlassCard(padding: 16) {
-                        VStack(spacing: 12) {
-                            Toggle("All Day", isOn: $allDay)
-                                .foregroundStyle(LColors.textPrimary)
-                                .tint(LColors.accent)
-
-                            if allDay {
-                                #if os(macOS)
-                                DateStepperRow(label: "Day", dateTime: $startDay)
-                                #else
-                                CalendarControlRow(label: "Day") {
-                                    DatePicker("", selection: $startDay, displayedComponents: .date)
-                                        .labelsHidden()
-                                        .datePickerStyle(.compact)
-                                        .tint(LColors.accent)
+                        if recurrenceEnabled {
+                            CalendarControlRow(label: "Frequency") {
+                                Picker("", selection: $recurrenceFreq) {
+                                    Text("Daily").tag(RecurrenceFrequency.daily)
+                                    Text("Weekly").tag(RecurrenceFrequency.weekly)
+                                    Text("Monthly").tag(RecurrenceFrequency.monthly)
+                                    Text("Yearly").tag(RecurrenceFrequency.yearly)
                                 }
-                                #endif
-                            } else {
-                                #if os(macOS)
-                                DateStepperRow(label: "Start Day", dateTime: $startDay)
-                                TimeEntryRow(label: "Start Time", dateTime: $startTime)
-                                DateStepperRow(label: "End Day", dateTime: $endDay)
-                                TimeEntryRow(label: "End Time", dateTime: $endTime)
-                                #else
-                                CalendarControlRow(label: "Start") {
-                                    DatePicker("", selection: Binding(
-                                        get: { CalendarCompute.merge(day: startDay, time: startTime) },
-                                        set: { newValue in
-                                            startDay = newValue
-                                            startTime = newValue
-                                        }
-                                    ), displayedComponents: [.date, .hourAndMinute])
-                                    .labelsHidden()
-                                    .datePickerStyle(.compact)
-                                    .tint(LColors.accent)
-                                }
-
-                                CalendarControlRow(label: "End") {
-                                    DatePicker("", selection: Binding(
-                                        get: { CalendarCompute.merge(day: endDay, time: endTime) },
-                                        set: { newValue in
-                                            endDay = newValue
-                                            endTime = newValue
-                                        }
-                                    ), displayedComponents: [.date, .hourAndMinute])
-                                    .labelsHidden()
-                                    .datePickerStyle(.compact)
-                                    .tint(LColors.accent)
-                                }
-                                #endif
+                                .labelsHidden()
+                                .pickerStyle(.menu)
                             }
-                        }
-                    }
 
-                    GlassCard(padding: 16) {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Toggle("Event Reminder", isOn: $reminderEnabled)
-                                .foregroundStyle(LColors.textPrimary)
-                                .tint(LColors.accent)
-
-                            if reminderEnabled {
-                                CalendarControlRow(label: "Remind") {
-                                    Stepper(value: $minutesBefore, in: 0...240, step: 5) {
-                                        Text(minutesBefore == 0 ? "At time" : "\(minutesBefore) min before")
-                                            .font(.system(size: 14, weight: .semibold))
-                                            .foregroundStyle(LColors.textPrimary)
-                                    }
-                                    .labelsHidden()
-                                }
-                            } else {
-                                Text("Turn on to add this event into Reminders.")
-                                    .font(.system(size: 13))
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("INTERVAL")
+                                    .font(.system(size: 13, weight: .semibold))
                                     .foregroundStyle(LColors.textSecondary)
-                            }
-                        }
-                    }
+                                    .tracking(0.5)
 
-                    GlassCard(padding: 16) {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Toggle("Repeat", isOn: $recurrenceEnabled)
-                                .foregroundStyle(LColors.textPrimary)
-                                .tint(LColors.accent)
-
-                            if recurrenceEnabled {
-                                CalendarControlRow(label: "Frequency") {
-                                    Picker("", selection: $recurrenceFreq) {
-                                        Text("Daily").tag(RecurrenceFrequency.daily)
-                                        Text("Weekly").tag(RecurrenceFrequency.weekly)
-                                        Text("Monthly").tag(RecurrenceFrequency.monthly)
-                                        Text("Yearly").tag(RecurrenceFrequency.yearly)
-                                    }
-                                    .labelsHidden()
-                                    .pickerStyle(.menu)
-                                }
-
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("INTERVAL")
-                                        .font(.system(size: 13, weight: .semibold))
-                                        .foregroundStyle(LColors.textSecondary)
-                                        .tracking(0.5)
-
-                                    HStack(spacing: 10) {
-                                        Button {
-                                            recurrenceInterval = max(1, recurrenceInterval - 1)
-                                        } label: {
-                                            Image(systemName: "minus")
-                                                .font(.system(size: 13, weight: .bold))
-                                                .foregroundStyle(.white)
-                                                .frame(width: 34, height: 34)
-                                                .background(Color.white.opacity(0.08))
-                                                .clipShape(RoundedRectangle(cornerRadius: 10))
-                                                .overlay(
-                                                    RoundedRectangle(cornerRadius: 10)
-                                                        .stroke(LColors.glassBorder, lineWidth: 1)
-                                                )
-                                        }
-                                        .buttonStyle(.plain)
-
-                                        Text("Every \(recurrenceInterval) \(recurrenceInterval == 1 ? unitLabel(for: recurrenceFreq) : unitLabel(for: recurrenceFreq) + "s")")
-                                            .font(.system(size: 14, weight: .semibold))
-                                            .foregroundStyle(LColors.textPrimary)
-                                            .frame(maxWidth: .infinity, alignment: .center)
-                                            .padding(.horizontal, 12)
-                                            .padding(.vertical, 10)
+                                HStack(spacing: 10) {
+                                    Button {
+                                        recurrenceInterval = max(1, recurrenceInterval - 1)
+                                    } label: {
+                                        Image(systemName: "minus")
+                                            .font(.system(size: 13, weight: .bold))
+                                            .foregroundStyle(.white)
+                                            .frame(width: 34, height: 34)
                                             .background(Color.white.opacity(0.08))
-                                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                                            .clipShape(RoundedRectangle(cornerRadius: 10))
                                             .overlay(
-                                                RoundedRectangle(cornerRadius: 12)
+                                                RoundedRectangle(cornerRadius: 10)
                                                     .stroke(LColors.glassBorder, lineWidth: 1)
                                             )
-
-                                        Button {
-                                            recurrenceInterval = min(365, recurrenceInterval + 1)
-                                        } label: {
-                                            Image(systemName: "plus")
-                                                .font(.system(size: 13, weight: .bold))
-                                                .foregroundStyle(.white)
-                                                .frame(width: 34, height: 34)
-                                                .background(Color.white.opacity(0.08))
-                                                .clipShape(RoundedRectangle(cornerRadius: 10))
-                                                .overlay(
-                                                    RoundedRectangle(cornerRadius: 10)
-                                                        .stroke(LColors.glassBorder, lineWidth: 1)
-                                                )
-                                        }
-                                        .buttonStyle(.plain)
                                     }
-                                }
+                                    .buttonStyle(.plain)
 
-                                if recurrenceFreq == .weekly {
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        Text("DAYS")
-                                            .font(.system(size: 13, weight: .semibold))
-                                            .foregroundStyle(LColors.textSecondary)
-                                            .tracking(0.5)
+                                    Text("Every \(recurrenceInterval) \(recurrenceInterval == 1 ? unitLabel(for: recurrenceFreq) : unitLabel(for: recurrenceFreq) + "s")")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(LColors.textPrimary)
+                                        .frame(maxWidth: .infinity, alignment: .center)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 10)
+                                        .background(Color.white.opacity(0.08))
+                                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .stroke(LColors.glassBorder, lineWidth: 1)
+                                        )
 
-                                        WeekdayPicker(selected: $recurrenceWeekdays)
+                                    Button {
+                                        recurrenceInterval = min(365, recurrenceInterval + 1)
+                                    } label: {
+                                        Image(systemName: "plus")
+                                            .font(.system(size: 13, weight: .bold))
+                                            .foregroundStyle(.white)
+                                            .frame(width: 34, height: 34)
+                                            .background(Color.white.opacity(0.08))
+                                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 10)
+                                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                            )
                                     }
+                                    .buttonStyle(.plain)
                                 }
+                            }
 
-                                if recurrenceFreq == .monthly {
-                                    VStack(alignment: .leading, spacing: 12) {
-                                        Text("MONTHLY PATTERN")
-                                            .font(.system(size: 13, weight: .semibold))
-                                            .foregroundStyle(LColors.textSecondary)
-                                            .tracking(0.5)
-
-                                        CalendarControlRow(label: "Mode") {
-                                            Picker("", selection: $monthlyRecurrenceMode) {
-                                                Text("Same day each month").tag(MonthlyRecurrenceMode.sameDay)
-                                                Text("Specific day(s) of month").tag(MonthlyRecurrenceMode.specificMonthDays)
-                                                Text("Nth weekday of month").tag(MonthlyRecurrenceMode.nthWeekday)
-                                            }
-                                            .labelsHidden()
-                                            .pickerStyle(.menu)
-                                        }
-
-                                        if monthlyRecurrenceMode == .specificMonthDays {
-                                            CalendarLabeledGlassField(label: "MONTH DAYS") {
-                                                TextField("Example: 1, 15, 28", text: $monthlySpecificDaysText)
-                                                    .textFieldStyle(.plain)
-                                                    .foregroundStyle(LColors.textPrimary)
-                                            }
-                                        }
-
-                                        if monthlyRecurrenceMode == .nthWeekday {
-                                            CalendarControlRow(label: "Ordinal") {
-                                                Picker("", selection: $monthlyOrdinal) {
-                                                    ForEach(RecurrenceOrdinal.allCases) { ordinal in
-                                                        Text(ordinal.label).tag(ordinal)
-                                                    }
-                                                }
-                                                .labelsHidden()
-                                                .pickerStyle(.menu)
-                                            }
-
-                                            CalendarControlRow(label: "Weekday") {
-                                                Picker("", selection: $monthlyNthWeekday) {
-                                                    ForEach(weekdayOptions, id: \.0) { value, label in
-                                                        Text(label).tag(value)
-                                                    }
-                                                }
-                                                .labelsHidden()
-                                                .pickerStyle(.menu)
-                                            }
-                                        }
-                                    }
-                                }
-
-                                if recurrenceFreq == .yearly {
-                                    VStack(alignment: .leading, spacing: 12) {
-                                        Text("YEARLY PATTERN")
-                                            .font(.system(size: 13, weight: .semibold))
-                                            .foregroundStyle(LColors.textSecondary)
-                                            .tracking(0.5)
-
-                                        CalendarControlRow(label: "Mode") {
-                                            Picker("", selection: $yearlyRecurrenceMode) {
-                                                Text("Same date each year").tag(YearlyRecurrenceMode.sameDate)
-                                                Text("Specific month and day").tag(YearlyRecurrenceMode.specificMonthDay)
-                                                Text("Nth weekday of month").tag(YearlyRecurrenceMode.nthWeekdayOfMonth)
-                                            }
-                                            .labelsHidden()
-                                            .pickerStyle(.menu)
-                                        }
-
-                                        if yearlyRecurrenceMode == .specificMonthDay {
-                                            CalendarControlRow(label: "Month") {
-                                                Picker("", selection: $yearlyMonth) {
-                                                    ForEach(monthOptions, id: \.0) { value, label in
-                                                        Text(label).tag(value)
-                                                    }
-                                                }
-                                                .labelsHidden()
-                                                .pickerStyle(.menu)
-                                            }
-
-                                            CalendarControlRow(label: "Day") {
-                                                Stepper(value: $yearlyDay, in: 1...31, step: 1) {
-                                                    Text("Day \(yearlyDay)")
-                                                        .font(.system(size: 14, weight: .semibold))
-                                                        .foregroundStyle(LColors.textPrimary)
-                                                }
-                                                .labelsHidden()
-                                            }
-                                        }
-
-                                        if yearlyRecurrenceMode == .nthWeekdayOfMonth {
-                                            CalendarControlRow(label: "Ordinal") {
-                                                Picker("", selection: $yearlyOrdinal) {
-                                                    ForEach(RecurrenceOrdinal.allCases) { ordinal in
-                                                        Text(ordinal.label).tag(ordinal)
-                                                    }
-                                                }
-                                                .labelsHidden()
-                                                .pickerStyle(.menu)
-                                            }
-
-                                            CalendarControlRow(label: "Weekday") {
-                                                Picker("", selection: $yearlyNthWeekday) {
-                                                    ForEach(weekdayOptions, id: \.0) { value, label in
-                                                        Text(label).tag(value)
-                                                    }
-                                                }
-                                                .labelsHidden()
-                                                .pickerStyle(.menu)
-                                            }
-
-                                            CalendarControlRow(label: "Month") {
-                                                Picker("", selection: $yearlyNthMonth) {
-                                                    ForEach(monthOptions, id: \.0) { value, label in
-                                                        Text(label).tag(value)
-                                                    }
-                                                }
-                                                .labelsHidden()
-                                                .pickerStyle(.menu)
-                                            }
-                                        }
-                                    }
-                                }
-
-                                VStack(alignment: .leading, spacing: 12) {
-                                    Text("END")
+                            if recurrenceFreq == .weekly {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("DAYS")
                                         .font(.system(size: 13, weight: .semibold))
                                         .foregroundStyle(LColors.textSecondary)
                                         .tracking(0.5)
 
-                                    CalendarControlRow(label: "Ends") {
-                                        Picker("", selection: $recurrenceEndMode) {
-                                            Text("Never").tag(RecurrenceEndMode.never)
-                                            Text("After").tag(RecurrenceEndMode.afterCount)
-                                            Text("On date").tag(RecurrenceEndMode.onDate)
+                                    WeekdayPicker(selected: $recurrenceWeekdays)
+                                }
+                            }
+
+                            if recurrenceFreq == .monthly {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text("MONTHLY PATTERN")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(LColors.textSecondary)
+                                        .tracking(0.5)
+
+                                    CalendarControlRow(label: "Mode") {
+                                        Picker("", selection: $monthlyRecurrenceMode) {
+                                            Text("Same day each month").tag(MonthlyRecurrenceMode.sameDay)
+                                            Text("Specific day(s) of month").tag(MonthlyRecurrenceMode.specificMonthDays)
+                                            Text("Nth weekday of month").tag(MonthlyRecurrenceMode.nthWeekday)
                                         }
                                         .labelsHidden()
                                         .pickerStyle(.menu)
                                     }
 
-                                    if recurrenceEndMode == .afterCount {
-                                        CalendarControlRow(label: "Count") {
-                                            Stepper(value: $recurrenceCount, in: 1...999, step: 1) {
-                                                Text("\(recurrenceCount) times")
+                                    if monthlyRecurrenceMode == .specificMonthDays {
+                                        CalendarLabeledGlassField(label: "MONTH DAYS") {
+                                            TextField("Example: 1, 15, 28", text: $monthlySpecificDaysText)
+                                                .textFieldStyle(.plain)
+                                                .foregroundStyle(LColors.textPrimary)
+                                        }
+                                    }
+
+                                    if monthlyRecurrenceMode == .nthWeekday {
+                                        CalendarControlRow(label: "Ordinal") {
+                                            Picker("", selection: $monthlyOrdinal) {
+                                                ForEach(RecurrenceOrdinal.allCases) { ordinal in
+                                                    Text(ordinal.label).tag(ordinal)
+                                                }
+                                            }
+                                            .labelsHidden()
+                                            .pickerStyle(.menu)
+                                        }
+
+                                        CalendarControlRow(label: "Weekday") {
+                                            Picker("", selection: $monthlyNthWeekday) {
+                                                ForEach(weekdayOptions, id: \.0) { value, label in
+                                                    Text(label).tag(value)
+                                                }
+                                            }
+                                            .labelsHidden()
+                                            .pickerStyle(.menu)
+                                        }
+                                    }
+                                }
+                            }
+
+                            if recurrenceFreq == .yearly {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text("YEARLY PATTERN")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(LColors.textSecondary)
+                                        .tracking(0.5)
+
+                                    CalendarControlRow(label: "Mode") {
+                                        Picker("", selection: $yearlyRecurrenceMode) {
+                                            Text("Same date each year").tag(YearlyRecurrenceMode.sameDate)
+                                            Text("Specific month and day").tag(YearlyRecurrenceMode.specificMonthDay)
+                                            Text("Nth weekday of month").tag(YearlyRecurrenceMode.nthWeekdayOfMonth)
+                                        }
+                                        .labelsHidden()
+                                        .pickerStyle(.menu)
+                                    }
+
+                                    if yearlyRecurrenceMode == .specificMonthDay {
+                                        CalendarControlRow(label: "Month") {
+                                            Picker("", selection: $yearlyMonth) {
+                                                ForEach(monthOptions, id: \.0) { value, label in
+                                                    Text(label).tag(value)
+                                                }
+                                            }
+                                            .labelsHidden()
+                                            .pickerStyle(.menu)
+                                        }
+
+                                        CalendarControlRow(label: "Day") {
+                                            Stepper(value: $yearlyDay, in: 1...31, step: 1) {
+                                                Text("Day \(yearlyDay)")
                                                     .font(.system(size: 14, weight: .semibold))
                                                     .foregroundStyle(LColors.textPrimary)
                                             }
@@ -1145,68 +1121,170 @@ struct EventSheet: View {
                                         }
                                     }
 
-                                    if recurrenceEndMode == .onDate {
-                                        CalendarControlRow(label: "Until") {
-                                            DatePicker("", selection: $recurrenceUntilDay, displayedComponents: .date)
-                                                .labelsHidden()
-                                                .datePickerStyle(.compact)
-                                                .tint(LColors.accent)
+                                    if yearlyRecurrenceMode == .nthWeekdayOfMonth {
+                                        CalendarControlRow(label: "Ordinal") {
+                                            Picker("", selection: $yearlyOrdinal) {
+                                                ForEach(RecurrenceOrdinal.allCases) { ordinal in
+                                                    Text(ordinal.label).tag(ordinal)
+                                                }
+                                            }
+                                            .labelsHidden()
+                                            .pickerStyle(.menu)
+                                        }
+
+                                        CalendarControlRow(label: "Weekday") {
+                                            Picker("", selection: $yearlyNthWeekday) {
+                                                ForEach(weekdayOptions, id: \.0) { value, label in
+                                                    Text(label).tag(value)
+                                                }
+                                            }
+                                            .labelsHidden()
+                                            .pickerStyle(.menu)
+                                        }
+
+                                        CalendarControlRow(label: "Month") {
+                                            Picker("", selection: $yearlyNthMonth) {
+                                                ForEach(monthOptions, id: \.0) { value, label in
+                                                    Text(label).tag(value)
+                                                }
+                                            }
+                                            .labelsHidden()
+                                            .pickerStyle(.menu)
                                         }
                                     }
                                 }
-
-                            } else {
-                                Text("Turn on to make this a recurring event.")
-                                    .font(.system(size: 13))
-                                    .foregroundStyle(LColors.textSecondary)
                             }
+
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("END")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(LColors.textSecondary)
+                                    .tracking(0.5)
+
+                                CalendarControlRow(label: "Ends") {
+                                    Picker("", selection: $recurrenceEndMode) {
+                                        Text("Never").tag(RecurrenceEndMode.never)
+                                        Text("After").tag(RecurrenceEndMode.afterCount)
+                                        Text("On date").tag(RecurrenceEndMode.onDate)
+                                    }
+                                    .labelsHidden()
+                                    .pickerStyle(.menu)
+                                }
+
+                                if recurrenceEndMode == .afterCount {
+                                    CalendarControlRow(label: "Count") {
+                                        Stepper(value: $recurrenceCount, in: 1...999, step: 1) {
+                                            Text("\(recurrenceCount) times")
+                                                .font(.system(size: 14, weight: .semibold))
+                                                .foregroundStyle(LColors.textPrimary)
+                                        }
+                                        .labelsHidden()
+                                    }
+                                }
+
+                                if recurrenceEndMode == .onDate {
+                                    CalendarControlRow(label: "Until") {
+                                        DatePicker("", selection: $recurrenceUntilDay, displayedComponents: .date)
+                                            .labelsHidden()
+                                            .datePickerStyle(.compact)
+                                            .tint(LColors.accent)
+                                    }
+                                }
+                            }
+
+                        } else {
+                            Text("Turn on to make this a recurring event.")
+                                .font(.system(size: 13))
+                                .foregroundStyle(LColors.textSecondary)
                         }
                     }
+                }
 
-                    CalendarLabeledGlassField(label: "LOCATION") {
+                CalendarLabeledGlassField(label: "LOCATION") {
+                    VStack(alignment: .leading, spacing: 10) {
                         TextField("Add location (optional)", text: $location)
                             .textFieldStyle(.plain)
                             .foregroundStyle(LColors.textPrimary)
-                    }
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("DESCRIPTION")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(LColors.textSecondary)
-                            .tracking(0.5)
-
-                        GlassTextEditor(
-                            placeholder: "Event details (optional)",
-                            text: $eventDescription,
-                            minHeight: 80
-                        )
-                    }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("COLOR")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(LColors.textSecondary)
-                            .tracking(0.5)
-
-                        ColorPicker("", selection: $eventColorUI, supportsOpacity: false)
-                            .labelsHidden()
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .onChange(of: eventColorUI) { _, newColor in
-                                eventColor = newColor.toHexString()
+                        HStack(spacing: 10) {
+                            Button {
+                                showLocationSearchSheet = true
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "magnifyingglass")
+                                        .font(.system(size: 12, weight: .semibold))
+                                    Text("Search Place")
+                                        .font(.system(size: 13, weight: .semibold))
+                                }
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
+                                .background(LGradients.blue)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
                             }
-                    }
+                            .buttonStyle(.plain)
 
-                    Spacer(minLength: 24)
+                            Button {
+                                NotificationCenter.default.post(name: NSNotification.Name("LystariaUseCurrentLocation"), object: nil)
+                                showLocationSearchSheet = true
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "location.fill")
+                                        .font(.system(size: 12, weight: .semibold))
+                                    Text("Current Location")
+                                        .font(.system(size: 13, weight: .semibold))
+                                }
+                                .foregroundStyle(LColors.textPrimary)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
+                                .background(Color.white.opacity(0.08))
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
                 }
-                .padding(.horizontal, LSpacing.pageHorizontal)
-                .padding(.bottom, 120)
-                .frame(maxWidth: 560)
-                .frame(maxWidth: .infinity)
-            }
-        }
-        .onAppear { loadInitialState() }
-        .safeAreaInset(edge: .bottom) {
-            GlassCard(padding: 14) {
+
+                CalendarLabeledGlassField(label: "LINK") {
+                    TextField("Add link (optional)", text: $meetingUrl)
+                        .textFieldStyle(.plain)
+                        .foregroundStyle(LColors.textPrimary)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("DESCRIPTION")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+
+                    GlassTextEditor(
+                        placeholder: "Event details (optional)",
+                        text: $eventDescription,
+                        minHeight: 80
+                    )
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("COLOR")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+
+                    ColorPicker("", selection: $eventColorUI, supportsOpacity: false)
+                        .labelsHidden()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .onChange(of: eventColorUI) { _, newColor in
+                            eventColor = newColor.toHexString()
+                        }
+                }
+            },
+            footer: {
                 Button { save() } label: {
                     Text(editingEvent != nil ? "Save Changes" : "Save Event")
                         .font(.headline)
@@ -1219,8 +1297,12 @@ struct EventSheet: View {
                 .buttonStyle(.plain)
                 .disabled(titleTrimmed.isEmpty)
             }
-            .padding(.horizontal, LSpacing.pageHorizontal)
-            .padding(.bottom, 10)
+        )
+        .onAppear { loadInitialState() }
+        .sheet(isPresented: $showLocationSearchSheet) {
+            LocationSearchSheet { displayName, _, _ in
+                location = displayName
+            }
         }
     }
 
@@ -1229,6 +1311,7 @@ struct EventSheet: View {
             title = e.title
             allDay = e.allDay
             location = e.location ?? ""
+            meetingUrl = e.meetingUrl ?? ""
             eventDescription = e.eventDescription ?? ""
             eventColor = e.color ?? "#5b8def"
             eventColorUI = Color(ly_hex: eventColor)
@@ -1247,8 +1330,6 @@ struct EventSheet: View {
 
             if let rid = e.reminderServerId, let r = findReminder(serverId: rid) {
                 reminderEnabled = true
-                // Compute minutes-before from the persisted reminder fire time.
-                // (Positive means reminder fires before the event start.)
                 let diffMinutes = Int((e.startDate.timeIntervalSince(r.nextRunAt) / 60.0).rounded())
                 minutesBefore = max(0, min(240, diffMinutes))
             } else {
@@ -1368,6 +1449,7 @@ struct EventSheet: View {
             title = ""
             allDay = false
             location = ""
+            meetingUrl = ""
             eventDescription = ""
             eventColor = "#5b8def"
             eventColorUI = Color(ly_hex: eventColor)
@@ -1403,7 +1485,6 @@ struct EventSheet: View {
     }
 
     private func findReminder(serverId: String) -> LystariaReminder? {
-        // FIX 10: Use predicate here too, consistent with deleteReminder fix.
         let targetId = serverId
         let descriptor = FetchDescriptor<LystariaReminder>(
             predicate: #Predicate { $0.serverId == targetId }
@@ -1412,14 +1493,9 @@ struct EventSheet: View {
     }
 
     private func save() {
-        // ── STEP 1: Capture ALL values from @State into plain Swift locals.
-        // We do this BEFORE touching any SwiftData model object.
-        // The SIGABRT was caused by reading SwiftData @PersistedProperty getters
-        // (like .recurrence, .title, .allDay etc.) after or during a mutation —
-        // the observation registrar faults mid-mutation. Solution: never read the
-        // model back. Build everything from @State, write-only to the model.
         let cleanTitle      = titleTrimmed
         let cleanLocation   = location.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanMeetingUrl = meetingUrl.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanDesc       = eventDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         let isAllDay        = allDay
         let chosenColor     = eventColorUI.toHexString()
@@ -1456,7 +1532,6 @@ struct EventSheet: View {
             components.append("INTERVAL=\(max(1, recurrenceInterval))")
 
             if recurrenceFreq == .weekly {
-                // Require at least one day; default to the start day weekday.
                 var days = Array(recurrenceWeekdays)
                 if days.isEmpty {
                     let wd = tzCalendar.component(.weekday, from: start)
@@ -1506,7 +1581,6 @@ struct EventSheet: View {
             case .afterCount:
                 components.append("COUNT=\(max(1, recurrenceCount))")
             case .onDate:
-                // Use date-only UNTIL (YYYYMMDD) for portability.
                 let day = tzCalendar.startOfDay(for: recurrenceUntilDay)
                 let c = tzCalendar.dateComponents([.year, .month, .day], from: day)
                 let y = c.year ?? 1970
@@ -1545,11 +1619,8 @@ struct EventSheet: View {
             return tzCalendar.date(byAdding: .minute, value: -minsBefore, to: start) ?? start
         }()
 
-        // ── STEP 2: Read the ONE thing we need from the existing model object
-        // before we mutate anything — the existing reminder server ID.
         let existingReminderId: String? = editingEvent?.reminderServerId
 
-        // ── STEP 3: Write-only to the model. Zero reads after this point.
         let targetEvent: CalendarEvent
         if let e = editingEvent {
             e.title                = cleanTitle
@@ -1557,6 +1628,7 @@ struct EventSheet: View {
             e.startDate            = start
             e.endDate              = end
             e.location             = cleanLocation.isEmpty ? nil : cleanLocation
+            e.meetingUrl           = cleanMeetingUrl.isEmpty ? nil : cleanMeetingUrl
             e.eventDescription     = cleanDesc.isEmpty ? nil : cleanDesc
             e.color                = chosenColor
             e.updatedAt            = Date()
@@ -1572,7 +1644,7 @@ struct EventSheet: View {
                 allDay: isAllDay,
                 eventDescription: cleanDesc.isEmpty ? nil : cleanDesc,
                 color: chosenColor,
-                meetingUrl: nil,
+                meetingUrl: cleanMeetingUrl.isEmpty ? nil : cleanMeetingUrl,
                 location: cleanLocation.isEmpty ? nil : cleanLocation,
                 serverId: nil
             )
@@ -1582,9 +1654,6 @@ struct EventSheet: View {
             targetEvent = e
         }
 
-        // ── STEP 4: Schedule notifications using only plain-Swift values.
-        // applyReminderLink receives everything it needs as value types —
-        // it only WRITES to targetEvent (reminderServerId), never reads it.
         applyReminderLink(
             event: targetEvent,
             existingReminderId: existingReminderId,
@@ -1599,14 +1668,13 @@ struct EventSheet: View {
             resolvedExceptions: []
         )
 
-        // ── STEP 5: Persist
         do {
             try modelContext.save()
         } catch {
             print("❌ Failed to save event: \(error)")
         }
 
-        dismiss()
+        closeAction()
     }
 
     private func isoDayString(_ date: Date) -> String {
@@ -1627,9 +1695,6 @@ struct EventSheet: View {
         }
     }
 
-    // All string/date/rule params come from @State (plain Swift values).
-    // The only thing we write to `event` is reminderServerId — never read.
-    // existingReminderId is captured from the model BEFORE any mutations in save().
     private func applyReminderLink(
         event: CalendarEvent,
         existingReminderId: String?,
@@ -1643,8 +1708,6 @@ struct EventSheet: View {
         resolvedRRule: String?,
         resolvedExceptions: [String]
     ) {
-        // Build a ReminderSchedule that matches the event recurrence so RemindersView
-        // can show the correct badge and "Done" can advance to the next occurrence.
         func hhmm(_ date: Date) -> String {
             let df = DateFormatter()
             df.locale = .current
@@ -1668,7 +1731,6 @@ struct EventSheet: View {
         ) -> ReminderSchedule {
             let time = hhmm(runAt)
 
-            // Prefer RRULE parsing (more complete: BYDAY, INTERVAL, COUNT/UNTIL)
             if let rr = resolvedRRule, let parsed = ParsedRRule.parse(rr) {
                 let interval = max(1, parsed.interval)
                 switch parsed.freq {
@@ -1685,7 +1747,6 @@ struct EventSheet: View {
                 }
             }
 
-            // Fallback: map from the simplified RecurrenceRule used for notification scheduling
             if let rule = resolvedRule {
                 let interval = max(1, rule.interval)
                 switch rule.freq {
@@ -1702,12 +1763,10 @@ struct EventSheet: View {
                 }
             }
 
-            // One-time
             return .once
         }
 
         guard let runAt = resolvedRunAt else {
-            // Reminder is disabled — cancel & delete if one existed
             if let rid = existingReminderId {
                 NotificationManager.shared.cancelAllCalendarNotifications(id: rid)
                 if let r = findReminder(serverId: rid) {
@@ -1720,20 +1779,17 @@ struct EventSheet: View {
             return
         }
 
-        // Determine or create the reminder server ID
         let rid: String = existingReminderId ?? {
             let new = UUID().uuidString
-            event.reminderServerId = new  // only write, never read back
+            event.reminderServerId = new
             return new
         }()
         if existingReminderId == nil {
             event.reminderServerId = rid
         }
 
-        // Always cancel before re-scheduling so updates take effect.
         NotificationManager.shared.cancelAllCalendarNotifications(id: rid)
 
-        // Build body text purely from passed-in plain values
         let bodyText: String = {
             var parts: [String] = []
             if let loc = location, !loc.isEmpty { parts.append(loc) }
@@ -1745,7 +1801,6 @@ struct EventSheet: View {
             return extra.isEmpty ? title : extra
         }()
 
-        // Upsert the LystariaReminder model
         let computedSchedule = reminderScheduleForEvent(
             runAt: runAt,
             startDate: startDate,
@@ -1787,7 +1842,6 @@ struct EventSheet: View {
                 id: rid,
                 title: title,
                 body: bodyText,
-                // Use the reminder fire time as the recurrence base so "X min before" actually fires at that time.
                 startDate: runAt,
                 allDay: false,
                 recurrence: rule,
@@ -2311,6 +2365,3 @@ struct ExceptionPills: View {
         }
     }
 }
-
-
-

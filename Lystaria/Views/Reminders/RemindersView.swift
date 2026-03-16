@@ -270,23 +270,32 @@ struct RemindersView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showNewReminder) {
-                NewReminderSheet().preferredColorScheme(.dark)
+            .overlay {
+                if showNewReminder {
+                    NewReminderSheet(onClose: {
+                        showNewReminder = false
+                    })
+                    .preferredColorScheme(.dark)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .zIndex(50)
+                }
             }
             .navigationDestination(isPresented: $showKanban) {
                 KanbanView()
                     .preferredColorScheme(.dark)
             }
             // Use a boolean-driven sheet so we DO NOT depend on Identifiable behavior.
-            .sheet(
-                isPresented: Binding(
-                    get: { editingReminder != nil },
-                    set: { if !$0 { editingReminder = nil } }
-                )
-            ) {
+            .overlay {
                 if let r = editingReminder {
-                    EditReminderSheet(reminder: r)
-                        .preferredColorScheme(.dark)
+                    EditReminderSheet(
+                        onClose: {
+                            editingReminder = nil
+                        },
+                        reminder: r
+                    )
+                    .preferredColorScheme(.dark)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .zIndex(60)
                 }
             }
             // Handle "Done ✓" tapped on the system notification banner
@@ -493,7 +502,7 @@ struct ReminderCard: View {
         case .once: return LColors.badgeOnce
         case .daily: return LColors.badgeDaily
         case .weekly: return LColors.badgeWeekly
-        case .monthly: return LColors.badgeMonthly
+        case .monthly: return .yellow
         case .yearly: return LColors.gradientPurple
         case .interval: return LColors.badgeInterval
         }
@@ -666,15 +675,13 @@ struct ReminderCard: View {
 
 struct NewReminderSheet: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismiss
+    let onClose: () -> Void
 
     @State private var title = ""
     @State private var details = ""
 
-    // once
     @State private var onceDateTime = Date()
 
-    // recurring
     @State private var scheduleKind: ReminderScheduleKind = .once
     @State private var startDay = Date()
     @State private var timesOfDay: [Date] = [Date()]
@@ -685,276 +692,247 @@ struct NewReminderSheet: View {
     private var titleTrimmed: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     var body: some View {
-        ZStack {
-            LystariaBackground()
-
-            ScrollView {
-                VStack(spacing: 20) {
-
-                    header(title: "New Reminder", primaryTitle: "Save") { save() }
-
-                    // Text
-                    LabeledGlassField(label: "TEXT") {
-                        TextField("Reminder title", text: $title)
-                            .textFieldStyle(.plain)
-                            .foregroundStyle(LColors.textPrimary)
-#if os(iOS) || os(visionOS)
-                            .textInputAutocapitalization(.sentences)
-                            .disableAutocorrection(false)
-#else
-                            // macOS: these modifiers are unavailable; rely on default behavior
-#endif
-                    }
-
-                    LabeledGlassField(label: "DETAILS") {
-                        TextEditor(text: $details)
-                            .frame(minHeight: 120)
-                            .scrollContentBackground(.hidden)
-                            .foregroundStyle(LColors.textPrimary)
-#if os(iOS) || os(visionOS)
-                            .textInputAutocapitalization(.sentences)
-                            .disableAutocorrection(false)
-#else
-                            // macOS: unavailable
-#endif
-                    }
-
-                    // Repeat kind
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("REPEAT")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(LColors.textSecondary)
-                            .tracking(0.5)
-
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(ReminderScheduleKind.allCases, id: \.self) { kind in
-                                    let on = scheduleKind == kind
-                                    Button { scheduleKind = kind } label: {
-                                        Text(kind.label)
-                                            .font(.system(size: 13, weight: .semibold))
-                                            .foregroundStyle(on ? .white : LColors.textPrimary)
-                                            .padding(.horizontal, 14).padding(.vertical, 8)
-                                            .background(on ? LColors.accent : Color.white.opacity(0.08))
-                                            .clipShape(Capsule())
-                                            .overlay(Capsule().stroke(on ? LColors.accent : LColors.glassBorder, lineWidth: 1))
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                        }
-                    }
-
-                    // Schedule
-                    GlassCard(padding: 16) {
-                        VStack(spacing: 12) {
-
-                            if scheduleKind == .once {
-                                #if os(macOS)
-                                LDateStepperRow(label: "Date", dateTime: $onceDateTime)
-                                LTimeEntryRow(label: "Time", dateTime: $onceDateTime)
-                                #else
-                                LystariaControlRow(label: "Date & Time") {
-                                    DatePicker("", selection: $onceDateTime, in: Date()..., displayedComponents: [.date, .hourAndMinute])
-                                        .labelsHidden()
-                                        .datePickerStyle(.compact)
-                                        .tint(LColors.accent)
-                                }
-                                #endif
-                            } else {
-                                // Always include day for recurring
-                                #if os(macOS)
-                                LDateStepperRow(label: "Start Day", dateTime: $startDay)
-                                VStack(alignment: .leading, spacing: 10) {
-                                    ForEach(Array(timesOfDay.indices), id: \.self) { idx in
-                                        LTimeEntryRow(label: idx == 0 ? "Time" : "Time \(idx + 1)", dateTime: Binding(
-                                            get: { timesOfDay[idx] },
-                                            set: { timesOfDay[idx] = $0 }
-                                        ))
-                                    }
-
-                                    HStack(spacing: 10) {
-                                        Button {
-                                            timesOfDay.append(timesOfDay.last ?? Date())
-                                        } label: {
-                                            Text("Add Time")
-                                                .font(.system(size: 13, weight: .semibold))
-                                                .foregroundStyle(.white)
-                                                .padding(.horizontal, 12)
-                                                .padding(.vertical, 8)
-                                                .background(LColors.accent)
-                                                .clipShape(Capsule())
-                                        }
-                                        .buttonStyle(.plain)
-
-                                        Button {
-                                            if timesOfDay.count > 1 {
-                                                timesOfDay.removeLast()
-                                            }
-                                        } label: {
-                                            Text("Remove")
-                                                .font(.system(size: 13, weight: .semibold))
-                                                .foregroundStyle(.white)
-                                                .padding(.horizontal, 12)
-                                                .padding(.vertical, 8)
-                                                .background(Color.white.opacity(0.10))
-                                                .clipShape(Capsule())
-                                                .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
-                                        }
-                                        .buttonStyle(.plain)
-                                        .disabled(timesOfDay.count <= 1)
-
-                                        Spacer()
-                                    }
-                                    .padding(.top, 2)
-                                }
-                                #else
-                                LystariaControlRow(label: "Start Day") {
-                                    DatePicker("", selection: $startDay, in: Date()..., displayedComponents: [.date])
-                                        .labelsHidden()
-                                        .datePickerStyle(.compact)
-                                        .tint(LColors.accent)
-                                }
-                                VStack(alignment: .leading, spacing: 10) {
-                                    ForEach(Array(timesOfDay.indices), id: \.self) { idx in
-                                        LystariaControlRow(label: idx == 0 ? "Time" : "Time \(idx + 1)") {
-                                            DatePicker(
-                                                "",
-                                                selection: Binding(
-                                                    get: { timesOfDay[idx] },
-                                                    set: { timesOfDay[idx] = $0 }
-                                                ),
-                                                displayedComponents: .hourAndMinute
-                                            )
-                                            .labelsHidden()
-                                            .datePickerStyle(.compact)
-                                            .tint(LColors.accent)
-                                        }
-                                    }
-
-                                    HStack(spacing: 10) {
-                                        Button {
-                                            timesOfDay.append(timesOfDay.last ?? Date())
-                                        } label: {
-                                            Text("Add Time")
-                                                .font(.system(size: 13, weight: .semibold))
-                                                .foregroundStyle(.white)
-                                                .padding(.horizontal, 12)
-                                                .padding(.vertical, 8)
-                                                .background(LColors.accent)
-                                                .clipShape(Capsule())
-                                        }
-                                        .buttonStyle(.plain)
-
-                                        Button {
-                                            if timesOfDay.count > 1 {
-                                                timesOfDay.removeLast()
-                                            }
-                                        } label: {
-                                            Text("Remove")
-                                                .font(.system(size: 13, weight: .semibold))
-                                                .foregroundStyle(.white)
-                                                .padding(.horizontal, 12)
-                                                .padding(.vertical, 8)
-                                                .background(Color.white.opacity(0.10))
-                                                .clipShape(Capsule())
-                                                .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
-                                        }
-                                        .buttonStyle(.plain)
-                                        .disabled(timesOfDay.count <= 1)
-
-                                        Spacer()
-                                    }
-                                    .padding(.top, 2)
-                                }
-                                #endif
-
-                                if scheduleKind == .weekly {
-                                    HStack(spacing: 6) {
-                                        ForEach(0..<7, id: \.self) { d in
-                                            let on = selectedDays.contains(d)
-                                            Button {
-                                                if on { selectedDays.remove(d) } else { selectedDays.insert(d) }
-                                            } label: {
-                                                Text(weekdays[d])
-                                                    .font(.system(size: 12, weight: .semibold))
-                                                    .frame(width: 36, height: 36)
-                                                    .background(on ? LColors.accent : Color.white.opacity(0.08))
-                                                    .foregroundStyle(on ? .white : LColors.textPrimary)
-                                                    .clipShape(Circle())
-                                                    .overlay(Circle().stroke(on ? .clear : LColors.glassBorder, lineWidth: 1))
-                                            }
-                                            .buttonStyle(.plain)
-                                        }
-                                    }
-                                    .padding(.top, 4)
-                                }
-
-                                if scheduleKind == .interval {
-                                    LystariaControlRow(label: "Interval") {
-                                        Stepper(value: $intervalMinutes, in: 5...1440, step: 5) {
-                                            Text("\(intervalMinutes) min")
-                                                .font(.system(size: 14, weight: .semibold))
-                                                .foregroundStyle(LColors.textPrimary)
-                                        }
-                                        .labelsHidden()
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(minLength: 24)
+        LystariaOverlayPopup(
+            onClose: {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                    onClose()
                 }
-                .padding(.horizontal, LSpacing.pageHorizontal)
-                .padding(.bottom, 120)
-                .frame(maxWidth: 560)
-                .frame(maxWidth: .infinity)
-            }
-        }
-        // Sticky bottom button so you ALWAYS SEE IT
-        .safeAreaInset(edge: .bottom) {
-            GlassCard(padding: 14) {
-                Button { save() } label: {
-                    Text("Save")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(titleTrimmed.isEmpty ? AnyShapeStyle(Color.gray.opacity(0.3)) : AnyShapeStyle(LGradients.blue))
-                        .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
-                }
-                .buttonStyle(.plain)
-                .disabled(titleTrimmed.isEmpty)
-            }
-            .padding(.horizontal, LSpacing.pageHorizontal)
-            .padding(.bottom, 10)
+            },
+            width: 560,
+            heightRatio: 0.82
+        ) {
+            header
+        } content: {
+            content
+        } footer: {
+            footer
         }
     }
 
-    @ViewBuilder
-    private func header(title: String, primaryTitle: String, primaryAction: @escaping () -> Void) -> some View {
+    private var header: some View {
         HStack {
-            GradientTitle(text: title, font: .title2.bold())
+            GradientTitle(text: "New Reminder", font: .title2.bold())
             Spacer()
 
-            Button(primaryTitle) { primaryAction() }
+            Button("Save") { save() }
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.white)
-                .padding(.horizontal, 14).padding(.vertical, 8)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
                 .background(titleTrimmed.isEmpty ? Color.gray.opacity(0.3) : LColors.accent)
                 .clipShape(Capsule())
                 .buttonStyle(.plain)
                 .disabled(titleTrimmed.isEmpty)
 
-            Button { dismiss() } label: {
+            Button {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                    onClose()
+                }
+            } label: {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title2)
                     .foregroundStyle(LColors.textSecondary)
             }
             .buttonStyle(.plain)
         }
-        .padding(.top, 20)
+    }
+
+    private var content: some View {
+        VStack(spacing: 20) {
+            LabeledGlassField(label: "TEXT") {
+                TextField("Reminder title", text: $title)
+                    .textFieldStyle(.plain)
+                    .foregroundStyle(LColors.textPrimary)
+#if os(iOS) || os(visionOS)
+                    .textInputAutocapitalization(.sentences)
+                    .disableAutocorrection(false)
+#endif
+            }
+
+            LabeledGlassField(label: "DETAILS") {
+                TextEditor(text: $details)
+                    .frame(minHeight: 120)
+                    .scrollContentBackground(.hidden)
+                    .foregroundStyle(LColors.textPrimary)
+#if os(iOS) || os(visionOS)
+                    .textInputAutocapitalization(.sentences)
+                    .disableAutocorrection(false)
+#endif
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("REPEAT")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(LColors.textSecondary)
+                    .tracking(0.5)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(ReminderScheduleKind.allCases, id: \.self) { kind in
+                            let on = scheduleKind == kind
+                            Button { scheduleKind = kind } label: {
+                                Text(kind.label)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(on ? .white : LColors.textPrimary)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 8)
+                                    .background(on ? LColors.accent : Color.white.opacity(0.08))
+                                    .clipShape(Capsule())
+                                    .overlay(
+                                        Capsule().stroke(on ? LColors.accent : LColors.glassBorder, lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+
+            GlassCard(padding: 16) {
+                VStack(spacing: 12) {
+                    if scheduleKind == .once {
+#if os(macOS)
+                        LDateStepperRow(label: "Date", dateTime: $onceDateTime)
+                        LTimeEntryRow(label: "Time", dateTime: $onceDateTime)
+#else
+                        LystariaControlRow(label: nil) {
+                            DatePicker("", selection: $onceDateTime, displayedComponents: [.date, .hourAndMinute])
+                                .labelsHidden()
+                                .datePickerStyle(.compact)
+                                .tint(LColors.accent)
+                        }
+#endif
+                    } else {
+#if os(macOS)
+                        LDateStepperRow(label: "Start Day", dateTime: $startDay)
+                        VStack(alignment: .leading, spacing: 10) {
+                            ForEach(Array(timesOfDay.indices), id: \.self) { idx in
+                                LTimeEntryRow(label: idx == 0 ? "Time" : "Time \(idx + 1)", dateTime: Binding(
+                                    get: { timesOfDay[idx] },
+                                    set: { timesOfDay[idx] = $0 }
+                                ))
+                            }
+
+                            timeButtons
+                        }
+#else
+                        LystariaControlRow(label: "Start Day") {
+                            DatePicker("", selection: $startDay, in: Date()..., displayedComponents: [.date])
+                                .labelsHidden()
+                                .datePickerStyle(.compact)
+                                .tint(LColors.accent)
+                        }
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            ForEach(Array(timesOfDay.indices), id: \.self) { idx in
+                                LystariaControlRow(label: idx == 0 ? "Time" : "Time \(idx + 1)") {
+                                    DatePicker(
+                                        "",
+                                        selection: Binding(
+                                            get: { timesOfDay[idx] },
+                                            set: { timesOfDay[idx] = $0 }
+                                        ),
+                                        displayedComponents: .hourAndMinute
+                                    )
+                                    .labelsHidden()
+                                    .datePickerStyle(.compact)
+                                    .tint(LColors.accent)
+                                }
+                            }
+
+                            timeButtons
+                        }
+#endif
+
+                        if scheduleKind == .weekly {
+                            HStack(spacing: 6) {
+                                ForEach(0..<7, id: \.self) { d in
+                                    let on = selectedDays.contains(d)
+                                    Button {
+                                        if on { selectedDays.remove(d) } else { selectedDays.insert(d) }
+                                    } label: {
+                                        Text(weekdays[d])
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .frame(width: 36, height: 36)
+                                            .background(on ? LColors.accent : Color.white.opacity(0.08))
+                                            .foregroundStyle(on ? .white : LColors.textPrimary)
+                                            .clipShape(Circle())
+                                            .overlay(Circle().stroke(on ? .clear : LColors.glassBorder, lineWidth: 1))
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .padding(.top, 4)
+                        }
+
+                        if scheduleKind == .interval {
+                            LystariaControlRow(label: "Interval") {
+                                Stepper(value: $intervalMinutes, in: 5...1440, step: 5) {
+                                    Text("\(intervalMinutes) min")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(LColors.textPrimary)
+                                }
+                                .labelsHidden()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var footer: some View {
+        GlassCard(padding: 14) {
+            Button { save() } label: {
+                Text("Save")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(titleTrimmed.isEmpty ? AnyShapeStyle(Color.gray.opacity(0.3)) : AnyShapeStyle(LGradients.blue))
+                    .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
+            }
+            .buttonStyle(.plain)
+            .disabled(titleTrimmed.isEmpty)
+        }
+    }
+
+    private var timeButtons: some View {
+        HStack(spacing: 10) {
+            Button {
+                timesOfDay.append(timesOfDay.last ?? Date())
+            } label: {
+                Text("Add Time")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(LColors.accent)
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                if timesOfDay.count > 1 {
+                    timesOfDay.removeLast()
+                }
+            } label: {
+                Text("Remove")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.white.opacity(0.10))
+                    .clipShape(Capsule())
+                    .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .disabled(timesOfDay.count <= 1)
+
+            Spacer()
+        }
+        .padding(.top, 2)
     }
 
     private func save() {
@@ -1014,7 +992,7 @@ struct NewReminderSheet: View {
             NotificationManager.shared.printPendingNotifications()
 #endif
             print("[NewReminderSheet] Inserted reminder with nextRunAt=\(runAt)")
-            self.dismiss()
+            self.onClose()
         }
     }
 }
@@ -1022,7 +1000,7 @@ struct NewReminderSheet: View {
 // MARK: - Edit Reminder Sheet
 
 struct EditReminderSheet: View {
-    @Environment(\.dismiss) private var dismiss
+    let onClose: () -> Void
     @Bindable var reminder: LystariaReminder
 
     @State private var title = ""
@@ -1040,269 +1018,265 @@ struct EditReminderSheet: View {
     private var titleTrimmed: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     var body: some View {
-        ZStack {
-            LystariaBackground()
+        LystariaOverlayPopup(
+            onClose: {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                    onClose()
+                }
+            },
+            width: 560,
+            heightRatio: 0.82
+        ) {
+            header
+        } content: {
+            content
+        } footer: {
+            footer
+        }
+        .onAppear { loadFromModel() }
+    }
 
-            ScrollView {
-                VStack(spacing: 20) {
+    private var header: some View {
+        HStack {
+            GradientTitle(text: "Edit Reminder", font: .title2.bold())
+            Spacer()
 
-                    HStack {
-                        GradientTitle(text: "Edit Reminder", font: .title2.bold())
-                        Spacer()
+            Button("Save") { apply() }
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(titleTrimmed.isEmpty ? Color.gray.opacity(0.3) : LColors.accent)
+                .clipShape(Capsule())
+                .buttonStyle(.plain)
+                .disabled(titleTrimmed.isEmpty)
 
-                        Button("Save") { apply() }
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 14).padding(.vertical, 8)
-                            .background(titleTrimmed.isEmpty ? Color.gray.opacity(0.3) : LColors.accent)
-                            .clipShape(Capsule())
+            Button {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                    onClose()
+                }
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.title2)
+                    .foregroundStyle(LColors.textSecondary)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var content: some View {
+        VStack(spacing: 20) {
+            LabeledGlassField(label: "TEXT") {
+                TextField("Reminder title", text: $title)
+                    .textFieldStyle(.plain)
+                    .foregroundStyle(LColors.textPrimary)
+#if os(iOS) || os(visionOS)
+                    .textInputAutocapitalization(.sentences)
+                    .disableAutocorrection(false)
+#else
+                    // macOS: these modifiers are unavailable; rely on default behavior
+#endif
+            }
+
+            LabeledGlassField(label: "DETAILS") {
+                TextEditor(text: $details)
+                    .frame(minHeight: 120)
+                    .scrollContentBackground(.hidden)
+                    .foregroundStyle(LColors.textPrimary)
+#if os(iOS) || os(visionOS)
+                    .textInputAutocapitalization(.sentences)
+                    .disableAutocorrection(false)
+#else
+                    // macOS: unavailable
+#endif
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("REPEAT")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(LColors.textSecondary)
+                    .tracking(0.5)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(ReminderScheduleKind.allCases, id: \.self) { kind in
+                            let on = scheduleKind == kind
+                            Button { scheduleKind = kind } label: {
+                                Text(kind.label)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(on ? .white : LColors.textPrimary)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 8)
+                                    .background(on ? LColors.accent : Color.white.opacity(0.08))
+                                    .clipShape(Capsule())
+                                    .overlay(
+                                        Capsule().stroke(on ? LColors.accent : LColors.glassBorder, lineWidth: 1)
+                                    )
+                            }
                             .buttonStyle(.plain)
-                            .disabled(titleTrimmed.isEmpty)
-
-                        Button { dismiss() } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.title2)
-                                .foregroundStyle(LColors.textSecondary)
                         }
-                        .buttonStyle(.plain)
                     }
-                    .padding(.top, 20)
+                }
+            }
 
-                    LabeledGlassField(label: "TEXT") {
-                        TextField("Reminder title", text: $title)
-                            .textFieldStyle(.plain)
-                            .foregroundStyle(LColors.textPrimary)
-#if os(iOS) || os(visionOS)
-                            .textInputAutocapitalization(.sentences)
-                            .disableAutocorrection(false)
+            GlassCard(padding: 16) {
+                VStack(spacing: 12) {
+                    if scheduleKind == .once {
+#if os(macOS)
+                        LDateStepperRow(label: "Date", dateTime: $onceDateTime)
+                        LTimeEntryRow(label: "Time", dateTime: $onceDateTime)
 #else
-                            // macOS: these modifiers are unavailable; rely on default behavior
+                        LystariaControlRow(label: "Date & Time") {
+                            DatePicker("", selection: $onceDateTime, displayedComponents: [.date, .hourAndMinute])
+                                .labelsHidden()
+                                .datePickerStyle(.compact)
+                                .tint(LColors.accent)
+                        }
 #endif
-                    }
+                    } else {
+#if os(macOS)
+                        LDateStepperRow(label: "Start Day", dateTime: $startDay)
+                        VStack(alignment: .leading, spacing: 10) {
+                            ForEach(Array(timesOfDay.indices), id: \.self) { idx in
+                                LTimeEntryRow(
+                                    label: idx == 0 ? "Time" : "Time \(idx + 1)",
+                                    dateTime: Binding(
+                                        get: { timesOfDay[idx] },
+                                        set: { timesOfDay[idx] = $0 }
+                                    )
+                                )
+                            }
 
-                    LabeledGlassField(label: "DETAILS") {
-                        TextEditor(text: $details)
-                            .frame(minHeight: 120)
-                            .scrollContentBackground(.hidden)
-                            .foregroundStyle(LColors.textPrimary)
-#if os(iOS) || os(visionOS)
-                            .textInputAutocapitalization(.sentences)
-                            .disableAutocorrection(false)
+                            recurringTimeButtons
+                        }
 #else
-                            // macOS: unavailable
+                        LystariaControlRow(label: "Start Day") {
+                            DatePicker("", selection: $startDay, displayedComponents: [.date])
+                                .labelsHidden()
+                                .datePickerStyle(.compact)
+                                .tint(LColors.accent)
+                        }
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            ForEach(Array(timesOfDay.indices), id: \.self) { idx in
+                                LystariaControlRow(label: idx == 0 ? "Time" : "Time \(idx + 1)") {
+                                    DatePicker(
+                                        "",
+                                        selection: Binding(
+                                            get: { timesOfDay[idx] },
+                                            set: { timesOfDay[idx] = $0 }
+                                        ),
+                                        displayedComponents: .hourAndMinute
+                                    )
+                                    .labelsHidden()
+                                    .datePickerStyle(.compact)
+                                    .tint(LColors.accent)
+                                }
+                            }
+
+                            recurringTimeButtons
+                        }
 #endif
-                    }
 
-                    // Repeat
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("REPEAT")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(LColors.textSecondary)
-                            .tracking(0.5)
-
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(ReminderScheduleKind.allCases, id: \.self) { kind in
-                                    let on = scheduleKind == kind
-                                    Button { scheduleKind = kind } label: {
-                                        Text(kind.label)
-                                            .font(.system(size: 13, weight: .semibold))
-                                            .foregroundStyle(on ? .white : LColors.textPrimary)
-                                            .padding(.horizontal, 14).padding(.vertical, 8)
+                        if scheduleKind == .weekly {
+                            HStack(spacing: 6) {
+                                ForEach(0..<7, id: \.self) { d in
+                                    let on = selectedDays.contains(d)
+                                    Button {
+                                        if on {
+                                            selectedDays.remove(d)
+                                        } else {
+                                            selectedDays.insert(d)
+                                        }
+                                    } label: {
+                                        Text(weekdays[d])
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .frame(width: 36, height: 36)
                                             .background(on ? LColors.accent : Color.white.opacity(0.08))
-                                            .clipShape(Capsule())
-                                            .overlay(Capsule().stroke(on ? LColors.accent : LColors.glassBorder, lineWidth: 1))
+                                            .foregroundStyle(on ? .white : LColors.textPrimary)
+                                            .clipShape(Circle())
+                                            .overlay(
+                                                Circle().stroke(on ? .clear : LColors.glassBorder, lineWidth: 1)
+                                            )
                                     }
                                     .buttonStyle(.plain)
                                 }
                             }
+                            .padding(.top, 4)
                         }
-                    }
 
-                    // Schedule
-                    GlassCard(padding: 16) {
-                        VStack(spacing: 12) {
-
-                            if scheduleKind == .once {
-                                #if os(macOS)
-                                LDateStepperRow(label: "Date", dateTime: $onceDateTime)
-                                LTimeEntryRow(label: "Time", dateTime: $onceDateTime)
-                                #else
-                                LystariaControlRow(label: "Date & Time") {
-                                    DatePicker("", selection: $onceDateTime, displayedComponents: [.date, .hourAndMinute])
-                                        .labelsHidden()
-                                        .datePickerStyle(.compact)
-                                        .tint(LColors.accent)
+                        if scheduleKind == .interval {
+                            LystariaControlRow(label: "Interval") {
+                                Stepper(value: $intervalMinutes, in: 5...1440, step: 5) {
+                                    Text("\(intervalMinutes) min")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(LColors.textPrimary)
                                 }
-                                #endif
-                            } else {
-                                #if os(macOS)
-                                LDateStepperRow(label: "Start Day", dateTime: $startDay)
-                                VStack(alignment: .leading, spacing: 10) {
-                                    ForEach(Array(timesOfDay.indices), id: \.self) { idx in
-                                        LTimeEntryRow(label: idx == 0 ? "Time" : "Time \(idx + 1)", dateTime: Binding(
-                                            get: { timesOfDay[idx] },
-                                            set: { timesOfDay[idx] = $0 }
-                                        ))
-                                    }
-
-                                    HStack(spacing: 10) {
-                                        Button {
-                                            timesOfDay.append(timesOfDay.last ?? Date())
-                                        } label: {
-                                            Text("Add Time")
-                                                .font(.system(size: 13, weight: .semibold))
-                                                .foregroundStyle(.white)
-                                                .padding(.horizontal, 12)
-                                                .padding(.vertical, 8)
-                                                .background(LColors.accent)
-                                                .clipShape(Capsule())
-                                        }
-                                        .buttonStyle(.plain)
-
-                                        Button {
-                                            if timesOfDay.count > 1 {
-                                                timesOfDay.removeLast()
-                                            }
-                                        } label: {
-                                            Text("Remove")
-                                                .font(.system(size: 13, weight: .semibold))
-                                                .foregroundStyle(.white)
-                                                .padding(.horizontal, 12)
-                                                .padding(.vertical, 8)
-                                                .background(Color.white.opacity(0.10))
-                                                .clipShape(Capsule())
-                                                .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
-                                        }
-                                        .buttonStyle(.plain)
-                                        .disabled(timesOfDay.count <= 1)
-
-                                        Spacer()
-                                    }
-                                    .padding(.top, 2)
-                                }
-                                #else
-                                LystariaControlRow(label: "Start Day") {
-                                    DatePicker("", selection: $startDay, displayedComponents: [.date])
-                                        .labelsHidden()
-                                        .datePickerStyle(.compact)
-                                        .tint(LColors.accent)
-                                }
-                                VStack(alignment: .leading, spacing: 10) {
-                                    ForEach(Array(timesOfDay.indices), id: \.self) { idx in
-                                        LystariaControlRow(label: idx == 0 ? "Time" : "Time \(idx + 1)") {
-                                            DatePicker(
-                                                "",
-                                                selection: Binding(
-                                                    get: { timesOfDay[idx] },
-                                                    set: { timesOfDay[idx] = $0 }
-                                                ),
-                                                displayedComponents: .hourAndMinute
-                                            )
-                                            .labelsHidden()
-                                            .datePickerStyle(.compact)
-                                            .tint(LColors.accent)
-                                        }
-                                    }
-
-                                    HStack(spacing: 10) {
-                                        Button {
-                                            timesOfDay.append(timesOfDay.last ?? Date())
-                                        } label: {
-                                            Text("Add Time")
-                                                .font(.system(size: 13, weight: .semibold))
-                                                .foregroundStyle(.white)
-                                                .padding(.horizontal, 12)
-                                                .padding(.vertical, 8)
-                                                .background(LColors.accent)
-                                                .clipShape(Capsule())
-                                        }
-                                        .buttonStyle(.plain)
-
-                                        Button {
-                                            if timesOfDay.count > 1 {
-                                                timesOfDay.removeLast()
-                                            }
-                                        } label: {
-                                            Text("Remove")
-                                                .font(.system(size: 13, weight: .semibold))
-                                                .foregroundStyle(.white)
-                                                .padding(.horizontal, 12)
-                                                .padding(.vertical, 8)
-                                                .background(Color.white.opacity(0.10))
-                                                .clipShape(Capsule())
-                                                .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
-                                        }
-                                        .buttonStyle(.plain)
-                                        .disabled(timesOfDay.count <= 1)
-
-                                        Spacer()
-                                    }
-                                    .padding(.top, 2)
-                                }
-                                #endif
-
-                                if scheduleKind == .weekly {
-                                    HStack(spacing: 6) {
-                                        ForEach(0..<7, id: \.self) { d in
-                                            let on = selectedDays.contains(d)
-                                            Button {
-                                                if on { selectedDays.remove(d) } else { selectedDays.insert(d) }
-                                            } label: {
-                                                Text(weekdays[d])
-                                                    .font(.system(size: 12, weight: .semibold))
-                                                    .frame(width: 36, height: 36)
-                                                    .background(on ? LColors.accent : Color.white.opacity(0.08))
-                                                    .foregroundStyle(on ? .white : LColors.textPrimary)
-                                                    .clipShape(Circle())
-                                                    .overlay(Circle().stroke(on ? .clear : LColors.glassBorder, lineWidth: 1))
-                                            }
-                                            .buttonStyle(.plain)
-                                        }
-                                    }
-                                    .padding(.top, 4)
-                                }
-
-                                if scheduleKind == .interval {
-                                    LystariaControlRow(label: "Interval") {
-                                        Stepper(value: $intervalMinutes, in: 5...1440, step: 5) {
-                                            Text("\(intervalMinutes) min")
-                                                .font(.system(size: 14, weight: .semibold))
-                                                .foregroundStyle(LColors.textPrimary)
-                                        }
-                                        .labelsHidden()
-                                    }
-                                }
+                                .labelsHidden()
                             }
                         }
                     }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
 
-                    Spacer(minLength: 24)
-                }
-                .padding(.horizontal, LSpacing.pageHorizontal)
-                .padding(.bottom, 120)
-                .frame(maxWidth: 560)
-                .frame(maxWidth: .infinity)
+    private var footer: some View {
+        GlassCard(padding: 14) {
+            Button { apply() } label: {
+                Text("Save")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(
+                        titleTrimmed.isEmpty
+                        ? AnyShapeStyle(Color.gray.opacity(0.3))
+                        : AnyShapeStyle(LGradients.blue)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
             }
+            .buttonStyle(.plain)
+            .disabled(titleTrimmed.isEmpty)
         }
-        .onAppear { loadFromModel() }
-        .safeAreaInset(edge: .bottom) {
-            GlassCard(padding: 14) {
-                Button { apply() } label: {
-                    Text("Save")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(titleTrimmed.isEmpty ? AnyShapeStyle(Color.gray.opacity(0.3)) : AnyShapeStyle(LGradients.blue))
-                        .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
-                }
-                .buttonStyle(.plain)
-                .disabled(titleTrimmed.isEmpty)
+    }
+
+    private var recurringTimeButtons: some View {
+        HStack(spacing: 10) {
+            Button {
+                timesOfDay.append(timesOfDay.last ?? Date())
+            } label: {
+                Text("Add Time")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(LColors.accent)
+                    .clipShape(Capsule())
             }
-            .padding(.horizontal, LSpacing.pageHorizontal)
-            .padding(.bottom, 10)
+            .buttonStyle(.plain)
+
+            Button {
+                if timesOfDay.count > 1 {
+                    timesOfDay.removeLast()
+                }
+            } label: {
+                Text("Remove")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.white.opacity(0.10))
+                    .clipShape(Capsule())
+                    .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .disabled(timesOfDay.count <= 1)
+
+            Spacer()
         }
+        .padding(.top, 2)
     }
 
     private func loadFromModel() {
@@ -1320,7 +1294,6 @@ struct EditReminderSheet: View {
         } else {
             startDay = reminder.nextRunAt
 
-            // Prefill exact times from the stored schedule
             let schedule = reminder.schedule
             let storedTimes: [String] = {
                 if let t = schedule?.timesOfDay, !t.isEmpty { return t }
@@ -1329,7 +1302,6 @@ struct EditReminderSheet: View {
             }()
 
             if !storedTimes.isEmpty {
-                // Parse + sort by HH:mm so the UI order is stable
                 let parsed = storedTimes.compactMap { hhmm -> (h: Int, m: Int)? in
                     guard let (h, m) = ReminderCompute.parseHHMM(hhmm) else { return nil }
                     return (h: h, m: m)
@@ -1356,9 +1328,9 @@ struct EditReminderSheet: View {
     }
 
     private func apply() {
-        #if os(macOS)
+#if os(macOS)
         NSApp.keyWindow?.endEditing(for: nil)
-        #endif
+#endif
         DispatchQueue.main.async {
             print("[EditReminderSheet] Apply tapped. title=\(self.titleTrimmed), kind=\(self.scheduleKind.rawValue))")
             self.reminder.title = self.titleTrimmed
@@ -1402,11 +1374,13 @@ struct EditReminderSheet: View {
                     intervalMinutes: self.scheduleKind == .interval ? self.intervalMinutes : nil
                 )
             }
+
             print("[EditReminderSheet] Computed runAt=\(runAt), schedule=\(String(describing: schedule))")
 
             self.reminder.schedule = schedule
             self.reminder.nextRunAt = runAt
             self.reminder.updatedAt = Date()
+
             print("[EditReminderSheet] Updated reminder id=\(self.reminder.id) nextRunAt=\(self.reminder.nextRunAt) updatedAt=\(String(describing: self.reminder.updatedAt))")
 
             NotificationManager.shared.scheduleReminder(self.reminder)
@@ -1414,7 +1388,7 @@ struct EditReminderSheet: View {
             NotificationManager.shared.printPendingNotifications()
 #endif
 
-            self.dismiss()
+            self.onClose()
         }
     }
 }
@@ -1445,15 +1419,19 @@ struct LabeledGlassField<Content: View>: View {
 }
 
 struct LystariaControlRow<Content: View>: View {
-    let label: String
+    let label: String?
     @ViewBuilder var content: Content
 
     var body: some View {
         HStack(spacing: 12) {
-            Text(label)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(LColors.textPrimary)
-            Spacer()
+            if let label, !label.isEmpty {
+                Text(label)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(LColors.textPrimary)
+
+                Spacer()
+            }
+
             content
         }
         .padding(12)

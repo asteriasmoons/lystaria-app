@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Lystaria uses your location to quickly add places to your events.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Lystaria uses your calendar to sync your reminders and events with Apple Calendar.</string>
 	<key>CFBundleURLTypes</key>

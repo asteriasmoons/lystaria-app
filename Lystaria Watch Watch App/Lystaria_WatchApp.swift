@@ -13,7 +13,11 @@ struct Lystaria_Watch_Watch_AppApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .modelContainer(for: [MoodLog.self])
+                .modelContainer(for: [
+                    MoodLog.self,
+                    JournalBook.self,
+                    JournalEntry.self
+                ])
                 .onAppear {
                     WatchSessionManager.shared.activate()
                 }
