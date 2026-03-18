@@ -687,12 +687,10 @@ struct CalendarTabView: View {
     }
 
     private func deleteReminder(withServerId id: String) {
-        // FIX 8: Use a predicate instead of fetching all reminders.
-        // The original fetched every single LystariaReminder on the main thread
-        // during a SwiftUI delete action, which could deadlock the model context.
-        let targetId = id
+        // rid is stored in linkedHabitId (UUID) since LystariaReminder has no serverId field.
+        guard let targetUUID = UUID(uuidString: id) else { return }
         let descriptor = FetchDescriptor<LystariaReminder>(
-            predicate: #Predicate { $0.serverId == targetId }
+            predicate: #Predicate { $0.linkedHabitId == targetUUID }
         )
         if let match = try? modelContext.fetch(descriptor).first {
             modelContext.delete(match)
@@ -1485,9 +1483,9 @@ struct EventSheet: View {
     }
 
     private func findReminder(serverId: String) -> LystariaReminder? {
-        let targetId = serverId
+        guard let targetUUID = UUID(uuidString: serverId) else { return nil }
         let descriptor = FetchDescriptor<LystariaReminder>(
-            predicate: #Predicate { $0.serverId == targetId }
+            predicate: #Predicate { $0.linkedHabitId == targetUUID }
         )
         return try? modelContext.fetch(descriptor).first
     }
@@ -1817,21 +1815,21 @@ struct EventSheet: View {
             r.acknowledgedAt = nil
             r.timezone = NotificationManager.shared.effectiveTimezoneID
             r.linkedKindRaw = "event"
-            r.serverId = rid
-            r.markDirty()
+            r.linkedHabitId = UUID(uuidString: rid)
+            r.updatedAt = Date()
         } else {
             let r = LystariaReminder(
                 title: title,
                 status: .scheduled,
                 nextRunAt: runAt,
                 schedule: computedSchedule,
-                timezone: NotificationManager.shared.effectiveTimezoneID,
-                serverId: rid
+                timezone: NotificationManager.shared.effectiveTimezoneID
             )
             modelContext.insert(r)
             r.details = desc
             r.linkedKindRaw = "event"
-            r.markDirty()
+            r.linkedHabitId = UUID(uuidString: rid)
+            r.updatedAt = Date()
         }
 
         NotificationManager.shared.requestPermissionIfNeeded()
@@ -2153,7 +2151,7 @@ struct DateStepperRow: View {
     }
 
     private func bump(days: Int) {
-        let cal = Calendar.current
+        let cal = CalendarCompute.tzCalendar
         dateTime = cal.date(byAdding: .day, value: days, to: dateTime) ?? dateTime
     }
 }
@@ -2165,18 +2163,21 @@ struct TimeEntryRow: View {
     @FocusState private var focused: Bool
     @State private var text: String = ""
 
-    private static let displayFormatter: DateFormatter = {
+    // Instance properties so timezone is always current, not captured once at app launch.
+    private var displayFormatter: DateFormatter {
         let df = DateFormatter()
         df.locale = .current
+        df.timeZone = CalendarCompute.displayTimeZone
         df.timeStyle = .short
         df.dateStyle = .none
         return df
-    }()
+    }
 
-    private static let parseFormatters: [DateFormatter] = {
+    private var parseFormatters: [DateFormatter] {
         func make(_ fmt: String) -> DateFormatter {
             let df = DateFormatter()
             df.locale = .current
+            df.timeZone = CalendarCompute.displayTimeZone
             df.dateFormat = fmt
             return df
         }
@@ -2185,7 +2186,7 @@ struct TimeEntryRow: View {
             make("hh:mm a"), make("hh:mma"),
             make("h a"), make("ha")
         ]
-    }()
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -2228,16 +2229,16 @@ struct TimeEntryRow: View {
     }
 
     private func syncFromDate() {
-        text = Self.displayFormatter.string(from: dateTime)
+        text = displayFormatter.string(from: dateTime)
     }
 
     private func applyTypedTime() {
         let raw = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !raw.isEmpty else { syncFromDate(); return }
 
-        for df in Self.parseFormatters {
+        for df in parseFormatters {
             if let parsed = df.date(from: raw.uppercased()) {
-                let cal = Calendar.current
+                let cal = CalendarCompute.tzCalendar
                 let c = cal.dateComponents([.hour, .minute], from: parsed)
                 dateTime = CalendarCompute.setTimeKeepingDay(day: dateTime, hour: c.hour ?? 0, minute: c.minute ?? 0)
                 syncFromDate()
@@ -2248,7 +2249,7 @@ struct TimeEntryRow: View {
     }
 
     private func bump(minutes delta: Int) {
-        let cal = Calendar.current
+        let cal = CalendarCompute.tzCalendar
         let c = cal.dateComponents([.hour, .minute], from: dateTime)
         let baseHour = c.hour ?? 0
         let baseMin = c.minute ?? 0

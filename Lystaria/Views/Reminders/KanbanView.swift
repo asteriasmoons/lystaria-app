@@ -130,7 +130,7 @@ struct KanbanView: View {
                 ColumnEditorSheet(
                     column: nil,
                     onSave: { name, hex in
-                        let col = KanbanColumn(name: name, colorHex: hex, sortOrder: board.columns.count)
+                        let col = KanbanColumn(name: name, colorHex: hex, sortOrder: (board.columns ?? []).count)
                         col.board = board
                         modelContext.insert(col)
                         try? modelContext.save()
@@ -308,7 +308,6 @@ struct KanbanView: View {
     private func moveReminder(_ reminder: LystariaReminder, to column: KanbanColumn) {
         reminder.kanbanColumn = column
         reminder.isKanbanDone = false
-        reminder.markDirty()
         try? modelContext.save()
         showToast("Moved to \(column.name)")
     }
@@ -316,7 +315,6 @@ struct KanbanView: View {
     private func unassign(_ reminder: LystariaReminder) {
         reminder.kanbanColumn = nil
         reminder.isKanbanDone = false
-        reminder.markDirty()
         try? modelContext.save()
     }
 
@@ -328,7 +326,6 @@ struct KanbanView: View {
             reminder.acknowledgedAt = nil
             reminder.isKanbanDone = false
             reminder.updatedAt = now
-            reminder.markDirty()
             try? modelContext.save()
 
             NotificationManager.shared.cancelReminder(reminder)
@@ -344,7 +341,6 @@ struct KanbanView: View {
         reminder.isKanbanDone = true
         reminder.acknowledgedAt = now
         reminder.updatedAt = now
-        reminder.markDirty()
         try? modelContext.save()
 
         NotificationManager.shared.scheduleReminder(reminder)
@@ -357,8 +353,8 @@ struct KanbanView: View {
 
     private func deleteBoard(_ board: KanbanBoard) {
         // Unassign all reminders before deleting
-        for col in board.columns {
-            for r in col.reminders {
+        for col in (board.columns ?? []) {
+            for r in (col.reminders ?? []) {
                 r.kanbanColumn = nil
             }
         }
@@ -368,7 +364,7 @@ struct KanbanView: View {
     }
 
     private func deleteColumn(_ column: KanbanColumn) {
-        for r in column.reminders {
+        for r in (column.reminders ?? []) {
             r.kanbanColumn = nil
         }
         modelContext.delete(column)
@@ -455,7 +451,7 @@ struct KanbanColumnView: View {
     }
 
     private var columnReminders: [LystariaReminder] {
-        column.reminders
+        (column.reminders ?? [])
             .filter { $0.status != .deleted }
             .sorted { $0.kanbanSortOrder < $1.kanbanSortOrder }
     }

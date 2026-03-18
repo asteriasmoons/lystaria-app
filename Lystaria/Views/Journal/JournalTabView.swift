@@ -4,7 +4,6 @@
 import SwiftUI
 import SwiftData
 import Combine
-import Supabase
 
 struct JournalTabView: View {
     @Environment(\.modelContext) private var modelContext
@@ -302,10 +301,8 @@ struct JournalTabView: View {
         let entriesInBook = allEntries.filter { $0.book?.persistentModelID == book.persistentModelID }
         for e in entriesInBook {
             e.deletedAt = Date()
-            e.needsSync = true
         }
         book.deletedAt = Date()
-        book.needsSync = true
         try? modelContext.save()
     }
 
@@ -323,7 +320,6 @@ struct JournalTabView: View {
             for e in allEntries where e.book == nil {
                 e.book = existing
                 e.updatedAt = Date()
-                e.needsSync = true
             }
             return
         }
@@ -336,7 +332,6 @@ struct JournalTabView: View {
         for e in allEntries where e.book == nil {
             e.book = created
             e.updatedAt = Date()
-            e.needsSync = true
         }
     }
 
@@ -610,20 +605,28 @@ struct JournalBookCard: View {
 
 struct JournalBookDetailView: View {
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var appState: AppState
     let book: JournalBook
     
     @Query private var entries: [JournalEntry]
+    @Query private var prompts: [JournalPrompt]
     
     @State private var showEditor = false
     @State private var showPromptSheet = false
+    @State private var showStoredPromptsPopup = false
+    @State private var showPromptEditorPopup = false
     @State private var editingEntry: JournalEntry? = nil
     @State private var viewerEntry: JournalEntry? = nil
     @State private var tagFilter: String? = nil
+    @State private var editingStoredPrompt: JournalPrompt? = nil
+    @State private var storedPromptDraft: String = ""
     
-    // Prompt overlay state
+    // AI prompt overlay state
     @State private var promptText: String = ""
     @State private var promptLoading = false
     @State private var promptError: String?
+    
+    // Stored prompt feedback state
     @State private var promptShowCopied = false
     
     init(book: JournalBook) {
@@ -636,6 +639,14 @@ struct JournalBookDetailView: View {
                 entry.deletedAt == nil
             },
             sort: \JournalEntry.createdAt,
+            order: .reverse
+        )
+        _prompts = Query(
+            filter: #Predicate<JournalPrompt> { prompt in
+                prompt.book?.persistentModelID == bookID &&
+                prompt.deletedAt == nil
+            },
+            sort: \JournalPrompt.createdAt,
             order: .reverse
         )
     }
@@ -709,17 +720,30 @@ struct JournalBookDetailView: View {
                         onDelete: { e in
                             viewerEntry = nil
 
-                            // Soft-delete: set deletedAt so pushJournalEntries syncs
-                            // the deletion to Supabase. pullJournalEntries will then
-                            // hard-delete the local record after confirming remote deletion.
+                            // Soft-delete locally
                             e.deletedAt = Date()
-                            e.needsSync = true
                             try? modelContext.save()
                         }
                     )
                     .preferredColorScheme(.dark)
                     .transition(.opacity.combined(with: .scale))
                     .zIndex(50)
+                }
+            }
+            .overlay {
+                if showStoredPromptsPopup {
+                    storedJournalPromptsOverlay
+                        .preferredColorScheme(.dark)
+                        .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                        .zIndex(70)
+                }
+            }
+            .overlay {
+                if showPromptEditorPopup {
+                    storedJournalPromptEditorOverlay
+                        .preferredColorScheme(.dark)
+                        .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                        .zIndex(80)
                 }
             }
             
@@ -731,6 +755,8 @@ struct JournalBookDetailView: View {
             }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showPromptSheet)
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showStoredPromptsPopup)
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showPromptEditorPopup)
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showEditor)
     }
     
@@ -750,6 +776,27 @@ struct JournalBookDetailView: View {
                 }
                 
                 Spacer()
+                
+                Button {
+                    showStoredPromptsPopup = true
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.08))
+                            .overlay(
+                                Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                            .frame(width: 34, height: 34)
+
+                        Image("markfill")
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 16, height: 16)
+                            .foregroundStyle(.white)
+                    }
+                }
+                .buttonStyle(.plain)
                 
                 Button {
                     showPromptSheet = true
@@ -825,6 +872,298 @@ struct JournalBookDetailView: View {
             }
         }
         .padding(.top, 2)
+    }
+    
+    // MARK: - Stored Journal Prompts Overlay
+
+    private var storedJournalPromptsOverlay: some View {
+        ZStack(alignment: .top) {
+            LystariaOverlayPopup(
+                onClose: {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                        showStoredPromptsPopup = false
+                    }
+                },
+                width: 420,
+                heightRatio: 0.70,
+                header: {
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            GradientTitle(text: "Journal Prompts", font: .system(size: 20, weight: .bold))
+
+                            Text(book.title)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(LColors.textSecondary)
+                        }
+
+                        Spacer()
+
+                        Button {
+                            editingStoredPrompt = nil
+                            storedPromptDraft = ""
+                            showStoredPromptsPopup = false
+                            showPromptEditorPopup = true
+                        } label: {
+                            Text("Add")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(LGradients.blue)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                },
+                content: {
+                    if prompts.isEmpty {
+                        VStack(spacing: 14) {
+                            Image("pencilsparkle")
+                                .renderingMode(.template)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 34, height: 34)
+                                .foregroundStyle(.white)
+
+                            Text("No saved prompts yet")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundStyle(.white)
+
+                            Text("Add your first journal prompt to keep inspiration close by.")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(LColors.textSecondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 30)
+                    } else {
+                        ForEach(prompts, id: \.persistentModelID) { prompt in
+                            Button {
+                                copyStoredPrompt(prompt.text)
+                            } label: {
+                                Text(prompt.text)
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(LColors.textPrimary)
+                                    .multilineTextAlignment(.leading)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 12)
+                                    .background(Color.white.opacity(0.08))
+                                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 16)
+                                            .stroke(LColors.glassBorder, lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button {
+                                    editingStoredPrompt = prompt
+                                    storedPromptDraft = prompt.text
+                                    showStoredPromptsPopup = false
+                                    showPromptEditorPopup = true
+                                } label: {
+                                    Text("Edit")
+                                }
+
+                                Button(role: .destructive) {
+                                    deleteStoredPrompt(prompt)
+                                } label: {
+                                    Text("Delete")
+                                }
+                            }
+                        }
+                    }
+                },
+                footer: {
+                    HStack(spacing: 12) {
+                        Button {
+                            editingStoredPrompt = nil
+                            storedPromptDraft = ""
+                            showStoredPromptsPopup = false
+                            showPromptEditorPopup = true
+                        } label: {
+                            Text("Add Prompt")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(LGradients.blue)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                                showStoredPromptsPopup = false
+                            }
+                        } label: {
+                            Text("Close")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Color.white.opacity(0.08))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            )
+
+            if promptShowCopied {
+                Text("Copied")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 10)
+                    .background(LGradients.blue)
+                    .clipShape(Capsule())
+                    .shadow(color: .black.opacity(0.25), radius: 12, y: 6)
+                    .padding(.top, 34)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+    }
+
+    private var storedJournalPromptEditorOverlay: some View {
+        LystariaOverlayPopup(
+            onClose: {
+                storedPromptDraft = ""
+                editingStoredPrompt = nil
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                    showPromptEditorPopup = false
+                    showStoredPromptsPopup = true
+                }
+            },
+            width: 420,
+            heightRatio: 0.62,
+            header: {
+                HStack {
+                    GradientTitle(
+                        text: editingStoredPrompt == nil ? "Add Prompt" : "Edit Prompt",
+                        font: .system(size: 20, weight: .bold)
+                    )
+
+                    Spacer()
+                }
+            },
+            content: {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Prompt")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(LColors.textSecondary)
+
+                    TextEditor(text: $storedPromptDraft)
+                        .scrollContentBackground(.hidden)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(minHeight: 180)
+                        .padding(12)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(LColors.glassBorder, lineWidth: 1)
+                        )
+                }
+            },
+            footer: {
+                HStack(spacing: 12) {
+                    Button {
+                        storedPromptDraft = ""
+                        editingStoredPrompt = nil
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                            showPromptEditorPopup = false
+                            showStoredPromptsPopup = true
+                        }
+                    } label: {
+                        Text("Cancel")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        saveStoredPrompt()
+                    } label: {
+                        Text(editingStoredPrompt == nil ? "Save Prompt" : "Save Changes")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(LGradients.blue)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(storedPromptDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .opacity(storedPromptDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.55 : 1)
+                }
+            }
+        )
+    }
+
+    private func copyStoredPrompt(_ text: String) {
+        UIPasteboard.general.string = text
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+            promptShowCopied = true
+        }
+
+        Task {
+            try? await Task.sleep(for: .seconds(1.4))
+            await MainActor.run {
+                withAnimation(.easeOut(duration: 0.25)) {
+                    promptShowCopied = false
+                }
+            }
+        }
+    }
+
+    private func saveStoredPrompt() {
+        let trimmed = storedPromptDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        if let prompt = editingStoredPrompt {
+            prompt.text = trimmed
+            prompt.markDirty()
+        } else {
+            let prompt = JournalPrompt(text: trimmed, book: book)
+            modelContext.insert(prompt)
+        }
+
+        try? modelContext.save()
+
+        storedPromptDraft = ""
+        editingStoredPrompt = nil
+
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+            showPromptEditorPopup = false
+            showStoredPromptsPopup = true
+        }
+    }
+
+    private func deleteStoredPrompt(_ prompt: JournalPrompt) {
+        prompt.deletedAt = Date()
+        prompt.markDirty()
+        try? modelContext.save()
     }
     
     // MARK: - Journal Prompt Overlay
@@ -974,9 +1313,15 @@ struct JournalBookDetailView: View {
                 promptError = nil
             }
 
-            let session = try await SupabaseManager.shared.client.auth.session
-            let userId = session.user.id.uuidString
-            let response = try await JournalPromptService.shared.generatePrompt(userId: userId)
+            guard let userId = appState.currentAppleUserId,
+                  !userId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw NSError(
+                    domain: "JournalPromptService",
+                    code: -4,
+                    userInfo: [NSLocalizedDescriptionKey: "You need to be signed in with Apple to generate a prompt."]
+                )
+            }
+            let response = try await JournalPromptService.shared.generatePrompt(userId: userId, modelContext: modelContext)
 
             await MainActor.run {
                 promptText = response.prompt

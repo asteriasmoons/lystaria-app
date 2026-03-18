@@ -10,6 +10,8 @@ import SwiftData
 import Foundation
 
 struct DashboardView: View {
+    @Environment(\.modelContext) private var modelContext
+
     // MARK: - Data Queries
 
     @Query(sort: \JournalEntry.createdAt, order: .reverse)
@@ -25,6 +27,12 @@ struct DashboardView: View {
     @Query(sort: \ReadingStats.updatedAt, order: .reverse)
     private var readingStats: [ReadingStats]
 
+    @Query(sort: \DailyTarotRecord.updatedAt, order: .reverse)
+    private var tarotRecords: [DailyTarotRecord]
+
+    @Query(sort: \DailyHoroscopeRecord.updatedAt, order: .reverse)
+    private var horoscopeRecords: [DailyHoroscopeRecord]
+
 
     @StateObject private var stepHealth = HealthKitManager.shared
     @StateObject private var waterHealth = WaterHealthKitManager.shared
@@ -32,27 +40,18 @@ struct DashboardView: View {
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("waterGoalFlOz") private var waterGoal: Double = 80
     @AppStorage("stepGoal") private var stepGoal: Double = 5000
-    @AppStorage("readingLastCheckIn") private var readingLastCheckInTimestamp: Double = 0
+    @EnvironmentObject private var appState: AppState
 
     @State private var showToolbox = false
     @State private var momentumRefreshID = UUID()
     @State private var moonPhaseData = MoonPhaseCalculator.calculate(for: Date())
 
-    @AppStorage("dashboardTarotDayKey") private var tarotDayKey: String = ""
-    @AppStorage("dashboardTarotId") private var tarotStoredId: String = ""
-    @AppStorage("dashboardTarotTitle") private var tarotStoredTitle: String = ""
-    @AppStorage("dashboardTarotKeywords") private var tarotStoredKeywords: String = ""
-    @AppStorage("dashboardTarotMessage") private var tarotStoredMessage: String = ""
 
     @State private var selectedZodiacSign: String = ""
     @State private var isFetchingHoroscope = false
     @State private var horoscopeError: String? = nil
     @State private var selectedHoroscopeTab: HoroscopeCardTab = .daily
     @State private var previewHoroscope: DailyHoroscope? = nil
-
-    @AppStorage("dashboardHoroscopeDayKey") private var horoscopeDayKey: String = ""
-    @AppStorage("dashboardHoroscopeSign") private var horoscopeStoredSign: String = ""
-    @AppStorage("dashboardHoroscopeMessage") private var horoscopeStoredMessage: String = ""
 
     private var dashboardCalendar: Calendar {
         Calendar.autoupdatingCurrent
@@ -100,16 +99,24 @@ struct DashboardView: View {
         }
     }
 
+    private var currentUserId: String? {
+        appState.currentAppleUserId
+    }
+
+    private var currentReadingStats: ReadingStats? {
+        guard let currentUserId else { return nil }
+        let matches = readingStats.filter { $0.userId == currentUserId }
+        return matches.max(by: { $0.updatedAt < $1.updatedAt })
+    }
+
     private var currentDailyHoroscope: DailyHoroscope? {
-        guard horoscopeDayKey == todayKey,
-              !horoscopeStoredSign.isEmpty,
-              !horoscopeStoredMessage.isEmpty else {
+        guard let record = horoscopeRecords.first(where: { $0.dayKey == todayKey }) else {
             return nil
         }
 
         return DailyHoroscope(
-            sign: horoscopeStoredSign,
-            message: horoscopeStoredMessage
+            sign: record.sign,
+            message: record.message
         )
     }
 
@@ -118,9 +125,9 @@ struct DashboardView: View {
         guard !selectedZodiacSign.isEmpty else { return }
 
         if selectedHoroscopeTab == .daily,
-           horoscopeDayKey == todayKey,
-           horoscopeStoredSign.caseInsensitiveCompare(selectedZodiacSign) == .orderedSame,
-           !horoscopeStoredMessage.isEmpty {
+           let existing = horoscopeRecords.first(where: { $0.dayKey == todayKey }),
+           existing.sign.caseInsensitiveCompare(selectedZodiacSign) == .orderedSame,
+           !existing.message.isEmpty {
             return
         }
 
@@ -133,9 +140,19 @@ struct DashboardView: View {
 
                 await MainActor.run {
                     if selectedHoroscopeTab == .daily {
-                        horoscopeDayKey = todayKey
-                        horoscopeStoredSign = horoscope.sign
-                        horoscopeStoredMessage = horoscope.message
+                        if let existing = horoscopeRecords.first(where: { $0.dayKey == todayKey }) {
+                            existing.sign = horoscope.sign
+                            existing.message = horoscope.message
+                            existing.updatedAt = Date()
+                        } else {
+                            let record = DailyHoroscopeRecord(
+                                dayKey: todayKey,
+                                sign: horoscope.sign,
+                                message: horoscope.message
+                            )
+                            modelContext.insert(record)
+                        }
+                        try? modelContext.save()
                     } else {
                         previewHoroscope = horoscope
                     }
@@ -156,22 +173,15 @@ struct DashboardView: View {
     }
 
     private var currentDailyTarotTip: DailyTarotTip? {
-        guard tarotDayKey == todayKey,
-              !tarotStoredTitle.isEmpty,
-              !tarotStoredMessage.isEmpty else {
+        guard let record = tarotRecords.first(where: { $0.dayKey == todayKey }) else {
             return nil
         }
 
-        let keywords = tarotStoredKeywords
-            .split(separator: "|")
-            .map { String($0) }
-            .filter { !$0.isEmpty }
-
         return DailyTarotTip(
-            id: tarotStoredId.isEmpty ? todayKey : tarotStoredId,
-            title: tarotStoredTitle,
-            keywords: keywords,
-            message: tarotStoredMessage
+            id: record.tipId,
+            title: record.title,
+            keywords: record.keywords,
+            message: record.message
         )
     }
 
@@ -179,11 +189,15 @@ struct DashboardView: View {
         guard currentDailyTarotTip == nil, !localDailyTarotTips.isEmpty else { return }
         guard let tip = localDailyTarotTips.randomElement() else { return }
 
-        tarotDayKey = todayKey
-        tarotStoredId = tip.id
-        tarotStoredTitle = tip.title
-        tarotStoredKeywords = tip.keywords.joined(separator: "|")
-        tarotStoredMessage = tip.message
+        let record = DailyTarotRecord(
+            dayKey: todayKey,
+            tipId: tip.id,
+            title: tip.title,
+            keywords: tip.keywords,
+            message: tip.message
+        )
+        modelContext.insert(record)
+        try? modelContext.save()
     }
 
     private func refreshMomentumHealthData() {
@@ -231,8 +245,7 @@ struct DashboardView: View {
     }
 
     private var readingLoggedToday: Bool {
-        guard readingLastCheckInTimestamp > 0 else { return false }
-        let lastCheckIn = Date(timeIntervalSince1970: readingLastCheckInTimestamp)
+        guard let lastCheckIn = currentReadingStats?.lastCheckInDate else { return false }
         return dashboardCalendar.isDate(lastCheckIn, inSameDayAs: Date())
     }
 
@@ -370,8 +383,7 @@ struct DashboardView: View {
     }
 
     private var readingDayStarts: Set<Date> {
-        guard readingLastCheckInTimestamp > 0 else { return [] }
-        let date = Date(timeIntervalSince1970: readingLastCheckInTimestamp)
+        guard let date = currentReadingStats?.lastCheckInDate else { return [] }
         return [dashboardCalendar.startOfDay(for: date)]
     }
 
@@ -445,7 +457,7 @@ struct DashboardView: View {
     }
 
     private var readingCurrentStreak: Int {
-        readingStats.first?.streakDays ?? 0
+        currentReadingStats?.streakDays ?? 0
     }
 
     private var consistencyAreaScores: [ConsistencyAreaScore] {
@@ -580,7 +592,10 @@ struct DashboardView: View {
             .onChange(of: habitLogs.count) { _, _ in
                 refreshMomentumCard()
             }
-            .onChange(of: readingLastCheckInTimestamp) { _, _ in
+            .onChange(of: readingCurrentStreak) { _, _ in
+                refreshMomentumCard()
+            }
+            .onChange(of: readingLoggedToday) { _, _ in
                 refreshMomentumCard()
             }
             .onChange(of: selectedZodiacSign) { _, _ in
@@ -614,27 +629,50 @@ struct DashboardView: View {
             GradientTitle(text: "Dashboard", font: .title.bold())
             Spacer()
 
-            Button {
-                showToolbox = true
-            } label: {
-                ZStack {
-                    Circle()
-                        .fill(Color.white.opacity(0.08))
-                        .overlay(
-                            Circle().stroke(LColors.glassBorder, lineWidth: 1)
-                        )
-                        .frame(width: 34, height: 34)
+            HStack(spacing: 10) {
+                NavigationLink {
+                    HealthPageView()
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.08))
+                            .overlay(
+                                Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                            .frame(width: 34, height: 34)
 
-                    Image("pausefill")
-                        .renderingMode(.template)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 16, height: 16)
-                        .foregroundStyle(.white)
+                        Image("healthfill")
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 16, height: 16)
+                            .foregroundStyle(.white)
+                    }
                 }
+                .buttonStyle(.plain)
+
+                Button {
+                    showToolbox = true
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.08))
+                            .overlay(
+                                Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                            .frame(width: 34, height: 34)
+
+                        Image("pausefill")
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 16, height: 16)
+                            .foregroundStyle(.white)
+                    }
+                }
+                .onboardingTarget("toolboxIcon")
+                .buttonStyle(.plain)
             }
-            .onboardingTarget("toolboxIcon")
-            .buttonStyle(.plain)
         }
     }
 

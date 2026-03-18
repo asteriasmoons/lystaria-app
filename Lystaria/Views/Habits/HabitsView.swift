@@ -161,7 +161,7 @@ private struct HabitSummaryRow: View {
     }
 
     private var completedDayStarts: Set<Date> {
-        Set(habit.logs
+        Set((habit.logs ?? [])
             .filter { $0.count >= target }
             .map { Calendar.current.startOfDay(for: $0.dayStart) })
     }
@@ -195,7 +195,7 @@ private struct HabitSummaryRow: View {
         guard let interval = Calendar.current.dateInterval(of: .weekOfYear, for: start) else { return false }
 
         var days = Set<Date>()
-        for log in habit.logs {
+        for log in (habit.logs ?? []) {
             let d = Calendar.current.startOfDay(for: log.dayStart)
             if interval.contains(d), log.count >= target {
                 days.insert(d)
@@ -275,7 +275,7 @@ struct HabitCard: View {
     }
 
     private var todaysLog: HabitLog? {
-        habit.logs.first(where: { Calendar.current.isDate($0.dayStart, inSameDayAs: todayStart) })
+        (habit.logs ?? []).first(where: { Calendar.current.isDate($0.dayStart, inSameDayAs: todayStart) })
     }
 
     private var todaysCount: Int {
@@ -299,7 +299,7 @@ struct HabitCard: View {
 
     private var completedDayStarts: Set<Date> {
         // A day counts as completed only if it reaches the daily target.
-        Set(habit.logs
+        Set((habit.logs ?? [])
             .filter { $0.count >= target }
             .map { Calendar.current.startOfDay(for: $0.dayStart) })
     }
@@ -335,7 +335,7 @@ struct HabitCard: View {
 
         // Count distinct completed days within that week.
         var days = Set<Date>()
-        for log in habit.logs {
+        for log in (habit.logs ?? []) {
             let d = Calendar.current.startOfDay(for: log.dayStart)
             if interval.contains(d), log.count >= target {
                 days.insert(d)
@@ -577,7 +577,7 @@ struct HabitCard: View {
         let cal = Calendar.current
 
         // Grab today's logs first.
-        let todaysLogs = habit.logs.filter { log in
+        let todaysLogs = (habit.logs ?? []).filter { log in
             cal.isDate(log.dayStart, inSameDayAs: todayStart)
         }
 
@@ -588,8 +588,8 @@ struct HabitCard: View {
 
         // 2) ALSO remove them from the in-memory relationship immediately so
         //    the card recomputes progress / dots / streak effects right away.
-        habit.logs.removeAll { log in
-            cal.isDate(log.dayStart, inSameDayAs: todayStart)
+        habit.logs = (habit.logs ?? []).filter { log in
+            !cal.isDate(log.dayStart, inSameDayAs: todayStart)
         }
 
         habit.updatedAt = Date()
@@ -646,7 +646,11 @@ struct HabitCard: View {
             startDay: now.addingTimeInterval(1),
             timesOfDay: [hhmm],
             daysOfWeek: selectedDays,
-            intervalMinutes: nil
+            intervalMinutes: nil,
+            recurrenceInterval: 1,
+            dayOfMonth: nil,
+            anchorMonth: nil,
+            anchorDay: nil
         )
 
         r.nextRunAt = next
@@ -706,7 +710,7 @@ struct HabitCard: View {
         }
 
         // Delete logs explicitly (safe even if relationship is already cascading)
-        for log in habit.logs {
+        for log in (habit.logs ?? []) {
             modelContext.delete(log)
         }
 
@@ -995,7 +999,11 @@ struct NewHabitSheet: View {
                                 startDay: Calendar.current.startOfDay(for: reminderStartDate),
                                 timesOfDay: [timeStr],
                                 daysOfWeek: scheduleKind == .weekly ? selectedDays : nil,
-                                intervalMinutes: nil
+                                intervalMinutes: nil,
+                                recurrenceInterval: 1,
+                                dayOfMonth: nil,
+                                anchorMonth: nil,
+                                anchorDay: nil
                             )
                             
                             let suffix = reminderTimes.count > 1 ? " (\(idx + 1)/\(reminderTimes.count))" : ""
@@ -1006,7 +1014,6 @@ struct NewHabitSheet: View {
                                 nextRunAt: firstRun,
                                 schedule: schedule,
                                 timezone: TimeZone.current.identifier,
-                                serverId: nil,
                                 linkedKind: .habit,
                                 linkedHabitId: habit.id
                             )
@@ -1391,7 +1398,11 @@ struct EditHabitSheet: View {
                     startDay: Calendar.current.startOfDay(for: reminderStartDate),
                     timesOfDay: [timeStr],
                     daysOfWeek: scheduleKind == .weekly ? selectedDays : nil,
-                    intervalMinutes: nil
+                    intervalMinutes: nil,
+                    recurrenceInterval: 1,
+                    dayOfMonth: nil,
+                    anchorMonth: nil,
+                    anchorDay: nil
                 )
 
                 let suffix = reminderTimes.count > 1 ? " (\(idx + 1)/\(reminderTimes.count))" : ""
@@ -1402,7 +1413,6 @@ struct EditHabitSheet: View {
                     nextRunAt: firstRun,
                     schedule: schedule,
                     timezone: TimeZone.current.identifier,
-                    serverId: nil,
                     linkedKind: .habit,
                     linkedHabitId: habit.id
                 )

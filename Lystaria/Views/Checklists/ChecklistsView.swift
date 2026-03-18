@@ -44,7 +44,7 @@ struct ChecklistsView: View {
         // without any SwiftData writes happening mid-drag.
         if !dragBuffer.isEmpty { return dragBuffer }
         guard let c = activeChecklist else { return [] }
-        return c.items.sorted { $0.sortOrder < $1.sortOrder }
+        return (c.items ?? []).sorted { $0.sortOrder < $1.sortOrder }
     }
 
     private var filteredItems: [ChecklistItem] {
@@ -447,7 +447,7 @@ struct ChecklistsView: View {
         guard let c = activeChecklist else {
             ensureDefaultChecklistIfNeeded()
             guard let checklist = activeChecklist else { return }
-            let nextOrder = (checklist.items.map { $0.sortOrder }.max() ?? -1) + 1
+            let nextOrder = ((checklist.items ?? []).map { $0.sortOrder }.max() ?? -1) + 1
 
             let item = ChecklistItem(
                 text: "",
@@ -461,7 +461,7 @@ struct ChecklistsView: View {
             tab = .active
             return
         }
-        let nextOrder = (c.items.map { $0.sortOrder }.max() ?? -1) + 1
+        let nextOrder = ((c.items ?? []).map { $0.sortOrder }.max() ?? -1) + 1
 
         let item = ChecklistItem(
             text: "",
@@ -655,7 +655,7 @@ private struct ChecklistItemCard: View {
     private func moveItem(to checklist: Checklist) {
         guard let currentChecklist = item.checklist else { return }
 
-        let nextOrder = (checklist.items.map { $0.sortOrder }.max() ?? -1) + 1
+        let nextOrder = ((checklist.items ?? []).map { $0.sortOrder }.max() ?? -1) + 1
         item.checklist = checklist
         item.sortOrder = nextOrder
 

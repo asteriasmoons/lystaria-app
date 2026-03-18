@@ -13,18 +13,18 @@ final class UserSettings {
 
     // If true: always use the device timezone (TimeZone.current.identifier)
     // If false: use timezoneIdentifier below.
-    var useSystemTimezone: Bool
+    var useSystemTimezone: Bool = true
 
     // IANA timezone id like "America/Chicago"
     // Only used when useSystemTimezone == false
-    var timezoneIdentifier: String
+    var timezoneIdentifier: String = TimeZone.current.identifier
 
     // Timestamps
-    var createdAt: Date
-    var updatedAt: Date
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
 
     // Optional future sync flag
-    var needsSync: Bool
+    var needsSync: Bool = false
 
     init(
         serverId: String? = nil,

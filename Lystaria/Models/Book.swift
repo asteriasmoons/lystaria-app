@@ -33,15 +33,15 @@ final class Book {
     var deletedAt: Date?
     
     // MARK: - Fields
-    var title: String
-    var author: String
-    var shortSummary: String
-    var rating: Int                 // 0–5
-    var statusRaw: String           // stored as raw string for SwiftData
+    var title: String = ""
+    var author: String = ""
+    var shortSummary: String = ""
+    var rating: Int = 0             // 0–5
+    var statusRaw: String = BookStatus.tbr.rawValue   // stored as raw string for SwiftData
     var totalPages: Int?
     var currentPage: Int?
-    var createdAt: Date
-    var updatedAt: Date
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
     
     // MARK: - Computed
     var status: BookStatus {

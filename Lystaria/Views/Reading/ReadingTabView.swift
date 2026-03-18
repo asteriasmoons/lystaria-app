@@ -19,7 +19,8 @@ extension View {
 struct ReadingTabView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Book.createdAt, order: .reverse) private var books: [Book]
-    @AppStorage("currentUserId") private var currentUserId: String = "local-user"
+    @Query(sort: \ReadingStats.updatedAt, order: .reverse) private var readingStats: [ReadingStats]
+    @EnvironmentObject private var appState: AppState
 
     @State private var showAddBook = false
     @State private var editingBook: Book? = nil
@@ -33,18 +34,27 @@ struct ReadingTabView: View {
     @State private var tagFilter: String? = nil
     @State private var selectedStatus: BookStatus? = nil // nil means All
 
-    // ── Streak persistence via @AppStorage (UserDefaults) ──────────────────
-    // This is the UI source of truth — instant, synchronous, survives anything.
-    // The SwiftData record is kept in sync purely for server-side needsSync.
-    @AppStorage("readingStreakDays") private var streakDays: Int = 0
-    @AppStorage("readingLastCheckIn") private var lastCheckInTimestamp: Double = 0
+    private var currentUserId: String? {
+        appState.currentAppleUserId
+    }
 
-    // SwiftData record — only used for server sync, NOT for display.
-    @State private var syncRecord: ReadingStats? = nil
+    private var currentStats: ReadingStats? {
+        guard let currentUserId else { return nil }
+        let matches = readingStats.filter { $0.userId == currentUserId }
+        return matches.max(by: { $0.updatedAt < $1.updatedAt })
+    }
+
+    private var streakDays: Int {
+        currentStats?.streakDays ?? 0
+    }
+
+    private var lastCheckInDate: Date? {
+        currentStats?.lastCheckInDate
+    }
 
     private var alreadyCheckedInToday: Bool {
-        guard lastCheckInTimestamp > 0 else { return false }
-        return Calendar.current.isDateInToday(Date(timeIntervalSince1970: lastCheckInTimestamp))
+        guard let lastCheckInDate else { return false }
+        return Calendar.current.isDateInToday(lastCheckInDate)
     }
 
     @ViewBuilder
@@ -124,417 +134,7 @@ struct ReadingTabView: View {
     var body: some View {
         ZStack {
             LystariaBackground()
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    headerSection
-                    topToggleSection
-
-                    // Reading streak card area (placeholder for your existing content)
-                    GlassCard {
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack(alignment: .center, spacing: 12) {
-                                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                                    Image("prizefill")
-                                        .renderingMode(.template)
-                                        .resizable()
-                                        .scaledToFit()
-                                        .frame(width: 24, height: 24)
-                                        .foregroundStyle(.white)
-                                        .padding(.top, 1)
-
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        GradientTitle(text: "Reading Streak", font: .system(size: 14, weight: .bold))
-
-                                        Text("\(streakDays) \(streakDays == 1 ? "day" : "days") in a row")
-                                            .font(.subheadline)
-                                            .foregroundStyle(LColors.textSecondary)
-                                    }
-                                }
-
-                                Spacer()
-
-                                // Frosty glass box with big count (no GeometryReader)
-                                HStack {
-                                    Text("\(streakDays)")
-                                        .font(.system(size: 40, weight: .black))
-                                        .minimumScaleFactor(0.7)
-                                        .foregroundStyle(LColors.textPrimary)
-                                }
-                                .padding(.horizontal, 16)
-                                .frame(height: 56)
-                                .background(LColors.glassSurface)
-                                .clipShape(RoundedRectangle(cornerRadius: 14))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 14)
-                                        .stroke(LColors.glassBorder, lineWidth: 1)
-                                )
-                            }
-
-                            HStack(spacing: 12) {
-                                Button {
-                                    do {
-                                        let didCheckIn = try ReadingCheckInWriter.checkInToday(modelContext: modelContext)
-                                        if didCheckIn {
-                                            streakDays = UserDefaults.standard.integer(forKey: ReadingCheckInWriter.streakDaysKey)
-                                            lastCheckInTimestamp = UserDefaults.standard.double(forKey: ReadingCheckInWriter.lastCheckInKey)
-                                            loadOrCreateSyncRecord()
-                                            print("[ReadingTabView] Check-in: streak is now \(streakDays)")
-                                        } else {
-                                            print("[ReadingTabView] Check-in ignored (already checked in today)")
-                                        }
-                                    } catch {
-                                        print("[ReadingTabView] Failed to check in: \(error)")
-                                    }
-                                } label: {
-                                    HStack(spacing: 8) {
-                                        Image(systemName: alreadyCheckedInToday ? "checkmark.circle" : "checkmark.circle.fill")
-                                        Text(alreadyCheckedInToday ? "Checked In" : "Check In")
-                                            .font(.system(size: 14, weight: .semibold))
-                                    }
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 10)
-                                    .background(alreadyCheckedInToday ? Color.gray.opacity(0.35) : LColors.accent)
-                                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .stroke(LColors.glassBorder, lineWidth: 1)
-                                    )
-                                }
-                                .buttonStyle(.plain)
-                                .disabled(alreadyCheckedInToday)
-
-                                Button {
-                                    // 1. AppStorage — immediate.
-                                    streakDays = 0
-                                    lastCheckInTimestamp = 0
-                                    print("[ReadingTabView] Reset: streak is now 0")
-
-                                    // 2. SwiftData — sync.
-                                    if let record = syncRecord {
-                                        record.streakDays = 0
-                                        record.lastCheckInDate = nil
-                                        record.updatedAt = Date()
-                                        record.needsSync = true
-                                        try? modelContext.save()
-                                    }
-                                } label: {
-                                    HStack(spacing: 8) {
-                                        Image(systemName: "arrow.counterclockwise")
-                                        Text("Reset")
-                                            .font(.system(size: 14, weight: .semibold))
-                                    }
-                                    .foregroundStyle(LColors.textPrimary)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 10)
-                                    .background(Color.white.opacity(0.08))
-                                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .stroke(LColors.glassBorder, lineWidth: 1)
-                                    )
-                                }
-                                .buttonStyle(.plain)
-
-                                Spacer()
-                            }
-                        }
-                    }
-
-                    // Filter pills for All + every BookStatus
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 10) {
-                            Pill(title: "All", on: selectedStatus == nil) {
-                                withAnimation { selectedStatus = nil }
-                            }
-
-                            ForEach(BookStatus.allCases, id: \.self) { status in
-                                Pill(title: status.label, on: selectedStatus == status) {
-                                    withAnimation { selectedStatus = status }
-                                }
-                            }
-                        }
-                    }
-                    
-                    // TAG FILTER BAR
-                    if let currentTag = tagFilter {
-                        HStack {
-                            HStack(spacing: 6) {
-                                Image(systemName: "tag.fill")
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(LColors.textSecondary)
-
-                                Text("Filtered by #\(currentTag)")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(LColors.textPrimary)
-                            }
-
-                            Spacer()
-
-                            Button {
-                                withAnimation {
-                                    tagFilter = nil
-                                }
-                            } label: {
-                                Text("Clear")
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(LColors.textPrimary)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(Color.white.opacity(0.08))
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(LColors.glassBorder, lineWidth: 1)
-                                    )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .padding(12)
-                        .background(LColors.glassSurface)
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 14)
-                                .stroke(LColors.glassBorder, lineWidth: 1)
-                        )
-                    }
-
-                    // Books list (basic example – keep your existing cards if you have them)
-                    VStack(spacing: 14) {
-                        // Apply status and tag filters, sort so .reading status is always at the top
-                        let filteredBooks = books.filter { book in
-                            guard book.deletedAt == nil else { return false }
-                            let statusMatches = selectedStatus.map { book.status == $0 } ?? true
-                            let tagMatches: Bool
-                            if let currentTag = tagFilter, !currentTag.isEmpty {
-                                // Assuming Book has a `tags: [String]` or similar; if not, this will simply default to true
-                                if let tags = (book as AnyObject).value(forKey: "tags") as? [String] {
-                                    tagMatches = tags.contains(where: { $0.caseInsensitiveCompare(currentTag) == .orderedSame })
-                                } else {
-                                    tagMatches = true
-                                }
-                            } else {
-                                tagMatches = true
-                            }
-                            return statusMatches && tagMatches
-                        }
-                        .sorted { a, b in
-                            if a.status == .reading && b.status != .reading { return true }
-                            if a.status != .reading && b.status == .reading { return false }
-                            return a.createdAt > b.createdAt
-                        }
-
-                        let visibleBooks = Array(filteredBooks.prefix(visibleBookCount))
-                        if filteredBooks.isEmpty {
-                            GlassCard {
-                                Text("No books yet.")
-                                    .foregroundStyle(LColors.textSecondary)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 18)
-                            }
-                        } else {
-                            ForEach(visibleBooks) { book in
-                                GlassCard {
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        HStack(alignment: .firstTextBaseline, spacing: 10) {
-                                            Text(book.title)
-                                                .font(.system(size: 15, weight: .bold))
-                                                .foregroundStyle(LColors.textPrimary)
-
-                                            Spacer(minLength: 8)
-
-                                            StatusBadge(status: book.status)
-                                        }
-
-                                        if !book.author.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                            Text(book.author)
-                                                .font(.subheadline)
-                                                .foregroundStyle(LColors.textSecondary)
-                                        }
-
-                                        // Clickable star rating (tap to set, tap same star again to clear)
-                                        HStack(spacing: 8) {
-                                            ForEach(1...5, id: \.self) { i in
-                                                Button {
-                                                    let newValue = (book.rating == i) ? 0 : i
-                                                    book.rating = newValue
-                                                    markBookDirty(book)
-                                                    try? modelContext.save()
-                                                } label: {
-                                                    Image("starfill")
-                                                        .renderingMode(.template)
-                                                        .resizable()
-                                                        .scaledToFit()
-                                                        .frame(width: 16, height: 16)
-                                                        .foregroundStyle(i <= book.rating ? Color.white : LColors.textSecondary.opacity(0.35))
-                                                }
-                                                .buttonStyle(.plain)
-                                                .accessibilityLabel("Rate \(i) star\(i == 1 ? "" : "s")")
-                                            }
-                                        }
-                                        .padding(.top, 2)
-
-                                        if !book.shortSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                            Text(book.shortSummary)
-                                                .font(.subheadline)
-                                                .foregroundStyle(LColors.textSecondary)
-                                                .lineLimit(8)
-                                        }
-
-                                        // Progress bar: shows only if currentPage/totalPages available and valid
-                                        if book.status == .reading,
-                                           let total = book.totalPages, total > 0,
-                                           let current = book.currentPage, current >= 0 {
-                                            let clampedCurrent = min(max(current, 0), total)
-                                            let progress = CGFloat(book.progressPercent)
-
-                                            VStack(alignment: .leading, spacing: 8) {
-                                                // Track + gradient fill
-                                                ZStack(alignment: .leading) {
-                                                    RoundedRectangle(cornerRadius: 6)
-                                                        .fill(Color.white.opacity(0.10))
-                                                        .frame(height: 10)
-                                                        .overlay(
-                                                            RoundedRectangle(cornerRadius: 6)
-                                                                .stroke(LColors.glassBorder, lineWidth: 1)
-                                                        )
-
-                                                    GeometryReader { geo in
-                                                        let width = max(0, min(geo.size.width * progress, geo.size.width))
-                                                        RoundedRectangle(cornerRadius: 6)
-                                                            .fill(AnyShapeStyle(LGradients.blue))
-                                                            .frame(width: width, height: 10)
-                                                    }
-                                                    .frame(height: 10)
-                                                }
-
-                                                // Page count label
-                                                HStack {
-                                                    Text("\(clampedCurrent) / \(total) pages")
-                                                        .font(.system(size: 12, weight: .semibold))
-                                                        .foregroundStyle(LColors.textSecondary)
-
-                                                    Spacer()
-
-                                                    Text("\(Int((progress * 100).rounded()))%")
-                                                        .font(.system(size: 12, weight: .semibold))
-                                                        .foregroundStyle(LColors.textSecondary)
-                                                }
-                                            }
-                                            .padding(.top, 6)
-                                        }
-
-                                        // Bottom actions
-                                        HStack(spacing: 10) {
-                                            Button {
-                                                editingBook = book
-                                            } label: {
-                                                HStack(spacing: 8) {
-                                                    Image(systemName: "pencil")
-                                                    Text("Edit")
-                                                        .font(.system(size: 13, weight: .semibold))
-                                                }
-                                                .foregroundStyle(LColors.textPrimary)
-                                                .padding(.horizontal, 12)
-                                                .padding(.vertical, 9)
-                                                .background(Color.white.opacity(0.08))
-                                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                                                .overlay(
-                                                    RoundedRectangle(cornerRadius: 12)
-                                                        .stroke(LColors.glassBorder, lineWidth: 1)
-                                                )
-                                            }
-                                            .buttonStyle(.plain)
-
-                                            // Page step buttons (tap only)
-                                            if book.status == .reading,
-                                               let total = book.totalPages, total > 0,
-                                               let current = book.currentPage {
-
-                                                Button {
-                                                    let newValue = max(current - 1, 0)
-                                                    if newValue != current {
-                                                        book.currentPage = newValue
-                                                        book.updatedAt = Date()
-                                                        book.needsSync = true
-                                                        try? modelContext.save()
-                                                    }
-                                                } label: {
-                                                    Image("chevrondownfill")
-                                                        .renderingMode(.template)
-                                                        .resizable()
-                                                        .scaledToFit()
-                                                        .frame(width: 14, height: 14)
-                                                        .foregroundStyle(.white)
-                                                        .frame(width: 38, height: 38)
-                                                        .background(Color.white.opacity(0.08))
-                                                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                                                        .overlay(
-                                                            RoundedRectangle(cornerRadius: 12)
-                                                                .stroke(LColors.glassBorder, lineWidth: 1)
-                                                        )
-                                                }
-                                                .buttonStyle(.plain)
-
-                                                Button {
-                                                    let newValue = min(current + 1, total)
-                                                    if newValue != current {
-                                                        book.currentPage = newValue
-                                                        book.updatedAt = Date()
-                                                        book.needsSync = true
-                                                        try? modelContext.save()
-                                                    }
-                                                } label: {
-                                                    Image("chevronupfill")
-                                                        .renderingMode(.template)
-                                                        .resizable()
-                                                        .scaledToFit()
-                                                        .frame(width: 14, height: 14)
-                                                        .foregroundStyle(.white)
-                                                        .frame(width: 38, height: 38)
-                                                        .background(Color.white.opacity(0.08))
-                                                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                                                        .overlay(
-                                                            RoundedRectangle(cornerRadius: 12)
-                                                                .stroke(LColors.glassBorder, lineWidth: 1)
-                                                        )
-                                                }
-                                                .buttonStyle(.plain)
-                                            }
-
-                                            GradientCapsuleButton(title: "Delete", icon: "trashfill") {
-                                                bookPendingDeletion = book
-                                                showDeleteConfirm = true
-                                            }
-
-
-                                            Spacer()
-                                        }
-                                        .padding(.top, 10)
-                                    }
-                                }
-                            }
-                        }
-
-                            if filteredBooks.count > visibleBooks.count {
-                                HStack {
-                                    Spacer()
-                                    LoadMoreButton {
-                                        visibleBookCount += 4
-                                    }
-                                    Spacer()
-                                }
-                                .padding(.top, 6)
-                            }
-                    }
-
-                    Spacer(minLength: 96)
-                }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 140)
-            }
-
+            mainScrollContent
             readingPopupsOverlay
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showBookSummaryPopup)
@@ -557,7 +157,6 @@ struct ReadingTabView: View {
             .padding(.bottom, 26)
         }
         .zIndex(9999)
-        
         .overlay {
             if showAddBook {
                 AddBookSheet(
@@ -591,12 +190,11 @@ struct ReadingTabView: View {
         .onChange(of: tagFilter) { _, _ in
             visibleBookCount = 4
         }
-        
         .alert("Delete book?", isPresented: $showDeleteConfirm) {
             Button("Delete", role: .destructive) {
                 if let b = bookPendingDeletion {
                     b.deletedAt = Date()
-                    markBookDirty(b)
+                    markBookUpdated(b)
                     try? modelContext.save()
                 }
                 bookPendingDeletion = nil
@@ -608,25 +206,422 @@ struct ReadingTabView: View {
             Text("This will permanently remove this book.")
         }
         .onAppear {
-            if currentUserId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || currentUserId == "local-user" {
-                currentUserId = UUID().uuidString
-            }
-            loadOrCreateSyncRecord()
+            ensureReadingStatsRecordExists()
             visibleBookCount = 4
         }
     }
 
-    /// Marks a book as changed so sync will push it to Supabase.
-    private func markBookDirty(_ book: Book) {
-        book.updatedAt = Date()
-        book.needsSync = true
+    private var mainScrollContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                headerSection
+                topToggleSection
+
+                GlassCard {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(alignment: .center, spacing: 12) {
+                            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                                Image("booksfill")
+                                    .renderingMode(.template)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 24, height: 24)
+                                    .foregroundStyle(.white)
+                                    .padding(.top, 1)
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    GradientTitle(text: "Reading Streak", font: .system(size: 14, weight: .bold))
+
+                                    Text("\(streakDays) \(streakDays == 1 ? "day" : "days") in a row")
+                                        .font(.subheadline)
+                                        .foregroundStyle(LColors.textSecondary)
+                                }
+                            }
+
+                            Spacer()
+
+                            HStack {
+                                Text("\(streakDays)")
+                                    .font(.system(size: 40, weight: .black))
+                                    .minimumScaleFactor(0.7)
+                                    .foregroundStyle(LColors.textPrimary)
+                            }
+                            .padding(.horizontal, 16)
+                            .frame(height: 56)
+                            .background(LColors.glassSurface)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                        }
+
+                        HStack(spacing: 12) {
+                            Button {
+                                do {
+                                    guard let currentUserId else {
+                                        print("[ReadingTabView] No signed-in Apple user ID available")
+                                        return
+                                    }
+                                    let didCheckIn = try ReadingCheckInWriter.checkInToday(
+                                        modelContext: modelContext,
+                                        userId: currentUserId
+                                    )
+                                    if didCheckIn {
+                                        print("[ReadingTabView] Reading check-in complete")
+                                    } else {
+                                        print("[ReadingTabView] Check-in ignored (already checked in today)")
+                                    }
+                                } catch {
+                                    print("[ReadingTabView] Failed to check in: \(error)")
+                                }
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: alreadyCheckedInToday ? "checkmark.circle" : "checkmark.circle.fill")
+                                    Text(alreadyCheckedInToday ? "Checked In" : "Check In")
+                                        .font(.system(size: 14, weight: .semibold))
+                                }
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .background(alreadyCheckedInToday ? Color.gray.opacity(0.35) : LColors.accent)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(alreadyCheckedInToday)
+
+                            Button {
+                                if let record = currentStats {
+                                    record.streakDays = 0
+                                    record.lastCheckInDate = nil
+                                    record.updatedAt = Date()
+                                    try? modelContext.save()
+                                    print("[ReadingTabView] Reset: streak is now 0")
+                                }
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "arrow.counterclockwise")
+                                    Text("Reset")
+                                        .font(.system(size: 14, weight: .semibold))
+                                }
+                                .foregroundStyle(LColors.textPrimary)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .background(Color.white.opacity(0.08))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                )
+                            }
+                            .buttonStyle(.plain)
+
+                            Spacer()
+                        }
+                    }
+                }
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        Pill(title: "All", on: selectedStatus == nil) {
+                            withAnimation { selectedStatus = nil }
+                        }
+
+                        ForEach(BookStatus.allCases, id: \.self) { status in
+                            Pill(title: status.label, on: selectedStatus == status) {
+                                withAnimation { selectedStatus = status }
+                            }
+                        }
+                    }
+                }
+
+                if let currentTag = tagFilter {
+                    HStack {
+                        HStack(spacing: 6) {
+                            Image(systemName: "tag.fill")
+                                .font(.system(size: 12))
+                                .foregroundStyle(LColors.textSecondary)
+
+                            Text("Filtered by #\(currentTag)")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(LColors.textPrimary)
+                        }
+
+                        Spacer()
+
+                        Button {
+                            withAnimation {
+                                tagFilter = nil
+                            }
+                        } label: {
+                            Text("Clear")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(LColors.textPrimary)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Color.white.opacity(0.08))
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(12)
+                    .background(LColors.glassSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .stroke(LColors.glassBorder, lineWidth: 1)
+                    )
+                }
+
+                booksSection
+
+                Spacer(minLength: 96)
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 140)
+        }
     }
 
-    /// Loads (or creates) the SwiftData record used for server sync.
-    /// If the server-synced record has a HIGHER streak than local AppStorage
-    /// (e.g. synced from another device), adopt it.
-    private func loadOrCreateSyncRecord() {
-        let uid = currentUserId
+    private var booksSection: some View {
+        VStack(spacing: 14) {
+            let filteredBooks = books.filter { book in
+                guard book.deletedAt == nil else { return false }
+                let statusMatches = selectedStatus.map { book.status == $0 } ?? true
+                let tagMatches: Bool
+                if let currentTag = tagFilter, !currentTag.isEmpty {
+                    if let tags = (book as AnyObject).value(forKey: "tags") as? [String] {
+                        tagMatches = tags.contains(where: { $0.caseInsensitiveCompare(currentTag) == .orderedSame })
+                    } else {
+                        tagMatches = true
+                    }
+                } else {
+                    tagMatches = true
+                }
+                return statusMatches && tagMatches
+            }
+            .sorted { a, b in
+                if a.status == .reading && b.status != .reading { return true }
+                if a.status != .reading && b.status == .reading { return false }
+                return a.createdAt > b.createdAt
+            }
+
+            let visibleBooks = Array(filteredBooks.prefix(visibleBookCount))
+
+            if filteredBooks.isEmpty {
+                GlassCard {
+                    Text("No books yet.")
+                        .foregroundStyle(LColors.textSecondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 18)
+                }
+            } else {
+                ForEach(visibleBooks) { book in
+                    GlassCard {
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                                Text(book.title)
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundStyle(LColors.textPrimary)
+
+                                Spacer(minLength: 8)
+
+                                StatusBadge(status: book.status)
+                            }
+
+                            if !book.author.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Text(book.author)
+                                    .font(.subheadline)
+                                    .foregroundStyle(LColors.textSecondary)
+                            }
+
+                            HStack(spacing: 8) {
+                                ForEach(1...5, id: \.self) { i in
+                                    Button {
+                                        let newValue = (book.rating == i) ? 0 : i
+                                        book.rating = newValue
+                                        markBookUpdated(book)
+                                        try? modelContext.save()
+                                    } label: {
+                                        Image("starfill")
+                                            .renderingMode(.template)
+                                            .resizable()
+                                            .scaledToFit()
+                                            .frame(width: 16, height: 16)
+                                            .foregroundStyle(i <= book.rating ? Color.white : LColors.textSecondary.opacity(0.35))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel("Rate \(i) star\(i == 1 ? "" : "s")")
+                                }
+                            }
+                            .padding(.top, 2)
+
+                            if !book.shortSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Text(book.shortSummary)
+                                    .font(.subheadline)
+                                    .foregroundStyle(LColors.textSecondary)
+                                    .lineLimit(8)
+                            }
+
+                            if book.status == .reading,
+                               let total = book.totalPages, total > 0,
+                               let current = book.currentPage, current >= 0 {
+                                let clampedCurrent = min(max(current, 0), total)
+                                let progress = CGFloat(book.progressPercent)
+
+                                VStack(alignment: .leading, spacing: 8) {
+                                    ZStack(alignment: .leading) {
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .fill(Color.white.opacity(0.10))
+                                            .frame(height: 10)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 6)
+                                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                            )
+
+                                        GeometryReader { geo in
+                                            let width = max(0, min(geo.size.width * progress, geo.size.width))
+                                            RoundedRectangle(cornerRadius: 6)
+                                                .fill(AnyShapeStyle(LGradients.blue))
+                                                .frame(width: width, height: 10)
+                                        }
+                                        .frame(height: 10)
+                                    }
+
+                                    HStack {
+                                        Text("\(clampedCurrent) / \(total) pages")
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundStyle(LColors.textSecondary)
+
+                                        Spacer()
+
+                                        Text("\(Int((progress * 100).rounded()))%")
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundStyle(LColors.textSecondary)
+                                    }
+                                }
+                                .padding(.top, 6)
+                            }
+
+                            HStack(spacing: 10) {
+                                Button {
+                                    editingBook = book
+                                } label: {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "pencil")
+                                        Text("Edit")
+                                            .font(.system(size: 13, weight: .semibold))
+                                    }
+                                    .foregroundStyle(LColors.textPrimary)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 9)
+                                    .background(Color.white.opacity(0.08))
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(LColors.glassBorder, lineWidth: 1)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+
+                                if book.status == .reading,
+                                   let total = book.totalPages, total > 0,
+                                   let current = book.currentPage {
+
+                                    Button {
+                                        let newValue = max(current - 1, 0)
+                                        if newValue != current {
+                                            book.currentPage = newValue
+                                            book.updatedAt = Date()
+                                            try? modelContext.save()
+                                        }
+                                    } label: {
+                                        Image("chevrondownfill")
+                                            .renderingMode(.template)
+                                            .resizable()
+                                            .scaledToFit()
+                                            .frame(width: 14, height: 14)
+                                            .foregroundStyle(.white)
+                                            .frame(width: 38, height: 38)
+                                            .background(Color.white.opacity(0.08))
+                                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 12)
+                                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                            )
+                                    }
+                                    .buttonStyle(.plain)
+
+                                    Button {
+                                        let newValue = min(current + 1, total)
+                                        if newValue != current {
+                                            book.currentPage = newValue
+                                            book.updatedAt = Date()
+                                            try? modelContext.save()
+                                        }
+                                    } label: {
+                                        Image("chevronupfill")
+                                            .renderingMode(.template)
+                                            .resizable()
+                                            .scaledToFit()
+                                            .frame(width: 14, height: 14)
+                                            .foregroundStyle(.white)
+                                            .frame(width: 38, height: 38)
+                                            .background(Color.white.opacity(0.08))
+                                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 12)
+                                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                            )
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+
+                                GradientCapsuleButton(title: "Delete", icon: "trashfill") {
+                                    bookPendingDeletion = book
+                                    showDeleteConfirm = true
+                                }
+
+                                Spacer()
+                            }
+                            .padding(.top, 10)
+                        }
+                    }
+                }
+            }
+
+            if filteredBooks.count > visibleBooks.count {
+                HStack {
+                    Spacer()
+                    LoadMoreButton {
+                        visibleBookCount += 4
+                    }
+                    Spacer()
+                }
+                .padding(.top, 6)
+            }
+        }
+    }
+
+    /// Marks a book as locally updated.
+    private func markBookUpdated(_ book: Book) {
+        book.updatedAt = Date()
+    }
+
+    /// Ensures there is exactly one ReadingStats record for the current user.
+    private func ensureReadingStatsRecordExists() {
+        guard let uid = currentUserId, !uid.isEmpty else {
+            print("[ReadingTabView] No signed-in Apple user ID available")
+            return
+        }
+
         var descriptor = FetchDescriptor<ReadingStats>(
             predicate: #Predicate<ReadingStats> { record in
                 record.userId == uid
@@ -638,39 +633,20 @@ struct ReadingTabView: View {
             let matches = try modelContext.fetch(descriptor)
 
             if matches.isEmpty {
-                let new = ReadingStats(userId: uid, streakDays: streakDays)
-                if lastCheckInTimestamp > 0 {
-                    new.lastCheckInDate = Date(timeIntervalSince1970: lastCheckInTimestamp)
-                }
+                let new = ReadingStats(userId: uid, streakDays: 0)
                 modelContext.insert(new)
                 try modelContext.save()
-                syncRecord = new
-                print("[ReadingTabView] Created sync record for userId=\(uid)")
-            } else {
-                let best = matches.max(by: { $0.streakDays < $1.streakDays }) ?? matches[0]
-                syncRecord = best
-
-                // If the server record has a higher streak (synced from another device),
-                // bring AppStorage up to date.
-                if best.streakDays > streakDays {
-                    streakDays = best.streakDays
-                    if let d = best.lastCheckInDate {
-                        lastCheckInTimestamp = d.timeIntervalSince1970
-                    }
-                    print("[ReadingTabView] Adopted server streak=\(best.streakDays)")
+                print("[ReadingTabView] Created ReadingStats record for userId=\(uid)")
+            } else if matches.count > 1 {
+                let best = matches.max(by: { $0.updatedAt < $1.updatedAt }) ?? matches[0]
+                for dupe in matches where dupe.persistentModelID != best.persistentModelID {
+                    modelContext.delete(dupe)
                 }
-
-                // Purge duplicates.
-                if matches.count > 1 {
-                    for dupe in matches where dupe.persistentModelID != best.persistentModelID {
-                        modelContext.delete(dupe)
-                    }
-                    try modelContext.save()
-                    print("[ReadingTabView] Cleaned up \(matches.count - 1) duplicate(s)")
-                }
+                try modelContext.save()
+                print("[ReadingTabView] Cleaned up \(matches.count - 1) duplicate ReadingStats record(s)")
             }
         } catch {
-            print("[ReadingTabView] Failed to load sync record: \(error)")
+            print("[ReadingTabView] Failed to ensure ReadingStats record: \(error)")
         }
     }
 
@@ -866,17 +842,17 @@ struct AddBookSheet: View {
             book.currentPage = nil
         }
 
-        markBookDirty(book)
+        markBookUpdated(book)
 
         modelContext.insert(book)
         try? modelContext.save()
         closeAction()
     }
 
-    private func markBookDirty(_ book: Book) {
+    private func markBookUpdated(_ book: Book) {
         book.updatedAt = Date()
-        book.needsSync = true
     }
+
 }
 
 // MARK: - Edit Book Sheet
@@ -1067,14 +1043,12 @@ struct EditBookSheet: View {
             book.currentPage = nil
         }
 
-        markBookDirty(book)
+        markBookUpdated(book)
         try? modelContext.save()
         closeAction()
     }
-
-    private func markBookDirty(_ book: Book) {
+    private func markBookUpdated(_ book: Book) {
         book.updatedAt = Date()
-        book.needsSync = true
     }
 }
 

@@ -250,8 +250,7 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
         content.badge = nil  // iOS manages badge count
         
         // Stable identifier used by notification action handling.
-        // Prefer serverId, otherwise fall back to persistentModelID description.
-        let idString = reminder.serverId ?? String(describing: reminder.persistentModelID)
+        let idString = String(describing: reminder.persistentModelID)
         // Keep BOTH keys for one release cycle so old action handlers still work.
         content.userInfo = [
             "reminderID": idString,
@@ -463,8 +462,7 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
         content.categoryIdentifier = Self.reminderCategoryID
 
         // Stable identifier used by notification action handling.
-        // Prefer serverId, otherwise fall back to persistentModelID description.
-        let idString = reminder.serverId ?? String(describing: reminder.persistentModelID)
+        let idString = String(describing: reminder.persistentModelID)
         // Keep BOTH keys for one release cycle so old action handlers still work.
         content.userInfo = [
             "reminderID": idString,
@@ -1069,9 +1067,8 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
         // Do NOT use hashValue for identifiers. Swift hash values are not stable across launches,
         // which leads to "orphaned" notifications that never get cancelled (exactly what your logs show).
         //
-        // Prefer a stable serverId (UUID string). If that's not available, fall back to the
-        // persistentModelID description (stable for the same store).
-        let stable = reminder.serverId ?? String(describing: reminder.persistentModelID)
+        // Use the reminder's SwiftData persistent model identifier string.
+        let stable = String(describing: reminder.persistentModelID)
         // Make it notification-safe (remove spaces and punctuation that can vary)
         let safe = stable
             .replacingOccurrences(of: " ", with: "")

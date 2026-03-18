@@ -20,13 +20,30 @@ final class JournalEntry {
     var book: JournalBook?
 
     // MARK: - Fields
-    var title: String
-    var body: String
+    var title: String = ""
+    var body: String = ""
     var bodyData: Data?
-    var tags: [String]
+    var tagsStorage: String = "[]"
 
-    var createdAt: Date
-    var updatedAt: Date
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+
+    var tags: [String] {
+        get {
+            guard let data = tagsStorage.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([String].self, from: data)
+            else { return [] }
+            return decoded
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue),
+               let encoded = String(data: data, encoding: .utf8) {
+                tagsStorage = encoded
+            } else {
+                tagsStorage = "[]"
+            }
+        }
+    }
 
     // MARK: - Sync helpers
     func markDirty() {
@@ -84,7 +101,7 @@ final class JournalEntry {
             withRootObject: bodyAttributedText,
             requiringSecureCoding: false
         )
-        self.tags = tags
+        self.tagsStorage = "[]"
         self.book = book
         self.serverId = serverId
         self.userId = userId
@@ -93,5 +110,6 @@ final class JournalEntry {
         self.deletedAt = deletedAt
         self.createdAt = Date()
         self.updatedAt = Date()
+        self.tags = tags
     }
 }

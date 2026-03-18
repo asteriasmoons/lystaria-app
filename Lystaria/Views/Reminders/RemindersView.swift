@@ -49,214 +49,8 @@ struct RemindersView: View {
         NavigationStack {
             ZStack {
                 LystariaBackground()
-
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
-
-                        // Header
-                        VStack(spacing: 0) {
-                            HStack {
-                                GradientTitle(text: greeting, font: .title.bold())
-                                Spacer()
-
-                                HStack(spacing: 8) {
-                                    Button {
-                                        showNewReminder = true
-                                    } label: {
-                                        ZStack {
-                                            Circle()
-                                                .fill(Color.white.opacity(0.08))
-                                                .overlay(
-                                                    Circle().stroke(LColors.glassBorder, lineWidth: 1)
-                                                )
-                                                .frame(width: 34, height: 34)
-
-                                            Image(systemName: "plus")
-                                                .font(.system(size: 15, weight: .semibold))
-                                                .foregroundStyle(.white)
-                                        }
-                                    }
-                                    .buttonStyle(.plain)
-
-                                    NavigationLink {
-                                        StepCountView()
-                                            .preferredColorScheme(.dark)
-                                    } label: {
-                                        ZStack {
-                                            Circle()
-                                                .fill(Color.white.opacity(0.08))
-                                                .overlay(
-                                                    Circle().stroke(LColors.glassBorder, lineWidth: 1)
-                                                )
-                                                .frame(width: 34, height: 34)
-
-                                            Image("shoefill")
-                                                .renderingMode(.template)
-                                                .resizable()
-                                                .scaledToFit()
-                                                .frame(width: 16, height: 16)
-                                                .foregroundColor(.white)
-                                        }
-                                    }
-                                    .buttonStyle(.plain)
-                                    .onboardingTarget("stepsIcon")
-
-                                    NavigationLink {
-                                        WaterTrackingView()
-                                            .preferredColorScheme(.dark)
-                                    } label: {
-                                        ZStack {
-                                            Circle()
-                                                .fill(Color.white.opacity(0.08))
-                                                .overlay(
-                                                    Circle().stroke(LColors.glassBorder, lineWidth: 1)
-                                                )
-                                                .frame(width: 34, height: 34)
-
-                                            Image("glassfill")
-                                                .renderingMode(.template)
-                                                .resizable()
-                                                .scaledToFit()
-                                                .frame(width: 16, height: 16)
-                                                .foregroundColor(.white)
-                                        }
-                                    }
-                                    .buttonStyle(.plain)
-                                    .onboardingTarget("waterIcon")
-
-                                    Button {
-                                        showKanban = true
-                                    } label: {
-                                        ZStack {
-                                            Circle()
-                                                .fill(Color.white.opacity(0.08))
-                                                .overlay(
-                                                    Circle().stroke(LColors.glassBorder, lineWidth: 1)
-                                                )
-                                                .frame(width: 34, height: 34)
-
-                                            Image("blocksfill")
-                                                .renderingMode(.template)
-                                                .resizable()
-                                                .scaledToFit()
-                                                .frame(width: 16, height: 16)
-                                                .foregroundStyle(.white)
-                                        }
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                            .padding(.top, 24)
-
-                            Rectangle()
-                                .fill(LColors.glassBorder)
-                                .frame(height: 1)
-                                .padding(.top, 12)
-                        }
-
-
-                        // Filters
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(filterOptions, id: \.self) { opt in
-                                    let on = filter == opt
-                                    Button { filter = opt } label: {
-                                        Text(opt.uppercased())
-                                            .font(.system(size: 12, weight: .semibold))
-                                            .foregroundStyle(on ? .white : LColors.textPrimary)
-                                            .padding(.horizontal, 14)
-                                            .padding(.vertical, 8)
-                                            .background(on ? LColors.accent : Color.white.opacity(0.08))
-                                            .clipShape(Capsule())
-                                            .overlay(Capsule().stroke(on ? LColors.accent : LColors.glassBorder, lineWidth: 1))
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                        }
-
-                        // List
-                        VStack(spacing: 14) {
-                            if filtered.isEmpty {
-                                GlassCard {
-                                    Text("No reminders yet.")
-                                        .foregroundStyle(LColors.textSecondary)
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 20)
-                                }
-                            } else {
-                                ForEach(visibleReminders) { reminder in
-                                    let id = reminder.persistentModelID
-                                    ReminderCard(
-                                        reminder: reminder,
-                                        onDone: {
-                                            if let live = modelContext.model(for: id) as? LystariaReminder {
-                                                markDone(live)
-                                            }
-                                        },
-                                        onSnooze: {
-                                            if let live = modelContext.model(for: id) as? LystariaReminder {
-                                                snooze(live)
-                                            }
-                                        },
-                                        onEdit: { editingReminder = reminder },
-                                        onDelete: {
-                                            if let live = modelContext.model(for: id) as? LystariaReminder {
-                                                delete(live)
-                                            }
-                                        }
-                                    )
-                                }
-
-                                if filtered.count > 5 {
-                                    HStack {
-                                        Text("Showing \(min(visibleCount, filtered.count)) of \(filtered.count)")
-                                            .font(.system(size: 12, weight: .semibold))
-                                            .foregroundStyle(LColors.textSecondary)
-                                        Spacer()
-                                    }
-                                    .padding(.top, 2)
-
-                                    if visibleCount < filtered.count {
-                                        LoadMoreButton {
-                                            visibleCount += 5
-                                        }
-                                        .padding(.top, 4)
-                                    }
-                                }
-                            }
-                        }
-
-                        Spacer(minLength: 96)
-                    }
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 96)
-                }
-                .frame(maxWidth: .infinity)
-                .clipped()
-                
-
-                // ── Completion toast ──────────────────────────────
-                if let msg = toastMessage {
-                    VStack {
-                        Spacer()
-                        HStack(spacing: 10) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(LColors.success)
-                            Text(msg)
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(LColors.textPrimary)
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 14)
-                        .background(.ultraThinMaterial)
-                        .clipShape(Capsule())
-                        .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
-                        .padding(.bottom, 110)
-                    }
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .zIndex(99)
-                }
+                mainContent
+                toastOverlay
             }
             .animation(.spring(response: 0.4, dampingFraction: 0.8), value: toastMessage)
             .overlayPreferenceValue(OnboardingTargetKey.self) { anchors in
@@ -284,7 +78,6 @@ struct RemindersView: View {
                 KanbanView()
                     .preferredColorScheme(.dark)
             }
-            // Use a boolean-driven sheet so we DO NOT depend on Identifiable behavior.
             .overlay {
                 if let r = editingReminder {
                     EditReminderSheet(
@@ -298,22 +91,20 @@ struct RemindersView: View {
                     .zIndex(60)
                 }
             }
-            // Handle "Done ✓" tapped on the system notification banner
             .onReceive(NotificationCenter.default.publisher(for: .lystariaNotificationAction)) { note in
                 guard let info = note.userInfo,
                       let actionID = info["actionID"] as? String,
                       actionID == NotificationManager.doneActionID,
                       let userInfo = info["userInfo"] as? [String: Any] else { return }
 
-                // Resolve the reminder ONLY by stable ids.
                 let reminderID = userInfo["reminderID"] as? String
 
-                let match = allReminders.first { r in
-                    if let rid = reminderID {
-                        if let sid = r.serverId, sid == rid { return true }
+                let match = allReminders
+                    .filter { r in
+                        guard let rid = reminderID else { return false }
+                        return String(describing: r.persistentModelID) == rid || String(describing: r.id) == rid
                     }
-                    return false
-                }
+                    .first
 
                 if let reminder = match {
                     markDone(reminder)
@@ -336,6 +127,221 @@ struct RemindersView: View {
         }
     }
 
+    private var mainContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                headerSection
+                filtersSection
+                remindersSection
+                Spacer(minLength: 96)
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 96)
+        }
+        .frame(maxWidth: .infinity)
+        .clipped()
+    }
+
+    private var headerSection: some View {
+        VStack(spacing: 0) {
+            HStack {
+                GradientTitle(text: greeting, font: .title.bold())
+                Spacer()
+
+                HStack(spacing: 8) {
+                    Button {
+                        showNewReminder = true
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.08))
+                                .overlay(
+                                    Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                                )
+                                .frame(width: 34, height: 34)
+
+                            Image(systemName: "plus")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(.white)
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    NavigationLink {
+                        StepCountView()
+                            .preferredColorScheme(.dark)
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.08))
+                                .overlay(
+                                    Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                                )
+                                .frame(width: 34, height: 34)
+
+                            Image("shoefill")
+                                .renderingMode(.template)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 16, height: 16)
+                                .foregroundColor(.white)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .onboardingTarget("stepsIcon")
+
+                    NavigationLink {
+                        WaterTrackingView()
+                            .preferredColorScheme(.dark)
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.08))
+                                .overlay(
+                                    Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                                )
+                                .frame(width: 34, height: 34)
+
+                            Image("glassfill")
+                                .renderingMode(.template)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 16, height: 16)
+                                .foregroundColor(.white)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .onboardingTarget("waterIcon")
+
+                    Button {
+                        showKanban = true
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.08))
+                                .overlay(
+                                    Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                                )
+                                .frame(width: 34, height: 34)
+
+                            Image("blocksfill")
+                                .renderingMode(.template)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 16, height: 16)
+                                .foregroundStyle(.white)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.top, 24)
+
+            Rectangle()
+                .fill(LColors.glassBorder)
+                .frame(height: 1)
+                .padding(.top, 12)
+        }
+    }
+
+    private var filtersSection: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(filterOptions, id: \.self) { opt in
+                    let on = filter == opt
+                    Button { filter = opt } label: {
+                        Text(opt.uppercased())
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(on ? .white : LColors.textPrimary)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(on ? LColors.accent : Color.white.opacity(0.08))
+                            .clipShape(Capsule())
+                            .overlay(Capsule().stroke(on ? LColors.accent : LColors.glassBorder, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private var remindersSection: some View {
+        VStack(spacing: 14) {
+            if filtered.isEmpty {
+                GlassCard {
+                    Text("No reminders yet.")
+                        .foregroundStyle(LColors.textSecondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 20)
+                }
+            } else {
+                ForEach(visibleReminders) { reminder in
+                    let id = reminder.persistentModelID
+                    ReminderCard(
+                        reminder: reminder,
+                        onDone: {
+                            if let live = modelContext.model(for: id) as? LystariaReminder {
+                                markDone(live)
+                            }
+                        },
+                        onSnooze: {
+                            if let live = modelContext.model(for: id) as? LystariaReminder {
+                                snooze(live)
+                            }
+                        },
+                        onEdit: { editingReminder = reminder },
+                        onDelete: {
+                            if let live = modelContext.model(for: id) as? LystariaReminder {
+                                delete(live)
+                            }
+                        }
+                    )
+                }
+
+                if filtered.count > 5 {
+                    HStack {
+                        Text("Showing \(min(visibleCount, filtered.count)) of \(filtered.count)")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(LColors.textSecondary)
+                        Spacer()
+                    }
+                    .padding(.top, 2)
+
+                    if visibleCount < filtered.count {
+                        LoadMoreButton {
+                            visibleCount += 5
+                        }
+                        .padding(.top, 4)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var toastOverlay: some View {
+        if let msg = toastMessage {
+            VStack {
+                Spacer()
+                HStack(spacing: 10) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(LColors.success)
+                    Text(msg)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(LColors.textPrimary)
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 14)
+                .background(.ultraThinMaterial)
+                .clipShape(Capsule())
+                .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
+                .padding(.bottom, 110)
+            }
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .zIndex(99)
+        }
+    }
+
     private func logHabitIfLinked(_ reminder: LystariaReminder) {
         // Only habit-linked reminders should affect habit logs.
         guard reminder.linkedKind == .habit,
@@ -345,7 +351,7 @@ struct RemindersView: View {
         let todayStart = Calendar.current.startOfDay(for: Date())
         let cap = max(1, habit.timesPerDay)
 
-        if let existing = habit.logs.first(where: { Calendar.current.isDate($0.dayStart, inSameDayAs: todayStart) }) {
+        if let existing = (habit.logs ?? []).first(where: { Calendar.current.isDate($0.dayStart, inSameDayAs: todayStart) }) {
             if existing.count < cap {
                 existing.count += 1
                 existing.updatedAt = Date()
@@ -365,7 +371,7 @@ struct RemindersView: View {
               let habit = habits.first(where: { $0.id == habitID }) else { return }
 
         let cal = Calendar.current
-        let todaysLogs = habit.logs.filter { log in
+        let todaysLogs = (habit.logs ?? []).filter { log in
             cal.isDate(log.dayStart, inSameDayAs: now)
         }
 
@@ -384,8 +390,8 @@ struct RemindersView: View {
             modelContext.delete(log)
         }
 
-        habit.logs.removeAll { log in
-            cal.isDate(log.dayStart, inSameDayAs: now)
+        habit.logs = (habit.logs ?? []).filter { log in
+            !cal.isDate(log.dayStart, inSameDayAs: now)
         }
 
         habit.updatedAt = now
@@ -405,8 +411,7 @@ struct RemindersView: View {
             // Clear acknowledged state so the circle unchecks immediately on re-render.
             reminder.acknowledgedAt = nil
 
-            // Mark dirty so Supabase sync picks up the new nextRunAt.
-            reminder.markDirty()
+            reminder.updatedAt = Date()
 
             // If this is a habit-linked reminder and another same-day reminder is still due later,
             // fully reset today's habit progress so the next same-day occurrence starts fresh.
@@ -427,8 +432,7 @@ struct RemindersView: View {
             reminder.acknowledgedAt = Date()
             reminder.status = .sent
 
-            // Mark dirty so Supabase sync pushes the completed state.
-            reminder.markDirty()
+            reminder.updatedAt = Date()
 
             // Persist so the view reflects checked state and sync can pick it up.
             try? modelContext.save()
@@ -456,7 +460,7 @@ struct RemindersView: View {
         print("[RemindersView] snooze id=\(reminder.id) old nextRunAt=\(reminder.nextRunAt)")
         let cal = ReminderCompute.tzCalendar
         reminder.nextRunAt = cal.date(byAdding: .minute, value: 10, to: reminder.nextRunAt) ?? reminder.nextRunAt
-        reminder.markDirty()
+        reminder.updatedAt = Date()
         try? modelContext.save()
         print("[RemindersView] snoozed new nextRunAt=\(reminder.nextRunAt)")
         NotificationManager.shared.snoozeReminder(reminder)
@@ -465,7 +469,7 @@ struct RemindersView: View {
     private func delete(_ reminder: LystariaReminder) {
         print("[RemindersView] delete id=\(reminder.id) title=\(reminder.title)")
         reminder.status = .deleted
-        reminder.markDirty()
+        reminder.updatedAt = Date()
         try? modelContext.save()
         print("[RemindersView] deleted status=\(reminder.status.rawValue)")
         NotificationManager.shared.cancelReminder(reminder)
@@ -476,6 +480,8 @@ struct RemindersView: View {
 
 struct ReminderCard: View {
     @Bindable var reminder: LystariaReminder
+    @State private var isChecklistExpanded = false
+    @State private var showingDeleteConfirm = false
     let onDone: () -> Void
     let onSnooze: () -> Void
     let onEdit: () -> Void
@@ -484,7 +490,9 @@ struct ReminderCard: View {
     private var scheduleLabel: String {
         guard let schedule = reminder.schedule else { return "Once" }
 
-        if schedule.kind == .daily, (schedule.interval ?? 1) > 1 {
+        if (schedule.interval ?? 1) > 1,
+           schedule.kind != .interval,
+           schedule.kind != .once {
             return "Custom"
         }
 
@@ -493,8 +501,9 @@ struct ReminderCard: View {
 
     private var badgeColor: Color {
         if let schedule = reminder.schedule,
-           schedule.kind == .daily,
-           (schedule.interval ?? 1) > 1 {
+           (schedule.interval ?? 1) > 1,
+           schedule.kind != .interval,
+           schedule.kind != .once {
             return Color(red: 201/255, green: 44/255, blue: 194/255) // #c92cc2
         }
 
@@ -561,6 +570,10 @@ struct ReminderCard: View {
         }
     }
 
+    private var checklistItems: [String] {
+        reminder.checklistItems
+    }
+
     @ViewBuilder
     private func timePillsView() -> some View {
         if !scheduledTimes.isEmpty {
@@ -577,6 +590,56 @@ struct ReminderCard: View {
                         .overlay(Capsule().stroke(Color.white.opacity(0.18), lineWidth: 1))
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func checklistPreviewView() -> some View {
+        if !checklistItems.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                Button {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                        isChecklistExpanded.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Circle()
+                            .stroke(Color.white.opacity(0.7), lineWidth: 1.5)
+                            .frame(width: 10, height: 10)
+
+                        Text("\(checklistItems.count) checklist item\(checklistItems.count == 1 ? "" : "s")")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(LColors.textSecondary)
+
+                        Image(systemName: isChecklistExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(LColors.textSecondary.opacity(0.8))
+
+                        Spacer()
+                    }
+                }
+                .buttonStyle(.plain)
+
+                if isChecklistExpanded {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(checklistItems, id: \.self) { item in
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .stroke(Color.white.opacity(0.7), lineWidth: 1.5)
+                                    .frame(width: 10, height: 10)
+
+                                Text(item)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(LColors.textSecondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                    }
+                    .padding(.top, 2)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+            }
+            .padding(.top, 2)
         }
     }
 
@@ -650,6 +713,7 @@ struct ReminderCard: View {
                             .foregroundStyle(LColors.textSecondary)
                             .lineLimit(3)
                     }
+                    checklistPreviewView()
 
                     HStack(spacing: 8) {
                         Image(systemName: "clock")
@@ -663,10 +727,23 @@ struct ReminderCard: View {
                     HStack(spacing: 10) {
                         LButton(title: "Snooze", icon: "clock.arrow.circlepath", style: .secondary) { onSnooze() }
                         LButton(title: "Edit", icon: "pencil", style: .secondary) { onEdit() }
-                        GradientCapsuleButton(title: "Delete", icon: "trashfill") { onDelete() }
+                        GradientCapsuleButton(title: "Delete", icon: "trashfill") {
+                            showingDeleteConfirm = true
+                        }
                     }
                 }
             }
+            .modifier(
+                LystariaConfirmDialog(
+                    isPresented: $showingDeleteConfirm,
+                    title: "Delete Reminder?",
+                    message: "This reminder will be removed.",
+                    confirmTitle: "Delete",
+                    confirmRole: .destructive
+                ) {
+                    onDelete()
+                }
+            )
         }
     }
 }
@@ -679,6 +756,8 @@ struct NewReminderSheet: View {
 
     @State private var title = ""
     @State private var details = ""
+    @State private var checklistEntries: [String] = [""]
+    @FocusState private var focusedChecklistIndex: Int?
 
     @State private var onceDateTime = Date()
 
@@ -687,8 +766,26 @@ struct NewReminderSheet: View {
     @State private var timesOfDay: [Date] = [Date()]
     @State private var selectedDays: Set<Int> = []
     @State private var intervalMinutes: Int = 60
+    @State private var recurrenceInterval: Int = 1
+    @State private var dayOfMonth: Int = Calendar.current.component(.day, from: Date())
+    @State private var anchorMonth: Int = Calendar.current.component(.month, from: Date())
+    @State private var anchorDay: Int = Calendar.current.component(.day, from: Date())
 
     private let weekdays = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]
+    private var monthSymbols: [String] { Calendar.current.monthSymbols }
+
+    private var maxAnchorDay: Int {
+        var comps = DateComponents()
+        comps.year = 2024
+        comps.month = anchorMonth
+        return Calendar.current.range(of: .day, in: .month, for: Calendar.current.date(from: comps) ?? Date())?.count ?? 31
+    }
+
+    private var canSave: Bool {
+        if titleTrimmed.isEmpty { return false }
+        if scheduleKind == .weekly { return !selectedDays.isEmpty }
+        return true
+    }
     private var titleTrimmed: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     var body: some View {
@@ -707,6 +804,12 @@ struct NewReminderSheet: View {
         } footer: {
             footer
         }
+        .onAppear {
+            // nothing to preload for new reminders
+        }
+        .onChange(of: checklistEntries) { _, _ in
+            // items saved on Save tap
+        }
     }
 
     private var header: some View {
@@ -719,10 +822,10 @@ struct NewReminderSheet: View {
                 .foregroundStyle(.white)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(titleTrimmed.isEmpty ? Color.gray.opacity(0.3) : LColors.accent)
+                .background(canSave ? LColors.accent : Color.gray.opacity(0.3))
                 .clipShape(Capsule())
                 .buttonStyle(.plain)
-                .disabled(titleTrimmed.isEmpty)
+                .disabled(!canSave)
 
             Button {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
@@ -758,6 +861,59 @@ struct NewReminderSheet: View {
                     .textInputAutocapitalization(.sentences)
                     .disableAutocorrection(false)
 #endif
+            }
+
+            LabeledGlassField(label: "CHECKLIST ITEMS") {
+                VStack(alignment: .leading, spacing: 8) {
+                    VStack(spacing: 8) {
+                        ForEach(Array(checklistEntries.indices), id: \.self) { idx in
+                            TextField(
+                                idx == 0 ? "Checklist item" : "Another item",
+                                text: Binding(
+                                    get: { checklistEntries[idx] },
+                                    set: { checklistEntries[idx] = $0 }
+                                )
+                            )
+                            .textFieldStyle(.plain)
+                            .foregroundStyle(LColors.textPrimary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                            .focused($focusedChecklistIndex, equals: idx)
+#if os(iOS) || os(visionOS)
+                            .textInputAutocapitalization(.sentences)
+                            .disableAutocorrection(false)
+#endif
+                            .onSubmit {
+                                let trimmed = checklistEntries[idx].trimmingCharacters(in: .whitespacesAndNewlines)
+                                let isLast = idx == checklistEntries.count - 1
+
+                                if trimmed.isEmpty {
+                                    if isLast && checklistEntries.count > 1 {
+                                        checklistEntries.removeLast()
+                                    }
+                                    focusedChecklistIndex = nil
+                                } else if isLast {
+                                    checklistEntries[idx] = trimmed
+                                    checklistEntries.append("")
+                                    focusedChecklistIndex = idx + 1
+                                } else {
+                                    checklistEntries[idx] = trimmed
+                                    focusedChecklistIndex = min(idx + 1, checklistEntries.count - 1)
+                                }
+                            }
+                        }
+                    }
+
+                    Text("Type an item and press Return")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(LColors.textSecondary)
+                }
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -844,6 +1000,47 @@ struct NewReminderSheet: View {
                         }
 #endif
 
+                        if scheduleKind != .interval {
+                            LystariaControlRow(label: nil) {
+                                let unit: String = {
+                                    switch scheduleKind {
+                                    case .daily: return recurrenceInterval == 1 ? "day" : "days"
+                                    case .weekly: return recurrenceInterval == 1 ? "week" : "weeks"
+                                    case .monthly: return recurrenceInterval == 1 ? "month" : "months"
+                                    case .yearly: return recurrenceInterval == 1 ? "year" : "years"
+                                    default: return "unit"
+                                    }
+                                }()
+
+                                HStack(spacing: 10) {
+                                    Text("Every")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(LColors.textPrimary)
+
+                                    Picker("Every", selection: $recurrenceInterval) {
+                                        ForEach(1...30, id: \.self) { n in
+                                            Text("\(n)").tag(n)
+                                        }
+                                    }
+                                    .pickerStyle(.menu)
+                                    .tint(LColors.accent)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(Color.white.opacity(0.06))
+                                    .clipShape(Capsule())
+                                    .overlay(
+                                        Capsule().stroke(LColors.glassBorder, lineWidth: 1)
+                                    )
+
+                                    Text(unit)
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(LColors.textPrimary)
+
+                                    Spacer()
+                                }
+                            }
+                        }
+
                         if scheduleKind == .weekly {
                             HStack(spacing: 6) {
                                 ForEach(0..<7, id: \.self) { d in
@@ -863,6 +1060,42 @@ struct NewReminderSheet: View {
                                 }
                             }
                             .padding(.top, 4)
+                        }
+
+                        if scheduleKind == .monthly {
+                            LystariaControlRow(label: "Day of Month") {
+                                Stepper(value: $dayOfMonth, in: 1...31, step: 1) {
+                                    Text("\(dayOfMonth)")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(LColors.textPrimary)
+                                }
+                                .labelsHidden()
+                            }
+                        }
+
+                        if scheduleKind == .yearly {
+                            LystariaControlRow(label: "Month") {
+                                Picker("Month", selection: $anchorMonth) {
+                                    ForEach(1...12, id: \.self) { month in
+                                        Text(monthSymbols[month - 1]).tag(month)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                .tint(LColors.accent)
+                                .onChange(of: anchorMonth) { _, _ in
+                                    anchorDay = min(anchorDay, maxAnchorDay)
+                                }
+                            }
+
+                            LystariaControlRow(label: "Day") {
+                                Picker("Day", selection: $anchorDay) {
+                                    ForEach(1...maxAnchorDay, id: \.self) { day in
+                                        Text("\(day)").tag(day)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                .tint(LColors.accent)
+                            }
                         }
 
                         if scheduleKind == .interval {
@@ -890,11 +1123,15 @@ struct NewReminderSheet: View {
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
-                    .background(titleTrimmed.isEmpty ? AnyShapeStyle(Color.gray.opacity(0.3)) : AnyShapeStyle(LGradients.blue))
+                    .background(
+                        canSave
+                        ? AnyShapeStyle(LGradients.blue)
+                        : AnyShapeStyle(Color.gray.opacity(0.3))
+                    )
                     .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
             }
             .buttonStyle(.plain)
-            .disabled(titleTrimmed.isEmpty)
+            .disabled(!canSave)
         }
     }
 
@@ -940,6 +1177,8 @@ struct NewReminderSheet: View {
         NSApp.keyWindow?.endEditing(for: nil)
         #endif
         DispatchQueue.main.async {
+            guard self.canSave else { return }
+
             print("[NewReminderSheet] Save tapped. title=\(self.titleTrimmed), kind=\(self.scheduleKind.rawValue))")
             let schedule: ReminderSchedule?
             let runAt: Date
@@ -961,11 +1200,11 @@ struct NewReminderSheet: View {
                     kind: self.scheduleKind,
                     timeOfDay: primary,
                     timesOfDay: timeStrings,
-                    interval: nil,
+                    interval: self.scheduleKind == .interval ? nil : self.recurrenceInterval,
                     daysOfWeek: self.scheduleKind == .weekly ? Array(self.selectedDays).sorted() : nil,
-                    dayOfMonth: nil,
-                    anchorMonth: nil,
-                    anchorDay: nil,
+                    dayOfMonth: self.scheduleKind == .monthly ? self.dayOfMonth : nil,
+                    anchorMonth: self.scheduleKind == .yearly ? self.anchorMonth : nil,
+                    anchorDay: self.scheduleKind == .yearly ? self.anchorDay : nil,
                     intervalMinutes: self.scheduleKind == .interval ? self.intervalMinutes : nil
                 )
 
@@ -974,7 +1213,11 @@ struct NewReminderSheet: View {
                     startDay: self.startDay,
                     timesOfDay: timeStrings,
                     daysOfWeek: self.scheduleKind == .weekly ? Array(self.selectedDays) : nil,
-                    intervalMinutes: self.scheduleKind == .interval ? self.intervalMinutes : nil
+                    intervalMinutes: self.scheduleKind == .interval ? self.intervalMinutes : nil,
+                    recurrenceInterval: self.scheduleKind == .interval ? nil : self.recurrenceInterval,
+                    dayOfMonth: self.scheduleKind == .monthly ? self.dayOfMonth : nil,
+                    anchorMonth: self.scheduleKind == .yearly ? self.anchorMonth : nil,
+                    anchorDay: self.scheduleKind == .yearly ? self.anchorDay : nil
                 )
             }
 
@@ -987,10 +1230,16 @@ struct NewReminderSheet: View {
             let detailsTrimmed = self.details.trimmingCharacters(in: .whitespacesAndNewlines)
             newReminder.details = detailsTrimmed.isEmpty ? nil : detailsTrimmed
             self.modelContext.insert(newReminder)
+
+            let checklistItems = self.checklistEntries
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            newReminder.checklistItems = checklistItems
+
             NotificationManager.shared.scheduleReminder(newReminder)
-#if DEBUG
+        #if DEBUG
             NotificationManager.shared.printPendingNotifications()
-#endif
+        #endif
             print("[NewReminderSheet] Inserted reminder with nextRunAt=\(runAt)")
             self.onClose()
         }
@@ -1005,6 +1254,8 @@ struct EditReminderSheet: View {
 
     @State private var title = ""
     @State private var details = ""
+    @State private var checklistEntries: [String] = [""]
+    @FocusState private var focusedChecklistIndex: Int?
 
     @State private var scheduleKind: ReminderScheduleKind = .once
     @State private var onceDateTime = Date()
@@ -1013,8 +1264,26 @@ struct EditReminderSheet: View {
     @State private var timesOfDay: [Date] = [Date()]
     @State private var selectedDays: Set<Int> = []
     @State private var intervalMinutes: Int = 60
+    @State private var recurrenceInterval: Int = 1
+    @State private var dayOfMonth: Int = Calendar.current.component(.day, from: Date())
+    @State private var anchorMonth: Int = Calendar.current.component(.month, from: Date())
+    @State private var anchorDay: Int = Calendar.current.component(.day, from: Date())
 
     private let weekdays = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]
+    private var monthSymbols: [String] { Calendar.current.monthSymbols }
+
+    private var maxAnchorDay: Int {
+        var comps = DateComponents()
+        comps.year = 2024
+        comps.month = anchorMonth
+        return Calendar.current.range(of: .day, in: .month, for: Calendar.current.date(from: comps) ?? Date())?.count ?? 31
+    }
+
+    private var canSave: Bool {
+        if titleTrimmed.isEmpty { return false }
+        if scheduleKind == .weekly { return !selectedDays.isEmpty }
+        return true
+    }
     private var titleTrimmed: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     var body: some View {
@@ -1034,6 +1303,9 @@ struct EditReminderSheet: View {
             footer
         }
         .onAppear { loadFromModel() }
+        .onChange(of: checklistEntries) { _, _ in
+            // items saved on Save tap
+        }
     }
 
     private var header: some View {
@@ -1046,10 +1318,10 @@ struct EditReminderSheet: View {
                 .foregroundStyle(.white)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(titleTrimmed.isEmpty ? Color.gray.opacity(0.3) : LColors.accent)
+                .background(canSave ? LColors.accent : Color.gray.opacity(0.3))
                 .clipShape(Capsule())
                 .buttonStyle(.plain)
-                .disabled(titleTrimmed.isEmpty)
+                .disabled(!canSave)
 
             Button {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
@@ -1089,6 +1361,61 @@ struct EditReminderSheet: View {
 #else
                     // macOS: unavailable
 #endif
+            }
+
+            LabeledGlassField(label: "CHECKLIST ITEMS") {
+                VStack(alignment: .leading, spacing: 8) {
+                    VStack(spacing: 8) {
+                        ForEach(Array(checklistEntries.indices), id: \.self) { idx in
+                            TextField(
+                                idx == 0 ? "Checklist item" : "Another item",
+                                text: Binding(
+                                    get: { checklistEntries[idx] },
+                                    set: { checklistEntries[idx] = $0 }
+                                )
+                            )
+                            .textFieldStyle(.plain)
+                            .foregroundStyle(LColors.textPrimary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                            .focused($focusedChecklistIndex, equals: idx)
+#if os(iOS) || os(visionOS)
+                            .textInputAutocapitalization(.sentences)
+                            .disableAutocorrection(false)
+#else
+                            // macOS: unavailable
+#endif
+                            .onSubmit {
+                                let trimmed = checklistEntries[idx].trimmingCharacters(in: .whitespacesAndNewlines)
+                                let isLast = idx == checklistEntries.count - 1
+
+                                if trimmed.isEmpty {
+                                    if isLast && checklistEntries.count > 1 {
+                                        checklistEntries.removeLast()
+                                    }
+                                    focusedChecklistIndex = nil
+                                } else if isLast {
+                                    checklistEntries[idx] = trimmed
+                                    checklistEntries.append("")
+                                    focusedChecklistIndex = idx + 1
+                                } else {
+                                    checklistEntries[idx] = trimmed
+                                    focusedChecklistIndex = min(idx + 1, checklistEntries.count - 1)
+                                }
+                            }
+                        }
+                    }
+
+                    Text("Type an item and press Return")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(LColors.textSecondary)
+                }
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -1178,6 +1505,47 @@ struct EditReminderSheet: View {
                         }
 #endif
 
+                        if scheduleKind != .interval {
+                            LystariaControlRow(label: nil) {
+                                let unit: String = {
+                                    switch scheduleKind {
+                                    case .daily: return recurrenceInterval == 1 ? "day" : "days"
+                                    case .weekly: return recurrenceInterval == 1 ? "week" : "weeks"
+                                    case .monthly: return recurrenceInterval == 1 ? "month" : "months"
+                                    case .yearly: return recurrenceInterval == 1 ? "year" : "years"
+                                    default: return "unit"
+                                    }
+                                }()
+
+                                HStack(spacing: 10) {
+                                    Text("Every")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(LColors.textPrimary)
+
+                                    Picker("Every", selection: $recurrenceInterval) {
+                                        ForEach(1...30, id: \.self) { n in
+                                            Text("\(n)").tag(n)
+                                        }
+                                    }
+                                    .pickerStyle(.menu)
+                                    .tint(LColors.accent)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(Color.white.opacity(0.06))
+                                    .clipShape(Capsule())
+                                    .overlay(
+                                        Capsule().stroke(LColors.glassBorder, lineWidth: 1)
+                                    )
+
+                                    Text(unit)
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(LColors.textPrimary)
+
+                                    Spacer()
+                                }
+                            }
+                        }
+
                         if scheduleKind == .weekly {
                             HStack(spacing: 6) {
                                 ForEach(0..<7, id: \.self) { d in
@@ -1203,6 +1571,42 @@ struct EditReminderSheet: View {
                                 }
                             }
                             .padding(.top, 4)
+                        }
+
+                        if scheduleKind == .monthly {
+                            LystariaControlRow(label: "Day of Month") {
+                                Stepper(value: $dayOfMonth, in: 1...31, step: 1) {
+                                    Text("\(dayOfMonth)")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(LColors.textPrimary)
+                                }
+                                .labelsHidden()
+                            }
+                        }
+
+                        if scheduleKind == .yearly {
+                            LystariaControlRow(label: "Month") {
+                                Picker("Month", selection: $anchorMonth) {
+                                    ForEach(1...12, id: \.self) { month in
+                                        Text(monthSymbols[month - 1]).tag(month)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                .tint(LColors.accent)
+                                .onChange(of: anchorMonth) { _, _ in
+                                    anchorDay = min(anchorDay, maxAnchorDay)
+                                }
+                            }
+
+                            LystariaControlRow(label: "Day") {
+                                Picker("Day", selection: $anchorDay) {
+                                    ForEach(1...maxAnchorDay, id: \.self) { day in
+                                        Text("\(day)").tag(day)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                .tint(LColors.accent)
+                            }
                         }
 
                         if scheduleKind == .interval {
@@ -1231,14 +1635,14 @@ struct EditReminderSheet: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                     .background(
-                        titleTrimmed.isEmpty
-                        ? AnyShapeStyle(Color.gray.opacity(0.3))
-                        : AnyShapeStyle(LGradients.blue)
+                        canSave
+                        ? AnyShapeStyle(LGradients.blue)
+                        : AnyShapeStyle(Color.gray.opacity(0.3))
                     )
                     .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
             }
             .buttonStyle(.plain)
-            .disabled(titleTrimmed.isEmpty)
+            .disabled(!canSave)
         }
     }
 
@@ -1283,6 +1687,8 @@ struct EditReminderSheet: View {
         print("[EditReminderSheet] loadFromModel for id=\(reminder.id) title=\(reminder.title)")
         title = reminder.title
         details = reminder.details ?? ""
+        let storedChecklist = reminder.checklistItems
+        checklistEntries = storedChecklist.isEmpty ? [""] : storedChecklist
 
         let kind = reminder.schedule?.kind ?? .once
         scheduleKind = kind
@@ -1322,21 +1728,33 @@ struct EditReminderSheet: View {
             }
 
             selectedDays = Set(reminder.schedule?.daysOfWeek ?? [])
+            recurrenceInterval = max(1, reminder.schedule?.interval ?? 1)
+            dayOfMonth = reminder.schedule?.dayOfMonth ?? Calendar.current.component(.day, from: reminder.nextRunAt)
+            anchorMonth = reminder.schedule?.anchorMonth ?? Calendar.current.component(.month, from: reminder.nextRunAt)
+            anchorDay = reminder.schedule?.anchorDay ?? Calendar.current.component(.day, from: reminder.nextRunAt)
+            anchorDay = min(anchorDay, maxAnchorDay)
             intervalMinutes = reminder.schedule?.intervalMinutes ?? 60
             print("[EditReminderSheet] Recurring: startDay=\(startDay), timesOfDay=\(self.timesOfDay), days=\(selectedDays.sorted()), intervalMinutes=\(intervalMinutes)")
         }
     }
 
     private func apply() {
-#if os(macOS)
+    #if os(macOS)
         NSApp.keyWindow?.endEditing(for: nil)
-#endif
+    #endif
         DispatchQueue.main.async {
+            guard self.canSave else { return }
+
             print("[EditReminderSheet] Apply tapped. title=\(self.titleTrimmed), kind=\(self.scheduleKind.rawValue))")
             self.reminder.title = self.titleTrimmed
 
             let detailsTrimmed = self.details.trimmingCharacters(in: .whitespacesAndNewlines)
             self.reminder.details = detailsTrimmed.isEmpty ? nil : detailsTrimmed
+
+            let checklistItems = self.checklistEntries
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            self.reminder.checklistItems = checklistItems
 
             let schedule: ReminderSchedule?
             let runAt: Date
@@ -1358,11 +1776,11 @@ struct EditReminderSheet: View {
                     kind: self.scheduleKind,
                     timeOfDay: primary,
                     timesOfDay: timeStrings,
-                    interval: nil,
+                    interval: self.scheduleKind == .interval ? nil : self.recurrenceInterval,
                     daysOfWeek: self.scheduleKind == .weekly ? Array(self.selectedDays).sorted() : nil,
-                    dayOfMonth: nil,
-                    anchorMonth: nil,
-                    anchorDay: nil,
+                    dayOfMonth: self.scheduleKind == .monthly ? self.dayOfMonth : nil,
+                    anchorMonth: self.scheduleKind == .yearly ? self.anchorMonth : nil,
+                    anchorDay: self.scheduleKind == .yearly ? self.anchorDay : nil,
                     intervalMinutes: self.scheduleKind == .interval ? self.intervalMinutes : nil
                 )
 
@@ -1371,7 +1789,11 @@ struct EditReminderSheet: View {
                     startDay: self.startDay,
                     timesOfDay: timeStrings,
                     daysOfWeek: self.scheduleKind == .weekly ? Array(self.selectedDays) : nil,
-                    intervalMinutes: self.scheduleKind == .interval ? self.intervalMinutes : nil
+                    intervalMinutes: self.scheduleKind == .interval ? self.intervalMinutes : nil,
+                    recurrenceInterval: self.scheduleKind == .interval ? nil : self.recurrenceInterval,
+                    dayOfMonth: self.scheduleKind == .monthly ? self.dayOfMonth : nil,
+                    anchorMonth: self.scheduleKind == .yearly ? self.anchorMonth : nil,
+                    anchorDay: self.scheduleKind == .yearly ? self.anchorDay : nil
                 )
             }
 
@@ -1384,9 +1806,9 @@ struct EditReminderSheet: View {
             print("[EditReminderSheet] Updated reminder id=\(self.reminder.id) nextRunAt=\(self.reminder.nextRunAt) updatedAt=\(String(describing: self.reminder.updatedAt))")
 
             NotificationManager.shared.scheduleReminder(self.reminder)
-#if DEBUG
+        #if DEBUG
             NotificationManager.shared.printPendingNotifications()
-#endif
+        #endif
 
             self.onClose()
         }
@@ -1612,6 +2034,99 @@ struct LTimeEntryRow: View {
 }
 #endif
 
+// MARK: - Reminder Checklist Store
+
+private enum ReminderChecklistStore {
+    private static let idPrefix = "lystaria.reminderChecklist.id."
+    private static let fingerprintPrefix = "lystaria.reminderChecklist.fingerprint."
+    private static let newDraftKey = "lystaria.reminderChecklist.newDraft"
+
+    private static func idKey(for reminder: LystariaReminder) -> String {
+        idPrefix + String(describing: reminder.id)
+    }
+
+    private static func fingerprint(for reminder: LystariaReminder) -> String {
+        let schedule = reminder.schedule
+        let kind = schedule?.kind.rawValue ?? "once"
+        let timeOfDay = schedule?.timeOfDay ?? ""
+        let timesOfDay = (schedule?.timesOfDay ?? []).joined(separator: ",")
+        let daysOfWeek = (schedule?.daysOfWeek ?? []).map(String.init).joined(separator: ",")
+        let dayOfMonth = schedule?.dayOfMonth.map(String.init) ?? ""
+        let anchorMonth = schedule?.anchorMonth.map(String.init) ?? ""
+        let anchorDay = schedule?.anchorDay.map(String.init) ?? ""
+        let interval = schedule?.interval.map(String.init) ?? ""
+        let intervalMinutes = schedule?.intervalMinutes.map(String.init) ?? ""
+
+        return [
+            reminder.title.trimmingCharacters(in: .whitespacesAndNewlines),
+            reminder.details?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+            kind,
+            timeOfDay,
+            timesOfDay,
+            daysOfWeek,
+            dayOfMonth,
+            anchorMonth,
+            anchorDay,
+            interval,
+            intervalMinutes
+        ].joined(separator: "|")
+    }
+
+    private static func fingerprintKey(for reminder: LystariaReminder) -> String {
+        fingerprintPrefix + fingerprint(for: reminder)
+    }
+
+    static func newDraftItems() -> [String] {
+        let raw = UserDefaults.standard.array(forKey: newDraftKey) as? [String] ?? []
+        return raw
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    static func setNewDraftItems(_ items: [String]) {
+        let cleaned = items
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        if cleaned.isEmpty {
+            UserDefaults.standard.removeObject(forKey: newDraftKey)
+        } else {
+            UserDefaults.standard.set(cleaned, forKey: newDraftKey)
+        }
+    }
+
+    static func clearNewDraftItems() {
+        UserDefaults.standard.removeObject(forKey: newDraftKey)
+    }
+
+    static func items(for reminder: LystariaReminder) -> [String] {
+        let idRaw = UserDefaults.standard.array(forKey: idKey(for: reminder)) as? [String]
+        let fingerprintRaw = UserDefaults.standard.array(forKey: fingerprintKey(for: reminder)) as? [String]
+        let raw = idRaw ?? fingerprintRaw ?? []
+
+        return raw
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    static func setItems(_ items: [String], for reminder: LystariaReminder) {
+        let cleaned = items
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        let idStorageKey = idKey(for: reminder)
+        let fingerprintStorageKey = fingerprintKey(for: reminder)
+
+        if cleaned.isEmpty {
+            UserDefaults.standard.removeObject(forKey: idStorageKey)
+            UserDefaults.standard.removeObject(forKey: fingerprintStorageKey)
+        } else {
+            UserDefaults.standard.set(cleaned, forKey: idStorageKey)
+            UserDefaults.standard.set(cleaned, forKey: fingerprintStorageKey)
+        }
+    }
+}
+
 // MARK: - ReminderCompute
 
 enum ReminderCompute {
@@ -1661,7 +2176,11 @@ enum ReminderCompute {
         startDay: Date,
         timesOfDay: [String],
         daysOfWeek: [Int]?,
-        intervalMinutes: Int?
+        intervalMinutes: Int?,
+        recurrenceInterval: Int?,
+        dayOfMonth: Int?,
+        anchorMonth: Int?,
+        anchorDay: Int?
     ) -> Date {
         let cal = tzCalendar
         let now = Date()
@@ -1681,8 +2200,10 @@ enum ReminderCompute {
         // Fallback if somehow empty
         let times = parsedTimes.isEmpty ? [(hourMinute(from: now).0, hourMinute(from: now).1)] : parsedTimes
 
-        // Normalize candidate day
-        var day = cal.startOfDay(for: startDay)
+        let repeatEvery = max(1, recurrenceInterval ?? 1)
+
+        let normalizedStart = cal.startOfDay(for: startDay)
+        var day = normalizedStart
         var iterations = 0
 
         // Find the earliest valid run from day forward
@@ -1693,6 +2214,71 @@ enum ReminderCompute {
                 // tomorrow at the first available time to prevent an infinite loop.
                 let tomorrow = cal.date(byAdding: .day, value: 1, to: now) ?? now
                 return merge(day: tomorrow, hour: times.first!.h, minute: times.first!.m)
+            }
+
+            if kind == .daily {
+                let deltaDays = cal.dateComponents([.day], from: normalizedStart, to: day).day ?? 0
+                if deltaDays % repeatEvery != 0 {
+                    day = cal.date(byAdding: .day, value: 1, to: day) ?? day
+                    continue
+                }
+            }
+
+            if kind == .monthly {
+                let wantedDay = min(dayOfMonth ?? cal.component(.day, from: normalizedStart), 31)
+                let dayComponent = cal.component(.day, from: day)
+                if dayComponent != wantedDay {
+                    let year = cal.component(.year, from: day)
+                    let month = cal.component(.month, from: day)
+                    var comps = DateComponents()
+                    comps.year = year
+                    comps.month = month
+                    comps.day = min(wantedDay, cal.range(of: .day, in: .month, for: day)?.count ?? wantedDay)
+                    let candidateDay = cal.startOfDay(for: cal.date(from: comps) ?? day)
+                    if candidateDay < day {
+                        day = cal.date(byAdding: .day, value: 1, to: day) ?? day
+                    } else {
+                        day = candidateDay
+                    }
+                    continue
+                }
+
+                let startMonthIndex = (cal.component(.year, from: normalizedStart) * 12) + cal.component(.month, from: normalizedStart)
+                let currentMonthIndex = (cal.component(.year, from: day) * 12) + cal.component(.month, from: day)
+                let monthDelta = currentMonthIndex - startMonthIndex
+                if monthDelta % repeatEvery != 0 {
+                    day = cal.date(byAdding: .day, value: 1, to: day) ?? day
+                    continue
+                }
+            }
+
+            if kind == .yearly {
+                let wantedMonth = anchorMonth ?? cal.component(.month, from: normalizedStart)
+                let fallbackDay = anchorDay ?? cal.component(.day, from: normalizedStart)
+                let maxDay = cal.range(of: .day, in: .month, for: cal.date(from: DateComponents(year: cal.component(.year, from: day), month: wantedMonth, day: 1)) ?? day)?.count ?? 31
+                let wantedDay = min(fallbackDay, maxDay)
+
+                let monthComponent = cal.component(.month, from: day)
+                let dayComponent = cal.component(.day, from: day)
+                if monthComponent != wantedMonth || dayComponent != wantedDay {
+                    var comps = DateComponents()
+                    comps.year = cal.component(.year, from: day)
+                    comps.month = wantedMonth
+                    comps.day = wantedDay
+                    let candidateDay = cal.startOfDay(for: cal.date(from: comps) ?? day)
+                    if candidateDay < day {
+                        day = cal.date(byAdding: .day, value: 1, to: day) ?? day
+                    } else {
+                        day = candidateDay
+                    }
+                    continue
+                }
+
+                let yearDelta = cal.component(.year, from: day) - cal.component(.year, from: normalizedStart)
+                if yearDelta % repeatEvery != 0 {
+                    day = cal.date(byAdding: .day, value: 1, to: day) ?? day
+                    continue
+                }
             }
 
             // Weekly restriction
@@ -1727,13 +2313,11 @@ enum ReminderCompute {
         guard let schedule = reminder.schedule else { return reminder.nextRunAt }
         let cal = tzCalendar
 
-        // Interval
         if schedule.kind == .interval, let iv = schedule.intervalMinutes {
             let base = cal.date(bySetting: .second, value: 0, of: now) ?? now
             return cal.date(byAdding: .minute, value: iv, to: base) ?? base
         }
 
-        // Determine available times
         let timeStrings = (schedule.timesOfDay?.isEmpty == false)
             ? (schedule.timesOfDay ?? [])
             : (schedule.timeOfDay != nil ? [schedule.timeOfDay!] : [])
@@ -1748,66 +2332,113 @@ enum ReminderCompute {
             ? [(hourMinute(from: reminder.nextRunAt).0, hourMinute(from: reminder.nextRunAt).1)]
             : parsedTimes
 
-        let calDay = tzCalendar.startOfDay(for: now)
+        let startSearchDay = cal.startOfDay(for: now)
+        let repeatEvery = max(1, schedule.interval ?? 1)
+        let normalizedStart = cal.startOfDay(for: reminder.nextRunAt)
 
-        // Try to find the next time TODAY first
-        var candidate: Date? = nil
-        for (hh, mm) in times {
-            let d = merge(day: calDay, hour: hh, minute: mm)
-            let secondsBehind = now.timeIntervalSince(d)
-            if secondsBehind <= 90 {
-                candidate = d
-                break
-            }
-        }
+        var day = startSearchDay
+        var iterations = 0
 
-        // If none today, start from tomorrow at the first time
-        var baseDay = calDay
-        if candidate == nil {
-            baseDay = cal.date(byAdding: .day, value: 1, to: calDay) ?? calDay
-            let first = times.first!
-            candidate = merge(day: baseDay, hour: first.h, minute: first.m)
-        }
-
-        var nextCandidate = candidate!
-
-        switch schedule.kind {
-        case .daily:
-            return nextCandidate
-
-        case .weekly:
-            let wanted = Set(schedule.daysOfWeek ?? [])
-            if wanted.isEmpty { return nextCandidate }
-
-            var weeklyIterations = 0
-            while !wanted.contains(cal.component(.weekday, from: nextCandidate) - 1) {
-                weeklyIterations += 1
-                if weeklyIterations > 14 {
-                    // Safety cap: daysOfWeek contains no valid weekday values.
-                    // Fall back to 1 day from now to avoid an infinite loop.
-                    break
-                }
-                let nextDay = cal.date(byAdding: .day, value: 1, to: tzCalendar.startOfDay(for: nextCandidate)) ?? nextCandidate
+        while true {
+            iterations += 1
+            if iterations > 1500 {
+                let fallbackDay = cal.date(byAdding: .day, value: 1, to: startSearchDay) ?? startSearchDay
                 let first = times.first!
-                nextCandidate = merge(day: nextDay, hour: first.h, minute: first.m)
+                return merge(day: fallbackDay, hour: first.h, minute: first.m)
             }
-            return nextCandidate
 
-        case .monthly:
-            var next = nextCandidate
-            if next <= now { next = cal.date(byAdding: .month, value: 1, to: next) ?? next }
-            return next
+            if schedule.kind == .daily {
+                let deltaDays = cal.dateComponents([.day], from: normalizedStart, to: day).day ?? 0
+                if deltaDays % repeatEvery != 0 {
+                    day = cal.date(byAdding: .day, value: 1, to: day) ?? day
+                    continue
+                }
+            }
 
-        case .yearly:
-            var next = nextCandidate
-            if next <= now { next = cal.date(byAdding: .year, value: 1, to: next) ?? next }
-            return next
+            if schedule.kind == .weekly {
+                let wanted = Set(schedule.daysOfWeek ?? [])
+                if !wanted.isEmpty {
+                    let weekdayIndex = cal.component(.weekday, from: day) - 1
+                    if !wanted.contains(weekdayIndex) {
+                        day = cal.date(byAdding: .day, value: 1, to: day) ?? day
+                        continue
+                    }
+                }
 
-        case .once:
-            return reminder.nextRunAt
+                let deltaDays = cal.dateComponents([.day], from: normalizedStart, to: day).day ?? 0
+                let weekDelta = max(0, deltaDays / 7)
+                if weekDelta % repeatEvery != 0 {
+                    day = cal.date(byAdding: .day, value: 1, to: day) ?? day
+                    continue
+                }
+            }
 
-        case .interval:
-            return nextCandidate
+            if schedule.kind == .monthly {
+                let wantedDay = min(schedule.dayOfMonth ?? cal.component(.day, from: normalizedStart), 31)
+                let dayComponent = cal.component(.day, from: day)
+                if dayComponent != wantedDay {
+                    let year = cal.component(.year, from: day)
+                    let month = cal.component(.month, from: day)
+                    var comps = DateComponents()
+                    comps.year = year
+                    comps.month = month
+                    comps.day = min(wantedDay, cal.range(of: .day, in: .month, for: day)?.count ?? wantedDay)
+                    let candidateDay = cal.startOfDay(for: cal.date(from: comps) ?? day)
+                    if candidateDay < day {
+                        day = cal.date(byAdding: .day, value: 1, to: day) ?? day
+                    } else {
+                        day = candidateDay
+                    }
+                    continue
+                }
+
+                let startMonthIndex = (cal.component(.year, from: normalizedStart) * 12) + cal.component(.month, from: normalizedStart)
+                let currentMonthIndex = (cal.component(.year, from: day) * 12) + cal.component(.month, from: day)
+                let monthDelta = currentMonthIndex - startMonthIndex
+                if monthDelta % repeatEvery != 0 {
+                    day = cal.date(byAdding: .day, value: 1, to: day) ?? day
+                    continue
+                }
+            }
+
+            if schedule.kind == .yearly {
+                let wantedMonth = schedule.anchorMonth ?? cal.component(.month, from: normalizedStart)
+                let fallbackDay = schedule.anchorDay ?? cal.component(.day, from: normalizedStart)
+                let maxDay = cal.range(of: .day, in: .month, for: cal.date(from: DateComponents(year: cal.component(.year, from: day), month: wantedMonth, day: 1)) ?? day)?.count ?? 31
+                let wantedDay = min(fallbackDay, maxDay)
+
+                let monthComponent = cal.component(.month, from: day)
+                let dayComponent = cal.component(.day, from: day)
+                if monthComponent != wantedMonth || dayComponent != wantedDay {
+                    var comps = DateComponents()
+                    comps.year = cal.component(.year, from: day)
+                    comps.month = wantedMonth
+                    comps.day = wantedDay
+                    let candidateDay = cal.startOfDay(for: cal.date(from: comps) ?? day)
+                    if candidateDay < day {
+                        day = cal.date(byAdding: .day, value: 1, to: day) ?? day
+                    } else {
+                        day = candidateDay
+                    }
+                    continue
+                }
+
+                let yearDelta = cal.component(.year, from: day) - cal.component(.year, from: normalizedStart)
+                if yearDelta % repeatEvery != 0 {
+                    day = cal.date(byAdding: .day, value: 1, to: day) ?? day
+                    continue
+                }
+            }
+
+            for (hh, mm) in times {
+                let candidate = merge(day: day, hour: hh, minute: mm)
+                let secondsBehind = now.timeIntervalSince(candidate)
+                if secondsBehind <= 90 {
+                    return candidate
+                }
+            }
+
+            day = cal.date(byAdding: .day, value: 1, to: day) ?? day
         }
     }
 }

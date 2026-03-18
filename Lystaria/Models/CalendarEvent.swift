@@ -8,21 +8,21 @@ import SwiftData
 
 // MARK: - Recurrence Types
 
-enum RecurrenceFrequency: String, Codable, CaseIterable {
+enum RecurrenceFrequency: String, CaseIterable {
     case daily = "daily"
     case weekly = "weekly"
     case monthly = "monthly"
     case yearly = "yearly"
 }
 
-enum RecurrenceEndKind: String, Codable {
+enum RecurrenceEndKind: String {
     case never = "never"
     case until = "until"
     case count = "count"
 }
 
 /// Codable struct stored as JSON in SwiftData
-struct RecurrenceEnd: Codable, Equatable, Sendable {
+struct RecurrenceEnd: Equatable, Sendable {
     var kind: RecurrenceEndKind
     var until: Date?
     var count: Int?
@@ -31,7 +31,7 @@ struct RecurrenceEnd: Codable, Equatable, Sendable {
 }
 
 /// Codable struct stored as JSON in SwiftData
-struct RecurrenceRule: Codable, Equatable, Sendable {
+struct RecurrenceRule: Equatable, Sendable {
     var freq: RecurrenceFrequency
     var interval: Int                // every X units (>= 1)
     var byWeekday: [Int]?            // weekly only: 0..6 (Sun..Sat)
@@ -46,10 +46,16 @@ struct RecurrenceRule: Codable, Equatable, Sendable {
 }
 
 /// Codable struct for location coordinates
-struct LocationCoords: Codable, Equatable, Sendable {
+struct LocationCoords: Equatable, Sendable {
     var lat: Double
     var lng: Double
 }
+
+extension RecurrenceFrequency: nonisolated Codable {}
+extension RecurrenceEndKind: nonisolated Codable {}
+extension RecurrenceEnd: nonisolated Codable {}
+extension RecurrenceRule: nonisolated Codable {}
+extension LocationCoords: nonisolated Codable {}
 
 // MARK: - CalendarEvent Model
 
@@ -63,18 +69,18 @@ final class CalendarEvent {
     var appleCalendarIdentifier: String? = nil
     
     // MARK: - Fields
-    var title: String
+    var title: String = ""
     var eventDescription: String?    // 'description' is reserved in Swift
-    var startDate: Date
+    var startDate: Date = Date()
     var endDate: Date?
-    var allDay: Bool
+    var allDay: Bool = false
     var color: String?
     var meetingUrl: String?
     var location: String?
     var locationPlaceId: String?
     
-    // Store coords as JSON via Codable
-    var locationCoords: LocationCoords?
+    // Store coords as JSON string
+    var locationCoordsStorage: String?
     
     var googleEventId: String?
     var googleCalendarId: String?
@@ -88,14 +94,14 @@ final class CalendarEvent {
     // Time zone identifier used for displaying/scheduling this event
     var timeZoneId: String?
 
-    // Recurrence (stored as JSON via Codable)
-    var recurrence: RecurrenceRule?
+    // Recurrence stored as JSON string
+    var recurrenceStorage: String?
+
+    // Legacy recurrence exceptions stored as JSON string
+    var recurrenceExceptionsStorage: String = "[]"
     
-    // NOTE: legacy field; not used by the RRULE-only recurrence approach
-    var recurrenceExceptions: [String] = []     // ISO date keys like "2026-01-25"
-    
-    var createdAt: Date
-    var updatedAt: Date
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
     
     // MARK: - Computed
     var isRecurring: Bool {
@@ -104,6 +110,61 @@ final class CalendarEvent {
     
     var displayColor: String {
         color ?? "#6C63FF"  // default purple
+    }
+    
+    var locationCoords: LocationCoords? {
+        get {
+            guard let locationCoordsStorage,
+                  let data = locationCoordsStorage.data(using: .utf8)
+            else { return nil }
+            return try? JSONDecoder().decode(LocationCoords.self, from: data)
+        }
+        set {
+            guard let newValue else {
+                locationCoordsStorage = nil
+                return
+            }
+            if let data = try? JSONEncoder().encode(newValue),
+               let encoded = String(data: data, encoding: .utf8) {
+                locationCoordsStorage = encoded
+            }
+        }
+    }
+    
+    var recurrence: RecurrenceRule? {
+        get {
+            guard let recurrenceStorage,
+                  let data = recurrenceStorage.data(using: .utf8)
+            else { return nil }
+            return try? JSONDecoder().decode(RecurrenceRule.self, from: data)
+        }
+        set {
+            guard let newValue else {
+                recurrenceStorage = nil
+                return
+            }
+            if let data = try? JSONEncoder().encode(newValue),
+               let encoded = String(data: data, encoding: .utf8) {
+                recurrenceStorage = encoded
+            }
+        }
+    }
+    
+    var recurrenceExceptions: [String] {
+        get {
+            guard let data = recurrenceExceptionsStorage.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([String].self, from: data)
+            else { return [] }
+            return decoded
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue),
+               let encoded = String(data: data, encoding: .utf8) {
+                recurrenceExceptionsStorage = encoded
+            } else {
+                recurrenceExceptionsStorage = "[]"
+            }
+        }
     }
     
     init(
@@ -130,16 +191,18 @@ final class CalendarEvent {
         self.meetingUrl = meetingUrl
         self.location = location
         self.locationPlaceId = nil
-        self.locationCoords = nil
+        self.locationCoordsStorage = nil
         self.googleEventId = nil
         self.googleCalendarId = nil
         self.reminderServerId = nil
         self.recurrenceRRule = recurrenceRRule
         self.timeZoneId = timeZoneId
-        self.recurrence = recurrence
-        self.recurrenceExceptions = recurrenceExceptions
+        self.recurrenceStorage = nil
+        self.recurrenceExceptionsStorage = "[]"
         self.serverId = serverId
         self.createdAt = Date()
         self.updatedAt = Date()
+        self.recurrence = recurrence
+        self.recurrenceExceptions = recurrenceExceptions
     }
 }

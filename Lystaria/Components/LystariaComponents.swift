@@ -10,6 +10,36 @@ import Combine
 
 private extension NSAttributedString.Key {
     static let lystariaBlockquote = NSAttributedString.Key("lystariaBlockquote")
+    static let lystariaDivider = NSAttributedString.Key("lystariaDivider")
+}
+
+// MARK: - DELETE CONFIRMATION DIALOGUE
+
+struct LystariaConfirmDialog: ViewModifier {
+    @Binding var isPresented: Bool
+
+    let title: String
+    let message: String
+    let confirmTitle: String
+    let confirmRole: ButtonRole?
+    let onConfirm: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .confirmationDialog(
+                title,
+                isPresented: $isPresented,
+                titleVisibility: .visible
+            ) {
+                Button(confirmTitle, role: confirmRole) {
+                    onConfirm()
+                }
+
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(message)
+            }
+    }
 }
 
 // MARK: - Pop Up Container (Reusable)
@@ -721,6 +751,83 @@ final class GlassRichTextController: ObservableObject {
         textView.delegate?.textViewDidChange?(textView)
     }
 
+    func insertDivider() {
+        guard let textView else { return }
+
+        let mutable = NSMutableAttributedString(attributedString: textView.attributedText)
+        let selectedRange = textView.selectedRange
+        guard selectedRange.location != NSNotFound else { return }
+
+        let nsText = mutable.string as NSString
+        let insertionLocation = min(selectedRange.location, nsText.length)
+
+
+        let defaultParagraph = (defaultTypingAttributes()[.paragraphStyle] as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle
+            ?? NSMutableParagraphStyle()
+        defaultParagraph.lineBreakMode = .byWordWrapping
+        defaultParagraph.alignment = .natural
+        defaultParagraph.paragraphSpacingBefore = 0
+        defaultParagraph.paragraphSpacing = 0
+
+        let dividerParagraph = defaultParagraph.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+        dividerParagraph.minimumLineHeight = 12
+        dividerParagraph.maximumLineHeight = 12
+        dividerParagraph.paragraphSpacingBefore = 0
+        dividerParagraph.paragraphSpacing = 0
+
+        let defaultAttrs = defaultTypingAttributes().merging([
+            .paragraphStyle: defaultParagraph,
+            .foregroundColor: UIColor(LColors.textPrimary)
+        ]) { _, new in new }
+
+        let dividerAttrs: [NSAttributedString.Key: Any] = [
+            .paragraphStyle: dividerParagraph,
+            .lystariaDivider: true,
+            .foregroundColor: UIColor.clear
+        ]
+
+        let needsLeadingNewline: Bool
+        if insertionLocation == 0 || nsText.length == 0 {
+            needsLeadingNewline = false
+        } else {
+            let previousChar = nsText.substring(with: NSRange(location: insertionLocation - 1, length: 1))
+            needsLeadingNewline = previousChar != "\n"
+        }
+
+        let needsTrailingNewline: Bool
+        if insertionLocation >= nsText.length {
+            needsTrailingNewline = true
+        } else {
+            let nextChar = nsText.substring(with: NSRange(location: insertionLocation, length: 1))
+            needsTrailingNewline = nextChar != "\n"
+        }
+
+        let dividerString = String(repeating: " ", count: 1)
+        let insertion = NSMutableAttributedString()
+
+        if needsLeadingNewline {
+            insertion.append(NSAttributedString(string: "\n", attributes: defaultAttrs))
+        }
+
+        insertion.append(NSAttributedString(string: dividerString, attributes: dividerAttrs))
+        insertion.append(NSAttributedString(string: "\n", attributes: dividerAttrs))
+
+        if needsTrailingNewline {
+            insertion.append(NSAttributedString(string: "\n", attributes: defaultAttrs))
+        }
+
+        mutable.replaceCharacters(in: selectedRange, with: insertion)
+
+        let caretOffsetAfterDivider = (needsLeadingNewline ? 1 : 0) + dividerString.count + 1
+        let finalCursor = min(insertionLocation + caretOffsetAfterDivider, mutable.length)
+
+        textView.attributedText = mutable
+        textView.typingAttributes = defaultAttrs
+        textView.selectedRange = NSRange(location: finalCursor, length: 0)
+        textView.setNeedsDisplay()
+        textView.delegate?.textViewDidChange?(textView)
+    }
+
     func insertLink() {
         guard let textView else { return }
         let mutable = NSMutableAttributedString(attributedString: textView.attributedText)
@@ -813,6 +920,7 @@ final class GlassRichTextController: ObservableObject {
 final class GlassRichTextView: UITextView {
     override func draw(_ rect: CGRect) {
         drawQuoteBlocks(in: rect)
+        drawDividers(in: rect)
         super.draw(rect)
     }
 
@@ -878,6 +986,66 @@ final class GlassRichTextView: UITextView {
                     options: []
                 )
             }
+            ctx.restoreGState()
+        }
+    }
+
+    private func drawDividers(in rect: CGRect) {
+        guard let attributedText, attributedText.length > 0,
+              let ctx = UIGraphicsGetCurrentContext() else { return }
+
+        let fullRange = NSRange(location: 0, length: attributedText.length)
+        attributedText.enumerateAttribute(.lystariaDivider, in: fullRange, options: []) { value, range, _ in
+            guard let isDivider = value as? Bool, isDivider == true else { return }
+
+            let glyphRange = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            guard glyphRange.length > 0 else { return }
+
+            var minY: CGFloat?
+            var maxY: CGFloat?
+
+            layoutManager.enumerateLineFragments(forGlyphRange: glyphRange) { _, usedRect, _, lineGlyphRange, _ in
+                let charRange = self.layoutManager.characterRange(forGlyphRange: lineGlyphRange, actualGlyphRange: nil)
+                guard charRange.location < attributedText.length else { return }
+                let lineIsDivider = attributedText.attribute(.lystariaDivider, at: charRange.location, effectiveRange: nil) as? Bool == true
+                guard lineIsDivider else { return }
+
+                let top = usedRect.minY + self.textContainerInset.top
+                let bottom = usedRect.maxY + self.textContainerInset.top
+
+                if let currentMin = minY { minY = min(currentMin, top) } else { minY = top }
+                if let currentMax = maxY { maxY = max(currentMax, bottom) } else { maxY = bottom }
+            }
+
+            guard let top = minY, let bottom = maxY else { return }
+
+            let left = self.textContainerInset.left
+            let right = bounds.width - self.textContainerInset.right
+            let availableWidth = max(0, right - left)
+            guard availableWidth > 0 else { return }
+
+            let lineHeight: CGFloat = 3
+            let y = top + ((bottom - top - lineHeight) / 2)
+            let drawRect = CGRect(x: left, y: y, width: availableWidth, height: lineHeight)
+            let path = UIBezierPath(roundedRect: drawRect, cornerRadius: lineHeight / 2)
+
+            ctx.saveGState()
+            path.addClip()
+
+            let colors = [
+                UIColor(red: 3/255, green: 219/255, blue: 252/255, alpha: 1).cgColor,
+                UIColor(red: 125/255, green: 25/255, blue: 247/255, alpha: 1).cgColor
+            ] as CFArray
+
+            if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1]) {
+                ctx.drawLinearGradient(
+                    gradient,
+                    start: CGPoint(x: drawRect.minX, y: drawRect.midY),
+                    end: CGPoint(x: drawRect.maxX, y: drawRect.midY),
+                    options: []
+                )
+            }
+
             ctx.restoreGState()
         }
     }
@@ -1006,6 +1174,62 @@ struct GlassRichTextEditor: UIViewRepresentable {
 
         func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText replacement: String) -> Bool {
             let nsText = textView.text as NSString? ?? "" as NSString
+
+            let attributed = textView.attributedText ?? NSAttributedString()
+
+            if replacement.isEmpty, range.length == 1 {
+                let deleteLocation = range.location
+                if deleteLocation > 0, deleteLocation <= attributed.length {
+                    let priorIndex = deleteLocation - 1
+                    let priorIsDivider = attributed.attribute(.lystariaDivider, at: priorIndex, effectiveRange: nil) as? Bool == true
+
+                    if priorIsDivider {
+                        var dividerRange = NSRange(location: 0, length: 0)
+                        _ = attributed.attribute(.lystariaDivider, at: priorIndex, effectiveRange: &dividerRange)
+
+                        let mutable = NSMutableAttributedString(attributedString: attributed)
+                        var removalRange = dividerRange
+
+                        if removalRange.location > 0 {
+                            let previousChar = (mutable.string as NSString).substring(with: NSRange(location: removalRange.location - 1, length: 1))
+                            if previousChar == "\n" {
+                                removalRange.location -= 1
+                                removalRange.length += 1
+                            }
+                        }
+
+                        if removalRange.location + removalRange.length < mutable.length {
+                            let nextChar = (mutable.string as NSString).substring(with: NSRange(location: removalRange.location + removalRange.length, length: 1))
+                            if nextChar == "\n" {
+                                removalRange.length += 1
+                            }
+                        }
+
+                        mutable.replaceCharacters(in: removalRange, with: "")
+                        textView.attributedText = mutable
+                        textView.typingAttributes = defaultTypingAttributes
+                        let newCursor = min(removalRange.location, mutable.length)
+                        textView.selectedRange = NSRange(location: newCursor, length: 0)
+                        textViewDidChange(textView)
+                        return false
+                    }
+                }
+            }
+            if replacement == "\n" {
+                let insertionLocation = min(max(range.location, 0), attributed.length)
+
+                if insertionLocation < attributed.length,
+                   attributed.attribute(.lystariaDivider, at: insertionLocation, effectiveRange: nil) as? Bool == true {
+                    let mutable = NSMutableAttributedString(attributedString: attributed)
+                    let insertion = NSAttributedString(string: "\n", attributes: defaultTypingAttributes)
+                    mutable.replaceCharacters(in: range, with: insertion)
+                    textView.attributedText = mutable
+                    textView.typingAttributes = defaultTypingAttributes
+                    textView.selectedRange = NSRange(location: insertionLocation + 1, length: 0)
+                    textViewDidChange(textView)
+                    return false
+                }
+            }
 
             // Auto-convert "- " typed at the start of a line into a bullet.
             if replacement == " " {
@@ -1181,13 +1405,27 @@ struct GlassRichTextDisplay: UIViewRepresentable {
             existing.lineBreakMode = .byWordWrapping
             existing.alignment = .natural
 
+            let isDivider = (mutable.attribute(.lystariaDivider, at: subRange.location, effectiveRange: nil) as? Bool) == true
             let isQuoted = (mutable.attribute(.lystariaBlockquote, at: subRange.location, effectiveRange: nil) as? Bool) == true
-            if isQuoted {
+
+            if isDivider {
+                existing.minimumLineHeight = 12
+                existing.maximumLineHeight = 12
+                existing.firstLineHeadIndent = 0
+                existing.headIndent = 0
+                existing.paragraphSpacingBefore = 0
+                existing.paragraphSpacing = 0
+                mutable.addAttribute(.foregroundColor, value: UIColor.clear, range: subRange)
+            } else if isQuoted {
+                existing.minimumLineHeight = 0
+                existing.maximumLineHeight = 0
                 existing.firstLineHeadIndent = 22
                 existing.headIndent = 22
                 existing.paragraphSpacingBefore = 4
                 existing.paragraphSpacing = 6
             } else {
+                existing.minimumLineHeight = 0
+                existing.maximumLineHeight = 0
                 existing.firstLineHeadIndent = 0
                 existing.headIndent = 0
                 existing.paragraphSpacingBefore = 0
@@ -1268,6 +1506,7 @@ struct GlassRichTextField: View {
                 richToolButton("•") { controller.toggleBulletList() }
                 richToolButton("1.") { controller.toggleNumberedList() }
                 richToolIconButton("quote.bubble") { controller.toggleQuoteBlock() }
+                richToolIconButton("rectangle.split.3x1") { controller.insertDivider() }
                 richToolIconButton("link") { controller.insertLink() }
                 Spacer()
             }
@@ -1280,6 +1519,7 @@ struct GlassRichTextField: View {
                 controller: controller
             )
             .frame(minHeight: max(minHeight, measuredHeight))
+            .fixedSize(horizontal: false, vertical: true)
             .background(Color.white.opacity(0.07))
             .clipShape(RoundedRectangle(cornerRadius: LSpacing.inputRadius))
             .overlay(

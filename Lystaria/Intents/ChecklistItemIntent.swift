@@ -16,14 +16,20 @@ struct AddChecklistItemIntent: AppIntent {
 
     @Parameter(
         title: "Item",
-        inputOptions: String.IntentInputOptions(multiline: false),
         requestValueDialog: IntentDialog("What checklist item would you like to add?")
     )
     var itemText: String
 
+    @Parameter(
+        title: "Checklist",
+        requestValueDialog: IntentDialog("Which checklist should this item go in?")
+    )
+    var checklist: ChecklistEntity?
+
     static var parameterSummary: some ParameterSummary {
         Summary("Add checklist item") {
             \.$itemText
+            \.$checklist
         }
     }
 
@@ -38,6 +44,7 @@ struct AddChecklistItemIntent: AppIntent {
             let context = ModelContext(LystariaApp.sharedModelContainer)
             try ChecklistItemWriter.addItem(
                 text: trimmed,
+                checklistID: checklist?.id,
                 modelContext: context
             )
         }

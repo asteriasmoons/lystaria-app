@@ -21,12 +21,18 @@ final class JournalBook {
     var deletedAt: Date?           // soft delete for sync
 
     // MARK: - Fields
-    var title: String
+    var title: String = ""
     /// Store as hex so it’s stable + easy to sync later.
-    var coverHex: String
+    var coverHex: String = "#6A5CFF"
 
-    var createdAt: Date
-    var updatedAt: Date
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+
+    @Relationship(deleteRule: .nullify, inverse: \JournalEntry.book)
+    var entries: [JournalEntry]?
+
+    @Relationship(deleteRule: .cascade, inverse: \JournalPrompt.book)
+    var prompts: [JournalPrompt]?
 
     // MARK: - Sync helpers
     func markDirty() {
@@ -52,5 +58,7 @@ final class JournalBook {
         self.deletedAt = deletedAt
         self.createdAt = Date()
         self.updatedAt = Date()
+        self.entries = nil
+        self.prompts = nil
     }
 }

@@ -7,7 +7,42 @@ struct JournalCard: View {
     let onTagSelect: (String) -> Void
 
     private var snippet: String {
-        let s = entry.body.trimmingCharacters(in: .whitespacesAndNewlines)
+        let attributed = entry.bodyAttributedText
+        guard attributed.length > 0 else { return "" }
+
+        let mutable = NSMutableAttributedString(attributedString: attributed)
+        let full = NSRange(location: 0, length: mutable.length)
+
+        // Convert divider blocks to "- - -"
+        mutable.enumerateAttribute(NSAttributedString.Key("lystariaDivider"), in: full, options: []) { value, range, _ in
+            guard let isDivider = value as? Bool, isDivider else { return }
+            mutable.replaceCharacters(in: range, with: NSAttributedString(string: "- - -"))
+        }
+
+        // Convert blockquote paragraphs to a plain-text "> " prefix
+        let quoteKey = NSAttributedString.Key("lystariaBlockquote")
+        let nsString = mutable.string as NSString
+        var paragraphRanges: [NSRange] = []
+        nsString.enumerateSubstrings(in: NSRange(location: 0, length: nsString.length), options: [.byParagraphs, .substringNotRequired]) { _, subRange, _, _ in
+            paragraphRanges.append(subRange)
+        }
+
+        for paragraphRange in paragraphRanges.reversed() {
+            guard paragraphRange.location < mutable.length else { continue }
+            let isQuote = (mutable.attribute(quoteKey, at: paragraphRange.location, effectiveRange: nil) as? Bool) == true
+            guard isQuote else { continue }
+
+            let paragraphText = (mutable.string as NSString).substring(with: paragraphRange)
+            let trimmedNewlineText = paragraphText.hasSuffix("\n") ? String(paragraphText.dropLast()) : paragraphText
+            let replacement = "> " + trimmedNewlineText + (paragraphText.hasSuffix("\n") ? "\n" : "")
+            mutable.replaceCharacters(in: paragraphRange, with: NSAttributedString(string: replacement))
+        }
+
+        // Convert to plain string
+        let s = mutable.string
+            .replacingOccurrences(of: "\n\n", with: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
         if s.isEmpty { return "" }
         return String(s.prefix(200))
     }

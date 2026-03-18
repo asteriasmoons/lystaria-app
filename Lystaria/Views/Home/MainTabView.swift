@@ -4,6 +4,7 @@
 import SwiftUI
 
 struct MainTabView: View {
+    @EnvironmentObject private var appState: AppState
     @State private var showSignIn = false
     @State private var selectedTab: Tab = .dashboard
 
@@ -50,6 +51,7 @@ struct MainTabView: View {
         }
         .sheet(isPresented: $showSignIn) {
             SignInView()
+                .environmentObject(appState)
                 .preferredColorScheme(.dark)
         }
     }

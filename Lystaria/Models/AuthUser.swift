@@ -1,7 +1,7 @@
 // AuthUser.swift
+// 
 // Lystaria
 //
-// Local auth state — stores credentials securely
 
 import Foundation
 import SwiftData
@@ -17,15 +17,15 @@ final class AuthUser {
     var serverId: String?           // MongoDB user _id
     var email: String?
     var displayName: String?
-    var authProviderRaw: String
+    var authProviderRaw: String = AuthProvider.apple.rawValue
     var appleUserId: String?        // Apple's stable user identifier
     var googleUserId: String?       // Google's stable user identifier
     var profileImagePath: String?     // Local file URL or relative path to a saved profile image
 
-    var createdAt: Date
+    var createdAt: Date = Date()
     
     var authProvider: AuthProvider {
-        get { AuthProvider(rawValue: authProviderRaw) ?? .email }
+        get { AuthProvider(rawValue: authProviderRaw) ?? .apple }
         set { authProviderRaw = newValue.rawValue }
     }
     
@@ -36,7 +36,7 @@ final class AuthUser {
     init(
         email: String? = nil,
         displayName: String? = nil,
-        authProvider: AuthProvider = .email,
+        authProvider: AuthProvider = .apple,
         appleUserId: String? = nil,
         googleUserId: String? = nil,
         serverId: String? = nil

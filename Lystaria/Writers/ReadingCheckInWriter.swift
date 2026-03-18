@@ -2,40 +2,34 @@
 //  ReadingCheckinWriter.swift
 //  Lystaria
 //
-//  Created by Asteria Moon on 3/14/26.
-//
 
 import Foundation
 import SwiftData
 
 @MainActor
 enum ReadingCheckInWriter {
-    static let streakDaysKey = "readingStreakDays"
-    static let lastCheckInKey = "readingLastCheckIn"
     static let currentUserIdKey = "currentUserId"
 
-    static func alreadyCheckedInToday(defaults: UserDefaults = .standard) -> Bool {
-        let timestamp = defaults.double(forKey: lastCheckInKey)
-        guard timestamp > 0 else { return false }
-        return Calendar.current.isDateInToday(Date(timeIntervalSince1970: timestamp))
-    }
+    static func alreadyCheckedInToday(modelContext: ModelContext, userId: String) -> Bool {
+        let currentUserId = userId
 
-    static func checkInToday(modelContext: ModelContext, defaults: UserDefaults = .standard) throws -> Bool {
-        if alreadyCheckedInToday(defaults: defaults) {
+        var descriptor = FetchDescriptor<ReadingStats>(
+            predicate: #Predicate<ReadingStats> { record in
+                record.userId == currentUserId
+            }
+        )
+        descriptor.fetchLimit = 1
+
+        guard let record = try? modelContext.fetch(descriptor).first,
+              let lastCheckIn = record.lastCheckInDate else {
             return false
         }
 
-        var currentUserId = defaults.string(forKey: currentUserIdKey) ?? "local-user"
-        if currentUserId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || currentUserId == "local-user" {
-            currentUserId = UUID().uuidString
-            defaults.set(currentUserId, forKey: currentUserIdKey)
-        }
+        return Calendar.current.isDateInToday(lastCheckIn)
+    }
 
-        let newStreakDays = defaults.integer(forKey: streakDaysKey) + 1
-        let now = Date()
-
-        defaults.set(newStreakDays, forKey: streakDaysKey)
-        defaults.set(now.timeIntervalSince1970, forKey: lastCheckInKey)
+    static func checkInToday(modelContext: ModelContext, userId: String) throws -> Bool {
+        let currentUserId = userId
 
         var descriptor = FetchDescriptor<ReadingStats>(
             predicate: #Predicate<ReadingStats> { record in
@@ -45,10 +39,16 @@ enum ReadingCheckInWriter {
         descriptor.fetchLimit = 50
 
         let matches = try modelContext.fetch(descriptor)
+        let now = Date()
 
         let record: ReadingStats
         if let best = matches.max(by: { $0.streakDays < $1.streakDays }) {
             record = best
+
+            if let lastCheckIn = record.lastCheckInDate,
+               Calendar.current.isDateInToday(lastCheckIn) {
+                return false
+            }
 
             if matches.count > 1 {
                 for dupe in matches where dupe.persistentModelID != best.persistentModelID {
@@ -61,10 +61,18 @@ enum ReadingCheckInWriter {
             record = newRecord
         }
 
+        let newStreakDays: Int
+        if let lastCheckIn = record.lastCheckInDate,
+           let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: now),
+           Calendar.current.isDate(lastCheckIn, inSameDayAs: yesterday) {
+            newStreakDays = record.streakDays + 1
+        } else {
+            newStreakDays = 1
+        }
+
         record.streakDays = newStreakDays
         record.lastCheckInDate = now
         record.updatedAt = now
-        record.needsSync = true
 
         try modelContext.save()
         return true

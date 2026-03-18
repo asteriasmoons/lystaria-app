@@ -12,47 +12,27 @@ struct DailyIntentionView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
 
-    // UI state
+    @Query(sort: \DailyIntention.updatedAt, order: .reverse)
+    private var intentions: [DailyIntention]
+
     @State private var text: String = ""
     @State private var isEditing: Bool = true
-    @State private var loaded: Bool = false
-    @State private var loadedDayKey: String = ""
+    @State private var lastSyncedText: String = ""
     @State private var dayChangeChecksEnabled: Bool = false
-
-    // The SwiftData record for today
-    @State private var record: DailyIntention? = nil
 
     private let dayChangeTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
-    // MARK: - Date helpers
-
-    private var todayComponents: DateComponents {
-        Calendar.autoupdatingCurrent.dateComponents([.year, .month, .day], from: Date())
-    }
-
-    private var todayDate: Date {
-        Calendar.current.date(from: todayComponents) ?? Date()
-    }
-
     private var todayKey: String {
-        let cal = Calendar.autoupdatingCurrent
-        let df = DateFormatter()
-        df.calendar = cal
-        df.locale = Locale(identifier: "en_US_POSIX")
-        df.dateFormat = "yyyy-MM-dd"
-        return df.string(from: todayDate)
+        DailyIntentionWriter.todayKey()
     }
 
-    private var storageKey: String {
-        "dailyIntentionText.\(todayKey)"
+    private var todayRecord: DailyIntention? {
+        intentions.first(where: { $0.dateKey == todayKey })
     }
-
-    // MARK: - Body
 
     var body: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 12) {
-                // Header: star icon + title, right-aligned action when editing state
                 HStack(spacing: 10) {
                     Image("starfill")
                         .renderingMode(.template)
@@ -81,7 +61,6 @@ struct DailyIntentionView: View {
                 }
 
                 if isEditing {
-                    // Entry mode: TextEditor with placeholder
                     ZStack(alignment: .topLeading) {
                         if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             Text("Set an intention for today…")
@@ -101,11 +80,8 @@ struct DailyIntentionView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
                 } else {
-                    // Saved mode: quote stripe with clear/edit actions
                     VStack(alignment: .leading, spacing: 10) {
-                        // Stripe box (flush, no overlap)
                         HStack(spacing: 0) {
-                            // Left accent stripe
                             Rectangle()
                                 .fill(LColors.accent.opacity(0.55))
                                 .frame(width: 5)
@@ -128,9 +104,11 @@ struct DailyIntentionView: View {
                             LButton(title: "Edit", icon: "pencil", style: .secondary) {
                                 isEditing = true
                             }
+
                             GradientCapsuleButton(title: "Clear", icon: "trashfill") {
                                 clear()
                             }
+
                             Spacer()
                         }
                     }
@@ -138,10 +116,9 @@ struct DailyIntentionView: View {
             }
         }
         .onAppear {
-            loadForToday()
+            ensureTodayRecordExists()
+            syncFromModel()
 
-            // Do not run day-change reset logic immediately on app/view startup.
-            // Give the app a moment to finish loading first.
             dayChangeChecksEnabled = false
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                 dayChangeChecksEnabled = true
@@ -151,78 +128,57 @@ struct DailyIntentionView: View {
             guard dayChangeChecksEnabled else { return }
             refreshForDayChangeIfNeeded()
         }
-        .onDisappear {
-            // Extra insurance if the user navigates away.
-            persistToUserDefaults()
-        }
         .onChange(of: scenePhase) { _, newPhase in
-            // If the app becomes active after midnight or a timezone change, reload for the new day,
-            // but only after the initial startup delay has passed.
             if newPhase == .active, dayChangeChecksEnabled {
                 refreshForDayChangeIfNeeded(forceReload: true)
+                syncFromModel()
+            }
+        }
+        .onChange(of: todayRecord?.text ?? "") { _, newValue in
+            let normalized = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let current = text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if normalized != current, !isEditing {
+                text = normalized
             }
 
-            // If the app is closed/backgrounded quickly, ensure the latest text is written.
-            if newPhase == .inactive || newPhase == .background {
-                persistToUserDefaults()
-                try? modelContext.save()
-            }
+            lastSyncedText = normalized
+            isEditing = normalized.isEmpty
         }
     }
 
-    // MARK: - Actions
-
-    private func loadForToday() {
-        guard !loaded || loadedDayKey != todayKey else { return }
-
-        // Try to load today’s record
-        if let existing = try? modelContext.fetch(
-            FetchDescriptor<DailyIntention>(
-                predicate: #Predicate { $0.dateKey == todayKey }
-            )
-        ).first {
-            record = existing
-            text = existing.text
-            isEditing = existing.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        } else {
-            // No SwiftData record for today yet.
-            // Fall back to UserDefaults so intentions survive restarts even if SwiftData save didn't happen.
-            let cached = UserDefaults.standard.string(forKey: storageKey) ?? ""
-            if !cached.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                text = cached
-                isEditing = false
-
-                // Rehydrate SwiftData so future loads come from the model.
-                let r = DailyIntention(date: todayDate, text: cached)
-                modelContext.insert(r)
-                record = r
-                try? modelContext.save()
-            } else {
-                record = nil
-                text = ""
-                isEditing = true
-            }
+    private func ensureTodayRecordExists() {
+        do {
+            _ = try DailyIntentionWriter.fetchOrCreateTodayRecord(modelContext: modelContext)
+        } catch {
+            print("Failed to ensure daily intention record exists: \(error)")
         }
-        loadedDayKey = todayKey
-        loaded = true
+    }
+
+    private func syncFromModel() {
+        let modelText = todayRecord?.text ?? ""
+        let normalized = modelText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if !isEditing || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || text == lastSyncedText {
+            text = normalized
+        }
+
+        lastSyncedText = normalized
+        isEditing = normalized.isEmpty
     }
 
     private func refreshForDayChangeIfNeeded(forceReload: Bool = false) {
         let currentKey = todayKey
-        guard forceReload || loadedDayKey != currentKey else { return }
+        let currentRecordKey = todayRecord?.dateKey ?? ""
 
-        // Day changed (or app re-activated): clear view state and load the record for the new day.
-        text = ""
-        isEditing = true
-        record = nil
-        loaded = false
-        loadedDayKey = ""
-        loadForToday()
-    }
+        guard forceReload || currentRecordKey != currentKey else { return }
 
-    private func persistToUserDefaults() {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        UserDefaults.standard.set(trimmed, forKey: storageKey)
+        do {
+            _ = try DailyIntentionWriter.fetchOrCreateTodayRecord(modelContext: modelContext)
+            syncFromModel()
+        } catch {
+            print("Failed to refresh daily intention for day change: \(error)")
+        }
     }
 
     private func save() {
@@ -235,30 +191,23 @@ struct DailyIntentionView: View {
                 modelContext: modelContext
             )
 
-            let key = DailyIntentionWriter.todayKey()
-
-            let descriptor = FetchDescriptor<DailyIntention>(
-                predicate: #Predicate<DailyIntention> { $0.dateKey == key }
-            )
-
-            record = try modelContext.fetch(descriptor).first
             text = trimmed
+            lastSyncedText = trimmed
             isEditing = false
-
         } catch {
             print("Failed to save daily intention: \(error)")
         }
     }
 
     private func clear() {
-        text = ""
-        UserDefaults.standard.set("", forKey: storageKey)
-        if let r = record {
-            r.text = ""
-            r.updatedAt = Date()
-            try? modelContext.save()
+        do {
+            try DailyIntentionWriter.clearTodayIntention(modelContext: modelContext)
+            text = ""
+            lastSyncedText = ""
+            isEditing = true
+        } catch {
+            print("Failed to clear daily intention: \(error)")
         }
-        isEditing = true
     }
 }
 

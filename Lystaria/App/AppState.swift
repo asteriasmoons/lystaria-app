@@ -7,22 +7,34 @@
 
 import Foundation
 import Combine
+import SwiftData
 
 @MainActor
 final class AppState: ObservableObject {
-
+    
     enum SessionStatus {
         case checking
         case signedOut
         case signedIn(AuthUser)
     }
-
+    
     @Published private(set) var status: SessionStatus = .checking
+    
+    var currentUser: AuthUser? {
+        if case .signedIn(let user) = status {
+            return user
+        }
+        return nil
+    }
 
+    var currentAppleUserId: String? {
+        currentUser?.appleUserId
+    }
+    
     private var bootstrapTask: Task<Void, Never>?
     private var hasBootstrapped = false
-
-    func bootstrap(force: Bool = false) {
+    
+    func bootstrap(modelContext: ModelContext, force: Bool = false) {
         if hasBootstrapped && !force { return }
 
         bootstrapTask?.cancel()
@@ -33,11 +45,13 @@ final class AppState: ObservableObject {
             guard let self else { return }
 
             do {
-                let user = try await AuthService.shared.fetchMeWithAutoRefresh()
+                try await AuthService.shared.validateStoredAppleSession()
+                let user = try await AuthService.shared.fetchMeWithAutoRefresh(modelContext: modelContext)
                 guard !Task.isCancelled else { return }
                 self.status = .signedIn(user)
             } catch {
                 guard !Task.isCancelled else { return }
+                print("[AppState] bootstrap failed:", error)
                 self.status = .signedOut
             }
         }
@@ -50,9 +64,11 @@ final class AppState: ObservableObject {
     }
 
     func signOut() {
+        print("[AppState] signOut() called")
         bootstrapTask?.cancel()
         AuthService.shared.signOutLocal()
         hasBootstrapped = true
         status = .signedOut
+        print("[AppState] status is now .signedOut")
     }
 }

@@ -21,20 +21,54 @@ final class MoodLog {
 
     // MARK: - Mini-app mirrored fields
     /// 1+ moods selected (stored as strings to match TS union values exactly)
-    var moods: [String]
+    var moodsStorage: String = "[]"
 
     /// 0+ activities selected
-    var activities: [String]
+    var activitiesStorage: String = "[]"
 
     /// Optional note (mini-app max 1500, enforce in UI)
     var note: String?
 
     /// Stored computed average mood score (1–5) at creation time
-    var score: Double
+    var score: Double = 3.0
 
     // MARK: - Timestamps
-    var createdAt: Date
-    var updatedAt: Date
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+
+    var moods: [String] {
+        get {
+            guard let data = moodsStorage.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([String].self, from: data)
+            else { return [] }
+            return decoded
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue),
+               let encoded = String(data: data, encoding: .utf8) {
+                moodsStorage = encoded
+            } else {
+                moodsStorage = "[]"
+            }
+        }
+    }
+
+    var activities: [String] {
+        get {
+            guard let data = activitiesStorage.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([String].self, from: data)
+            else { return [] }
+            return decoded
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue),
+               let encoded = String(data: data, encoding: .utf8) {
+                activitiesStorage = encoded
+            } else {
+                activitiesStorage = "[]"
+            }
+        }
+    }
 
     // MARK: - Single source of truth (mirrors mini-app constants)
 
@@ -117,8 +151,8 @@ final class MoodLog {
         let normalizedMoods = MoodLog.normalizeList(moods)
         let normalizedActivities = MoodLog.normalizeList(activities)
 
-        self.moods = normalizedMoods
-        self.activities = normalizedActivities
+        self.moodsStorage = "[]"
+        self.activitiesStorage = "[]"
         self.note = note
 
         // Compute score at creation time (stored, not derived later)
@@ -132,6 +166,10 @@ final class MoodLog {
         // Timestamps
         self.createdAt = Date()
         self.updatedAt = Date()
+
+        // Now safe to use computed properties
+        self.moods = normalizedMoods
+        self.activities = normalizedActivities
     }
 
     /// Alternate init if you ever need to import an already-computed score (e.g., from server sync).
@@ -146,8 +184,8 @@ final class MoodLog {
         lastSyncedAt: Date? = nil,
         needsSync: Bool = false
     ) {
-        self.moods = MoodLog.normalizeList(moods)
-        self.activities = MoodLog.normalizeList(activities)
+        self.moodsStorage = "[]"
+        self.activitiesStorage = "[]"
         self.note = note
         self.score = MoodLog.clampScore(score)
 
@@ -157,6 +195,10 @@ final class MoodLog {
         self.serverId = serverId
         self.lastSyncedAt = lastSyncedAt
         self.needsSync = needsSync
+
+        // Now safe to use computed properties
+        self.moods = MoodLog.normalizeList(moods)
+        self.activities = MoodLog.normalizeList(activities)
     }
 
     // MARK: - Helpers (validation-ish + scoring)

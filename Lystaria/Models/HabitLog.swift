@@ -8,19 +8,19 @@ import SwiftData
 
 @Model
 final class HabitLog {
-    @Attribute(.unique) var id: UUID
+    var id: UUID = UUID()
 
     /// The habit this log belongs to
     var habit: Habit?
 
     /// We store dayStart so “today” comparisons are reliable
-    var dayStart: Date
+    var dayStart: Date = Date()
 
     /// How many times the habit was logged on that day
-    var count: Int
+    var count: Int = 0
 
-    var createdAt: Date
-    var updatedAt: Date
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
 
     init(habit: Habit?, dayStart: Date, count: Int = 1) {
         self.id = UUID()

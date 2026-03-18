@@ -23,31 +23,31 @@ enum HabitReminderKind: String, Codable, CaseIterable {
 
 @Model
 final class Habit {
-    @Attribute(.unique) var id: UUID
+    var id: UUID = UUID()
 
-    var title: String
+    var title: String = ""
     var details: String?
 
     /// How many days per week the user wants to do this habit (e.g., 3)
-    var daysPerWeek: Int
+    var daysPerWeek: Int = 1
 
     /// How many times per day the user wants to do this habit (e.g., 2)
-    var timesPerDay: Int
+    var timesPerDay: Int = 1
 
     // MARK: - Reminder Settings (powers Habit nudges via LystariaReminder)
 
     /// If false, no linked reminders should exist for this habit.
-    var reminderEnabled: Bool
+    var reminderEnabled: Bool = false
 
     /// Stored as raw string for SwiftData compatibility.
-    var reminderKindRaw: String
+    var reminderKindRaw: String = HabitReminderKind.none.rawValue
 
     /// For daily/weekly reminders: one time of day in 24-hour "HH:mm".
     /// (We can expand to multiple times later.)
     var reminderTimeOfDay: String?
 
     /// Weekly only: selected days 0-6 (Sun-Sat). Must match `daysPerWeek` when weekly.
-    var reminderDaysOfWeek: [Int]
+    var reminderDaysOfWeekStorage: String = "[]"
 
     /// Optional: first day this habit reminder becomes active. If nil, scheduling can treat it as "today".
     var reminderStartDate: Date?
@@ -57,15 +57,32 @@ final class Habit {
         set { reminderKindRaw = newValue.rawValue }
     }
 
-    /// Used later for free-tier caps (e.g., only 2 active habits on free plan)
-    var isArchived: Bool
+    var reminderDaysOfWeek: [Int] {
+        get {
+            guard let data = reminderDaysOfWeekStorage.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([Int].self, from: data)
+            else { return [] }
+            return decoded
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue),
+               let encoded = String(data: data, encoding: .utf8) {
+                reminderDaysOfWeekStorage = encoded
+            } else {
+                reminderDaysOfWeekStorage = "[]"
+            }
+        }
+    }
 
-    var createdAt: Date
-    var updatedAt: Date
+    /// Used later for free-tier caps (e.g., only 2 active habits on free plan)
+    var isArchived: Bool = false
+
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
 
     // Relationship: one habit has many logs
     @Relationship(deleteRule: .cascade, inverse: \HabitLog.habit)
-    var logs: [HabitLog]
+    var logs: [HabitLog]?
 
     init(
         title: String,
@@ -108,12 +125,15 @@ final class Habit {
         self.reminderEnabled = computedEnabled
         self.reminderKindRaw = computedKindRaw
         self.reminderTimeOfDay = computedTime
-        self.reminderDaysOfWeek = computedDays
+        self.reminderDaysOfWeekStorage = "[]"
         self.reminderStartDate = reminderStartDate
 
         self.isArchived = isArchived
         self.createdAt = Date()
         self.updatedAt = Date()
-        self.logs = []
+        self.logs = nil
+
+        // Now safe to use computed property
+        self.reminderDaysOfWeek = computedDays
     }
 }

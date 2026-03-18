@@ -8,14 +8,14 @@ import SwiftData
 
 // MARK: - Enums
 
-enum ReminderStatus: String, Codable, CaseIterable {
+enum ReminderStatus: String, CaseIterable {
     case scheduled = "scheduled"
     case sent = "sent"
     case paused = "paused"
     case deleted = "deleted"
 }
 
-enum ReminderScheduleKind: String, Codable, CaseIterable {
+enum ReminderScheduleKind: String, CaseIterable {
     case once = "once"
     case daily = "daily"
     case weekly = "weekly"
@@ -37,7 +37,7 @@ enum ReminderScheduleKind: String, Codable, CaseIterable {
 
 // MARK: - Schedule (Codable struct stored as JSON)
 
-struct ReminderSchedule: Codable, Equatable, Sendable {
+struct ReminderSchedule: Equatable, Sendable {
     var kind: ReminderScheduleKind
     
     // For daily/weekly/monthly/yearly
@@ -61,42 +61,52 @@ struct ReminderSchedule: Codable, Equatable, Sendable {
     static let once = ReminderSchedule(kind: .once)
 }
 
+extension ReminderStatus: nonisolated Codable {}
+extension ReminderScheduleKind: nonisolated Codable {}
+extension ReminderSchedule: nonisolated Codable {}
+
 // MARK: - Reminder Model
 
 @Model
 final class LystariaReminder {
-    // MARK: - Sync metadata (Supabase)
-    var serverId: String?          // Supabase row id
-    var userId: String?            // auth.uid() owner
-    var lastSyncedAt: Date?
-    var needsSync: Bool = true
-    var deletedAt: Date?           // soft delete for sync
-    
     // MARK: - Fields
-    var title: String
+    var title: String = ""
     var details: String?
-    var statusRaw: String
-    var nextRunAt: Date
+    var statusRaw: String = ReminderStatus.scheduled.rawValue
+    var nextRunAt: Date = Date()
     var acknowledgedAt: Date?
     var pendingNextRunAt: Date?
     
     var runDayKey: String?          // "2026-02-05"
-    var sentTimesOfDay: [String]
+    var sentTimesOfDayStorage: String = "[]"
     
-    // Schedule stored as JSON via Codable
-    var schedule: ReminderSchedule?
+    // CloudKit-safe scalar storage for schedule JSON
+    var scheduleStorage: String?
     
-    var timezone: String
+    var timezone: String = TimeZone.current.identifier
     var lastRunAt: Date?
     
-    var createdAt: Date
-    var updatedAt: Date
+    var checklistStorage: String = "[]"
 
-    // MARK: - Sync helpers
-    func markDirty() {
-        self.updatedAt = Date()
-        self.needsSync = true
+    var checklistItems: [String] {
+        get {
+            guard let data = checklistStorage.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([String].self, from: data)
+            else { return [] }
+            return decoded
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue),
+               let encoded = String(data: data, encoding: .utf8) {
+                checklistStorage = encoded
+            } else {
+                checklistStorage = "[]"
+            }
+        }
     }
+
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
 
     // MARK: - Kanban
     var kanbanColumn: KanbanColumn?
@@ -121,6 +131,48 @@ final class LystariaReminder {
         get { ReminderStatus(rawValue: statusRaw) ?? .scheduled }
         set { statusRaw = newValue.rawValue }
     }
+
+    var sentTimesOfDay: [String] {
+        get {
+            guard let data = sentTimesOfDayStorage.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([String].self, from: data)
+            else {
+                return []
+            }
+            return decoded
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue),
+               let encoded = String(data: data, encoding: .utf8) {
+                sentTimesOfDayStorage = encoded
+            } else {
+                sentTimesOfDayStorage = "[]"
+            }
+        }
+    }
+
+    var schedule: ReminderSchedule? {
+        get {
+            guard let scheduleStorage,
+                  let data = scheduleStorage.data(using: .utf8)
+            else {
+                return nil
+            }
+            return try? JSONDecoder().decode(ReminderSchedule.self, from: data)
+        }
+        set {
+            guard let newValue else {
+                scheduleStorage = nil
+                return
+            }
+            if let data = try? JSONEncoder().encode(newValue),
+               let encoded = String(data: data, encoding: .utf8) {
+                scheduleStorage = encoded
+            } else {
+                scheduleStorage = nil
+            }
+        }
+    }
     
     var isRecurring: Bool {
         guard let schedule else { return false }
@@ -134,7 +186,6 @@ final class LystariaReminder {
         nextRunAt: Date,
         schedule: ReminderSchedule? = nil,
         timezone: String = TimeZone.current.identifier,
-        serverId: String? = nil,
         linkedKind: LinkedKind? = nil,
         linkedHabitId: UUID? = nil
     ) {
@@ -145,15 +196,15 @@ final class LystariaReminder {
         self.acknowledgedAt = nil
         self.pendingNextRunAt = nil
         self.runDayKey = nil
-        self.sentTimesOfDay = []
-        self.schedule = schedule
+        self.sentTimesOfDayStorage = "[]"
+        self.scheduleStorage = nil
         self.timezone = timezone
         self.lastRunAt = nil
-        self.serverId = serverId
         self.createdAt = Date()
         self.updatedAt = Date()
         self.linkedKind = linkedKind
         self.linkedHabitId = linkedHabitId
-        self.needsSync = true
+        self.sentTimesOfDay = []
+        self.schedule = schedule
     }
 }

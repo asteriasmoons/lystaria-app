@@ -1,8 +1,8 @@
 //
-//  ChecklistItemWriter.swift
-//  Lystaria
+// ChecklistItemWriter.swift
+// Lystaria
 //
-//  Created by Asteria Moon on 3/14/26.
+// Created By Asteria Moon
 //
 
 import Foundation
@@ -12,27 +12,40 @@ import SwiftData
 enum ChecklistItemWriter {
     static func addItem(
         text: String,
+        checklistID: String?,
         modelContext: ModelContext
     ) throws {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
         let descriptor = FetchDescriptor<Checklist>(
-            sortBy: [SortDescriptor(\.createdAt, order: .forward)]
+            sortBy: [
+                SortDescriptor(\.sortOrder, order: .forward),
+                SortDescriptor(\.createdAt, order: .forward)
+            ]
         )
 
         let existingChecklists = try modelContext.fetch(descriptor)
 
         let checklist: Checklist
-        if let first = existingChecklists.first {
+        if let checklistID,
+           let matched = existingChecklists.first(where: {
+               ChecklistEntity.makeStableID(for: $0) == checklistID
+           }) {
+            checklist = matched
+        } else if let first = existingChecklists.first {
             checklist = first
         } else {
-            let created = Checklist(name: "My Checklist", sortOrder: 0)
+            let created = Checklist(name: "Checklist 1", sortOrder: 0)
+            created.updatedAt = Date()
+            created.needsSync = true
             modelContext.insert(created)
             checklist = created
         }
 
-        let nextOrder = (checklist.items.map(\.sortOrder).max() ?? -1) + 1
+        let existingItems = (checklist.items ?? [])
+        let nextOrder = (existingItems.map(\.sortOrder).max() ?? -1) + 1
+        let now = Date()
 
         let item = ChecklistItem(
             text: trimmed,
@@ -41,10 +54,16 @@ enum ChecklistItemWriter {
             checklist: checklist
         )
 
-        item.updatedAt = Date()
+        item.text = trimmed
+        item.isCompleted = false
+        item.completedAt = nil
+        item.sortOrder = nextOrder
+        item.updatedAt = now
         item.needsSync = true
+        item.checklist = checklist
 
-        checklist.updatedAt = Date()
+        checklist.items = (checklist.items ?? []) + [item]
+        checklist.updatedAt = now
         checklist.needsSync = true
 
         modelContext.insert(item)

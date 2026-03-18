@@ -17,7 +17,19 @@ struct CheckInReadingIntent: AppIntent {
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let didCheckIn = try await MainActor.run {
             let context = ModelContext(LystariaApp.sharedModelContainer)
-            return try ReadingCheckInWriter.checkInToday(modelContext: context)
+
+            // Fetch the signed-in user so we can use the same userId used elsewhere
+            let descriptor = FetchDescriptor<AuthUser>()
+            let users = try context.fetch(descriptor)
+
+            guard let userId = users.first?.appleUserId else {
+                throw NSError(domain: "ReadingCheckIn", code: 1, userInfo: [NSLocalizedDescriptionKey: "No signed-in user available."])
+            }
+
+            return try ReadingCheckInWriter.checkInToday(
+                modelContext: context,
+                userId: userId
+            )
         }
 
         if didCheckIn {

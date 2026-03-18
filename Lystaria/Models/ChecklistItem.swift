@@ -16,24 +16,24 @@ final class Checklist {
     var needsSync: Bool = true
     
     // MARK: - Fields
-    var name: String
+    var name: String = ""
     var color: String?
-    var sortOrder: Int
+    var sortOrder: Int = 0
     
-    var createdAt: Date
-    var updatedAt: Date
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
     
     // MARK: - Relationship
     @Relationship(deleteRule: .cascade, inverse: \ChecklistItem.checklist)
-    var items: [ChecklistItem] = []
+    var items: [ChecklistItem]?
     
     // MARK: - Computed
     var completedCount: Int {
-        items.filter(\.isCompleted).count
+        (items ?? []).filter(\.isCompleted).count
     }
     
     var totalCount: Int {
-        items.count
+        (items ?? []).count
     }
     
     var progress: Double {
@@ -53,6 +53,7 @@ final class Checklist {
         self.serverId = serverId
         self.createdAt = Date()
         self.updatedAt = Date()
+        self.items = nil
     }
 }
 
@@ -66,13 +67,13 @@ final class ChecklistItem {
     var needsSync: Bool = true
     
     // MARK: - Fields
-    var text: String
-    var isCompleted: Bool
+    var text: String = ""
+    var isCompleted: Bool = false
     var completedAt: Date?
-    var sortOrder: Int
+    var sortOrder: Int = 0
     
-    var createdAt: Date
-    var updatedAt: Date
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
     
     // MARK: - Relationship
     var checklist: Checklist?
