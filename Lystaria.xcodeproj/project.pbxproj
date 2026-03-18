@@ -66,20 +66,6 @@
 		CF20514A2F578DFB006B71AA /* JournalCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF2051492F578DFB006B71AA /* JournalCard.swift */; };
 		CF20514C2F578E11006B71AA /* JournalPreviewSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF20514B2F578E11006B71AA /* JournalPreviewSheet.swift */; };
 		CF2051E12F59EFCD006B71AA /* LilyScriptOne-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = CF2051E02F59EFCD006B71AA /* LilyScriptOne-Regular.ttf */; };
-		CF4790A02F5B63ED0026696B /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = CF47909F2F5B63ED0026696B /* Auth */; };
-		CF4790A22F5B63ED0026696B /* Functions in Frameworks */ = {isa = PBXBuildFile; productRef = CF4790A12F5B63ED0026696B /* Functions */; };
-		CF4790A42F5B63ED0026696B /* PostgREST in Frameworks */ = {isa = PBXBuildFile; productRef = CF4790A32F5B63ED0026696B /* PostgREST */; };
-		CF4790A62F5B63ED0026696B /* Realtime in Frameworks */ = {isa = PBXBuildFile; productRef = CF4790A52F5B63ED0026696B /* Realtime */; };
-		CF4790A82F5B63ED0026696B /* Storage in Frameworks */ = {isa = PBXBuildFile; productRef = CF4790A72F5B63ED0026696B /* Storage */; };
-		CF4790AA2F5B63ED0026696B /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = CF4790A92F5B63ED0026696B /* Supabase */; };
-		CF4790AC2F5B64680026696B /* SupabaseManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF4790AB2F5B64620026696B /* SupabaseManager.swift */; };
-		CF84214B2F5F4D3E0069F12F /* SupabaseManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF4790AB2F5B64620026696B /* SupabaseManager.swift */; };
-		CF84214E2F5F4EEB0069F12F /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = CF84214D2F5F4EEB0069F12F /* Auth */; };
-		CF8421502F5F4EEB0069F12F /* Functions in Frameworks */ = {isa = PBXBuildFile; productRef = CF84214F2F5F4EEB0069F12F /* Functions */; };
-		CF8421522F5F4EEB0069F12F /* PostgREST in Frameworks */ = {isa = PBXBuildFile; productRef = CF8421512F5F4EEB0069F12F /* PostgREST */; };
-		CF8421542F5F4EEB0069F12F /* Realtime in Frameworks */ = {isa = PBXBuildFile; productRef = CF8421532F5F4EEB0069F12F /* Realtime */; };
-		CF8421562F5F4EEB0069F12F /* Storage in Frameworks */ = {isa = PBXBuildFile; productRef = CF8421552F5F4EEB0069F12F /* Storage */; };
-		CF8421582F5F4EEB0069F12F /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = CF8421572F5F4EEB0069F12F /* Supabase */; };
 		CF84216D2F5F57520069F12F /* AuthUser.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83222F50A4940092FC98 /* AuthUser.swift */; };
 		CF84217C2F5FA7580069F12F /* HealthKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84217B2F5FA7480069F12F /* HealthKitManager.swift */; };
 		CF84217D2F5FA7580069F12F /* HealthKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84217B2F5FA7480069F12F /* HealthKitManager.swift */; };
@@ -88,7 +74,6 @@
 		CF8421892F6079EC0069F12F /* OnboardingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8421882F6079E60069F12F /* OnboardingManager.swift */; };
 		CF8421912F607AE90069F12F /* WaterTrackingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84218F2F607AE90069F12F /* WaterTrackingView.swift */; };
 		CF8421922F607AE90069F12F /* StepCountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84218E2F607AE90069F12F /* StepCountView.swift */; };
-		CF8421972F607B100069F12F /* SyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8421942F607B100069F12F /* SyncService.swift */; };
 		CF84219A2F607B2D0069F12F /* OnboardingTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8421982F607B2D0069F12F /* OnboardingTarget.swift */; };
 		CF84219C2F607B6D0069F12F /* OnboardingModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84219B2F607B6D0069F12F /* OnboardingModels.swift */; };
 		CF84219E2F607BAE0069F12F /* OnboardingOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84219D2F607BA70069F12F /* OnboardingOverlay.swift */; };
@@ -228,13 +213,11 @@
 		CF20514B2F578E11006B71AA /* JournalPreviewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalPreviewSheet.swift; sourceTree = "<group>"; };
 		CF2051E02F59EFCD006B71AA /* LilyScriptOne-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "LilyScriptOne-Regular.ttf"; sourceTree = "<group>"; };
 		CF41A5932F4DF57000C96018 /* Lystaria.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Lystaria.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		CF4790AB2F5B64620026696B /* SupabaseManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseManager.swift; sourceTree = "<group>"; };
 		CF84217B2F5FA7480069F12F /* HealthKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitManager.swift; sourceTree = "<group>"; };
 		CF8421812F5FBD820069F12F /* WaterHealthKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaterHealthKitManager.swift; sourceTree = "<group>"; };
 		CF8421882F6079E60069F12F /* OnboardingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingManager.swift; sourceTree = "<group>"; };
 		CF84218E2F607AE90069F12F /* StepCountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StepCountView.swift; sourceTree = "<group>"; };
 		CF84218F2F607AE90069F12F /* WaterTrackingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaterTrackingView.swift; sourceTree = "<group>"; };
-		CF8421942F607B100069F12F /* SyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncService.swift; sourceTree = "<group>"; };
 		CF8421982F607B2D0069F12F /* OnboardingTarget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingTarget.swift; sourceTree = "<group>"; };
 		CF84219B2F607B6D0069F12F /* OnboardingModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingModels.swift; sourceTree = "<group>"; };
 		CF84219D2F607BA70069F12F /* OnboardingOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingOverlay.swift; sourceTree = "<group>"; };
@@ -297,7 +280,6 @@
 		CF8421752F5F5B550069F12F /* Exceptions for "Lystaria Watch Watch App" folder in "Lystaria" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				SupabaseSessionBridge.swift,
 				WatchSessionManager.swift,
 			);
 			target = CF41A5922F4DF57000C96018 /* Lystaria */;
@@ -320,12 +302,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				CF8421522F5F4EEB0069F12F /* PostgREST in Frameworks */,
-				CF8421502F5F4EEB0069F12F /* Functions in Frameworks */,
-				CF8421582F5F4EEB0069F12F /* Supabase in Frameworks */,
-				CF84214E2F5F4EEB0069F12F /* Auth in Frameworks */,
-				CF8421562F5F4EEB0069F12F /* Storage in Frameworks */,
-				CF8421542F5F4EEB0069F12F /* Realtime in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -333,14 +309,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				CF4790A62F5B63ED0026696B /* Realtime in Frameworks */,
-				CF4790A42F5B63ED0026696B /* PostgREST in Frameworks */,
-				CF4790A22F5B63ED0026696B /* Functions in Frameworks */,
 				CF8D83782F53C57E0092FC98 /* GoogleSignInSwift in Frameworks */,
-				CF4790A82F5B63ED0026696B /* Storage in Frameworks */,
-				CF4790AA2F5B63ED0026696B /* Supabase in Frameworks */,
 				CF8D83732F53C5120092FC98 /* FirebaseAuth in Frameworks */,
-				CF4790A02F5B63ED0026696B /* Auth in Frameworks */,
 				CF8D83762F53C57E0092FC98 /* GoogleSignIn in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -430,7 +400,6 @@
 				CF8421882F6079E60069F12F /* OnboardingManager.swift */,
 				CF8421812F5FBD820069F12F /* WaterHealthKitManager.swift */,
 				CF84217B2F5FA7480069F12F /* HealthKitManager.swift */,
-				CF4790AB2F5B64620026696B /* SupabaseManager.swift */,
 			);
 			path = Managers;
 			sourceTree = "<group>";
@@ -454,7 +423,6 @@
 		CF8421952F607B100069F12F /* Sync */ = {
 			isa = PBXGroup;
 			children = (
-				CF8421942F607B100069F12F /* SyncService.swift */,
 			);
 			path = Sync;
 			sourceTree = "<group>";
@@ -736,24 +704,12 @@
 			buildRules = (
 			);
 			dependencies = (
-				CF84215D2F5F50C30069F12F /* PBXTargetDependency */,
-				CF84215F2F5F50C30069F12F /* PBXTargetDependency */,
-				CF8421612F5F50C30069F12F /* PBXTargetDependency */,
-				CF8421632F5F50C30069F12F /* PBXTargetDependency */,
-				CF8421652F5F50C30069F12F /* PBXTargetDependency */,
-				CF8421672F5F50C30069F12F /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				CF0A09E12F5F14B200401658 /* Lystaria Watch Watch App */,
 			);
 			name = "Lystaria Watch Watch App";
 			packageProductDependencies = (
-				CF84214D2F5F4EEB0069F12F /* Auth */,
-				CF84214F2F5F4EEB0069F12F /* Functions */,
-				CF8421512F5F4EEB0069F12F /* PostgREST */,
-				CF8421532F5F4EEB0069F12F /* Realtime */,
-				CF8421552F5F4EEB0069F12F /* Storage */,
-				CF8421572F5F4EEB0069F12F /* Supabase */,
 			);
 			productName = "Lystaria Watch Watch App";
 			productReference = CF0A09E02F5F14B200401658 /* Lystaria Watch Watch App.app */;
@@ -778,12 +734,6 @@
 				CF8D83722F53C5120092FC98 /* FirebaseAuth */,
 				CF8D83752F53C57E0092FC98 /* GoogleSignIn */,
 				CF8D83772F53C57E0092FC98 /* GoogleSignInSwift */,
-				CF47909F2F5B63ED0026696B /* Auth */,
-				CF4790A12F5B63ED0026696B /* Functions */,
-				CF4790A32F5B63ED0026696B /* PostgREST */,
-				CF4790A52F5B63ED0026696B /* Realtime */,
-				CF4790A72F5B63ED0026696B /* Storage */,
-				CF4790A92F5B63ED0026696B /* Supabase */,
 			);
 			productName = Lystaria;
 			productReference = CF41A5932F4DF57000C96018 /* Lystaria.app */;
@@ -819,7 +769,6 @@
 			packageReferences = (
 				CF8D83712F53C5110092FC98 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				CF8D83742F53C57E0092FC98 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
-				CF47909E2F5B63ED0026696B /* XCRemoteSwiftPackageReference "supabase-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = CF41A5942F4DF57000C96018 /* Products */;
@@ -861,7 +810,6 @@
 				CF8421822F5FBD8B0069F12F /* WaterHealthKitManager.swift in Sources */,
 				CF84216D2F5F57520069F12F /* AuthUser.swift in Sources */,
 				CF0A09F22F5F1C5800401658 /* MoodLog.swift in Sources */,
-				CF84214B2F5F4D3E0069F12F /* SupabaseManager.swift in Sources */,
 				CF84217D2F5FA7580069F12F /* HealthKitManager.swift in Sources */,
 				CF13B6522F678C27008D3CE9 /* JournalEntry.swift in Sources */,
 				CF13B6562F678D53008D3CE9 /* JournalBook.swift in Sources */,
@@ -909,7 +857,6 @@
 				CF13B6462F675D8A008D3CE9 /* DashboardConsistencyModels.swift in Sources */,
 				CF8D837C2F53E1E60092FC98 /* SignInView.swift in Sources */,
 				CF13B65F2F68BE6E008D3CE9 /* JournalPrompt.swift in Sources */,
-				CF4790AC2F5B64680026696B /* SupabaseManager.swift in Sources */,
 				CF8D833D2F50B0620092FC98 /* APIClient.swift in Sources */,
 				CF8D832D2F50A4940092FC98 /* Habit.swift in Sources */,
 				CF8421AF2F61CD660069F12F /* WelcomeView.swift in Sources */,
@@ -955,7 +902,6 @@
 				CF8421832F5FBD8B0069F12F /* WaterHealthKitManager.swift in Sources */,
 				CF13B66F2F69B54A008D3CE9 /* AddExercisePopupView.swift in Sources */,
 				CF8421C72F636DD00069F12F /* ToolboxView.swift in Sources */,
-				CF8421972F607B100069F12F /* SyncService.swift in Sources */,
 				CF13B6832F6A2DFF008D3CE9 /* JournalPromptUsage.swift in Sources */,
 				CF8D834C2F5124EB0092FC98 /* LystariaTheme.swift in Sources */,
 				CF13B6402F65CECB008D3CE9 /* CalendarEventDetailOverlay.swift in Sources */,
@@ -993,30 +939,6 @@
 			isa = PBXTargetDependency;
 			target = CF0A09DF2F5F14B200401658 /* Lystaria Watch Watch App */;
 			targetProxy = CF0A09E82F5F14B400401658 /* PBXContainerItemProxy */;
-		};
-		CF84215D2F5F50C30069F12F /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			productRef = CF84215C2F5F50C30069F12F /* Auth */;
-		};
-		CF84215F2F5F50C30069F12F /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			productRef = CF84215E2F5F50C30069F12F /* Functions */;
-		};
-		CF8421612F5F50C30069F12F /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			productRef = CF8421602F5F50C30069F12F /* PostgREST */;
-		};
-		CF8421632F5F50C30069F12F /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			productRef = CF8421622F5F50C30069F12F /* Realtime */;
-		};
-		CF8421652F5F50C30069F12F /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			productRef = CF8421642F5F50C30069F12F /* Storage */;
-		};
-		CF8421672F5F50C30069F12F /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			productRef = CF8421662F5F50C30069F12F /* Supabase */;
 		};
 /* End PBXTargetDependency section */
 
@@ -1403,14 +1325,6 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		CF47909E2F5B63ED0026696B /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/supabase/supabase-swift";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 2.5.1;
-			};
-		};
 		CF8D83712F53C5110092FC98 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
@@ -1430,96 +1344,6 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		CF47909F2F5B63ED0026696B /* Auth */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = CF47909E2F5B63ED0026696B /* XCRemoteSwiftPackageReference "supabase-swift" */;
-			productName = Auth;
-		};
-		CF4790A12F5B63ED0026696B /* Functions */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = CF47909E2F5B63ED0026696B /* XCRemoteSwiftPackageReference "supabase-swift" */;
-			productName = Functions;
-		};
-		CF4790A32F5B63ED0026696B /* PostgREST */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = CF47909E2F5B63ED0026696B /* XCRemoteSwiftPackageReference "supabase-swift" */;
-			productName = PostgREST;
-		};
-		CF4790A52F5B63ED0026696B /* Realtime */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = CF47909E2F5B63ED0026696B /* XCRemoteSwiftPackageReference "supabase-swift" */;
-			productName = Realtime;
-		};
-		CF4790A72F5B63ED0026696B /* Storage */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = CF47909E2F5B63ED0026696B /* XCRemoteSwiftPackageReference "supabase-swift" */;
-			productName = Storage;
-		};
-		CF4790A92F5B63ED0026696B /* Supabase */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = CF47909E2F5B63ED0026696B /* XCRemoteSwiftPackageReference "supabase-swift" */;
-			productName = Supabase;
-		};
-		CF84214D2F5F4EEB0069F12F /* Auth */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = CF47909E2F5B63ED0026696B /* XCRemoteSwiftPackageReference "supabase-swift" */;
-			productName = Auth;
-		};
-		CF84214F2F5F4EEB0069F12F /* Functions */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = CF47909E2F5B63ED0026696B /* XCRemoteSwiftPackageReference "supabase-swift" */;
-			productName = Functions;
-		};
-		CF8421512F5F4EEB0069F12F /* PostgREST */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = CF47909E2F5B63ED0026696B /* XCRemoteSwiftPackageReference "supabase-swift" */;
-			productName = PostgREST;
-		};
-		CF8421532F5F4EEB0069F12F /* Realtime */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = CF47909E2F5B63ED0026696B /* XCRemoteSwiftPackageReference "supabase-swift" */;
-			productName = Realtime;
-		};
-		CF8421552F5F4EEB0069F12F /* Storage */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = CF47909E2F5B63ED0026696B /* XCRemoteSwiftPackageReference "supabase-swift" */;
-			productName = Storage;
-		};
-		CF8421572F5F4EEB0069F12F /* Supabase */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = CF47909E2F5B63ED0026696B /* XCRemoteSwiftPackageReference "supabase-swift" */;
-			productName = Supabase;
-		};
-		CF84215C2F5F50C30069F12F /* Auth */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = CF47909E2F5B63ED0026696B /* XCRemoteSwiftPackageReference "supabase-swift" */;
-			productName = Auth;
-		};
-		CF84215E2F5F50C30069F12F /* Functions */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = CF47909E2F5B63ED0026696B /* XCRemoteSwiftPackageReference "supabase-swift" */;
-			productName = Functions;
-		};
-		CF8421602F5F50C30069F12F /* PostgREST */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = CF47909E2F5B63ED0026696B /* XCRemoteSwiftPackageReference "supabase-swift" */;
-			productName = PostgREST;
-		};
-		CF8421622F5F50C30069F12F /* Realtime */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = CF47909E2F5B63ED0026696B /* XCRemoteSwiftPackageReference "supabase-swift" */;
-			productName = Realtime;
-		};
-		CF8421642F5F50C30069F12F /* Storage */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = CF47909E2F5B63ED0026696B /* XCRemoteSwiftPackageReference "supabase-swift" */;
-			productName = Storage;
-		};
-		CF8421662F5F50C30069F12F /* Supabase */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = CF47909E2F5B63ED0026696B /* XCRemoteSwiftPackageReference "supabase-swift" */;
-			productName = Supabase;
-		};
 		CF8D83722F53C5120092FC98 /* FirebaseAuth */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = CF8D83712F53C5110092FC98 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;

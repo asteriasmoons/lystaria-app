@@ -109,32 +109,30 @@ final class HealthKitManager: ObservableObject {
         healthStore.execute(query)
     }
     
-    func totalSteps(from startDate: Date, to endDate: Date) -> Double? {
-        let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount)!
+    func totalSteps(from startDate: Date, to endDate: Date) async -> Double {
+        await withCheckedContinuation { continuation in
+            let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount)!
 
-        let predicate = HKQuery.predicateForSamples(
-            withStart: startDate,
-            end: endDate,
-            options: .strictStartDate
-        )
+            let predicate = HKQuery.predicateForSamples(
+                withStart: startDate,
+                end: endDate,
+                options: .strictStartDate
+            )
 
-        var resultValue: Double?
-        let semaphore = DispatchSemaphore(value: 0)
+            let query = HKStatisticsQuery(
+                quantityType: stepType,
+                quantitySamplePredicate: predicate,
+                options: .cumulativeSum
+            ) { _, result, _ in
+                let value = result?
+                    .sumQuantity()?
+                    .doubleValue(for: .count()) ?? 0
 
-        let query = HKStatisticsQuery(
-            quantityType: stepType,
-            quantitySamplePredicate: predicate,
-            options: .cumulativeSum
-        ) { _, result, error in
-            if error == nil {
-                resultValue = result?.sumQuantity()?.doubleValue(for: .count()) ?? 0
+                continuation.resume(returning: value)
             }
-            semaphore.signal()
-        }
 
-        healthStore.execute(query)
-        semaphore.wait()
-        return resultValue
+            healthStore.execute(query)
+        }
     }
 
     @objc private func handleDayChange() {

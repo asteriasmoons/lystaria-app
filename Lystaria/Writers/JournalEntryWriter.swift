@@ -33,7 +33,7 @@ enum JournalEntryWriter {
             book: book
         )
 
-        entry.markDirty()
+        entry.updatedAt = Date()
 
         modelContext.insert(entry)
 

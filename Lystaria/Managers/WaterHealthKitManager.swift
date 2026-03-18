@@ -144,30 +144,28 @@ final class WaterHealthKitManager: ObservableObject {
         healthStore.execute(query)
     }
 
-    func totalWaterFlOz(from startDate: Date, to endDate: Date) -> Double? {
-        let predicate = HKQuery.predicateForSamples(
-            withStart: startDate,
-            end: endDate,
-            options: .strictStartDate
-        )
+    func totalWaterFlOz(from startDate: Date, to endDate: Date) async -> Double {
+        await withCheckedContinuation { continuation in
+            let predicate = HKQuery.predicateForSamples(
+                withStart: startDate,
+                end: endDate,
+                options: .strictStartDate
+            )
 
-        var resultValue: Double?
-        let semaphore = DispatchSemaphore(value: 0)
+            let query = HKStatisticsQuery(
+                quantityType: waterType,
+                quantitySamplePredicate: predicate,
+                options: .cumulativeSum
+            ) { _, result, _ in
+                let value = result?
+                    .sumQuantity()?
+                    .doubleValue(for: .fluidOunceUS()) ?? 0
 
-        let query = HKStatisticsQuery(
-            quantityType: waterType,
-            quantitySamplePredicate: predicate,
-            options: .cumulativeSum
-        ) { _, result, error in
-            if error == nil {
-                resultValue = result?.sumQuantity()?.doubleValue(for: .fluidOunceUS()) ?? 0
+                continuation.resume(returning: value)
             }
-            semaphore.signal()
-        }
 
-        healthStore.execute(query)
-        semaphore.wait()
-        return resultValue
+            healthStore.execute(query)
+        }
     }
 
     @objc private func handleDayChange() {

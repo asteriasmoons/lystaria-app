@@ -194,7 +194,7 @@ struct ReadingTabView: View {
             Button("Delete", role: .destructive) {
                 if let b = bookPendingDeletion {
                     b.deletedAt = Date()
-                    markBookUpdated(b)
+                    b.updatedAt = Date()
                     try? modelContext.save()
                 }
                 bookPendingDeletion = nil
@@ -447,7 +447,7 @@ struct ReadingTabView: View {
                                     Button {
                                         let newValue = (book.rating == i) ? 0 : i
                                         book.rating = newValue
-                                        markBookUpdated(book)
+                                        book.updatedAt = Date()
                                         try? modelContext.save()
                                     } label: {
                                         Image("starfill")
@@ -610,10 +610,6 @@ struct ReadingTabView: View {
         }
     }
 
-    /// Marks a book as locally updated.
-    private func markBookUpdated(_ book: Book) {
-        book.updatedAt = Date()
-    }
 
     /// Ensures there is exactly one ReadingStats record for the current user.
     private func ensureReadingStatsRecordExists() {
@@ -842,16 +838,13 @@ struct AddBookSheet: View {
             book.currentPage = nil
         }
 
-        markBookUpdated(book)
+        book.updatedAt = Date()
 
         modelContext.insert(book)
         try? modelContext.save()
         closeAction()
     }
 
-    private func markBookUpdated(_ book: Book) {
-        book.updatedAt = Date()
-    }
 
 }
 
@@ -1043,12 +1036,9 @@ struct EditBookSheet: View {
             book.currentPage = nil
         }
 
-        markBookUpdated(book)
+        book.updatedAt = Date()
         try? modelContext.save()
         closeAction()
-    }
-    private func markBookUpdated(_ book: Book) {
-        book.updatedAt = Date()
     }
 }
 

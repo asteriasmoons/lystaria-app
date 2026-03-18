@@ -8,16 +8,8 @@ import SwiftData
 
 @Model
 final class MoodLog {
-    // MARK: - Sync metadata (matches your JournalEntry style)
-    var serverId: String?
-    var lastSyncedAt: Date?
-    var needsSync: Bool = true
-
-    /// Safe UUID parsed from the Supabase row id if available.
-    var serverUUID: UUID? {
-        guard let serverId else { return nil }
-        return UUID(uuidString: serverId)
-    }
+    // MARK: - Local metadata
+    var deletedAt: Date?
 
     // MARK: - Mini-app mirrored fields
     /// 1+ moods selected (stored as strings to match TS union values exactly)
@@ -146,7 +138,7 @@ final class MoodLog {
         moods: [String],
         activities: [String] = [],
         note: String? = nil,
-        serverId: String? = nil
+        deletedAt: Date? = nil
     ) {
         let normalizedMoods = MoodLog.normalizeList(moods)
         let normalizedActivities = MoodLog.normalizeList(activities)
@@ -154,14 +146,10 @@ final class MoodLog {
         self.moodsStorage = "[]"
         self.activitiesStorage = "[]"
         self.note = note
+        self.deletedAt = deletedAt
 
         // Compute score at creation time (stored, not derived later)
         self.score = MoodLog.computeScore(for: normalizedMoods)
-
-        // Sync fields
-        self.serverId = serverId
-        self.lastSyncedAt = nil
-        self.needsSync = true
 
         // Timestamps
         self.createdAt = Date()
@@ -180,21 +168,16 @@ final class MoodLog {
         score: Double,
         createdAt: Date,
         updatedAt: Date,
-        serverId: String? = nil,
-        lastSyncedAt: Date? = nil,
-        needsSync: Bool = false
+        deletedAt: Date? = nil
     ) {
         self.moodsStorage = "[]"
         self.activitiesStorage = "[]"
         self.note = note
+        self.deletedAt = deletedAt
         self.score = MoodLog.clampScore(score)
 
         self.createdAt = createdAt
         self.updatedAt = updatedAt
-
-        self.serverId = serverId
-        self.lastSyncedAt = lastSyncedAt
-        self.needsSync = needsSync
 
         // Now safe to use computed properties
         self.moods = MoodLog.normalizeList(moods)
@@ -208,42 +191,12 @@ final class MoodLog {
         !moods.isEmpty
     }
 
-    /// Call this when you edit fields so your sync + updated timestamp stay consistent.
+    /// Call this when you edit fields so the updated timestamp stays current.
     func touchUpdated() {
         updatedAt = Date()
-        needsSync = true
     }
 
-    /// Explicitly mark this log as needing sync without changing other fields.
-    func markDirty() {
-        needsSync = true
-        updatedAt = Date()
-    }
-
-    /// Mark this log as synced after a successful Supabase insert/update.
-    func markSynced(serverId: String? = nil, syncedAt: Date = Date()) {
-        if let serverId {
-            self.serverId = serverId
-        }
-        self.lastSyncedAt = syncedAt
-        self.needsSync = false
-    }
-
-    /// Build the payload used when sending this log to Supabase.
-    func makeSupabaseUpsertRow(userId: UUID) -> MoodLogSupabaseRow {
-        MoodLogSupabaseRow(
-            id: serverUUID,
-            userId: userId,
-            moods: moods,
-            activities: activities,
-            note: note,
-            score: score,
-            createdAt: createdAt,
-            updatedAt: updatedAt
-        )
-    }
-
-    /// Normalize arrays like the server expects.
+    /// Normalize arrays for safe local storage.
     private static func normalizeList(_ list: [String]) -> [String] {
         list
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
@@ -269,45 +222,5 @@ final class MoodLog {
         let moodSet = Set(MoodLog.moodValues)
         let activitySet = Set(MoodLog.moodActivities)
         return Set(moods).isSubset(of: moodSet) && Set(activities).isSubset(of: activitySet)
-    }
-}
-
-// MARK: - Supabase row mapping
-
-struct MoodLogSupabaseRow: Codable, Identifiable, Hashable {
-    let id: UUID?
-    let userId: UUID
-    let moods: [String]
-    let activities: [String]
-    let note: String?
-    let score: Double
-    let createdAt: Date
-    let updatedAt: Date
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case userId = "user_id"
-        case moods
-        case activities
-        case note
-        case score
-        case createdAt = "created_at"
-        case updatedAt = "updated_at"
-    }
-}
-
-extension MoodLog {
-    static func fromSupabaseRow(_ row: MoodLogSupabaseRow) -> MoodLog {
-        MoodLog(
-            moods: row.moods,
-            activities: row.activities,
-            note: row.note,
-            score: row.score,
-            createdAt: row.createdAt,
-            updatedAt: row.updatedAt,
-            serverId: row.id?.uuidString,
-            lastSyncedAt: Date(),
-            needsSync: false
-        )
     }
 }

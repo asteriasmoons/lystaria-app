@@ -103,10 +103,10 @@ struct JournalBookEditorSheet: View {
         if let book {
             book.title = t
             book.coverHex = hex
-            book.markDirty()
+            book.updatedAt = Date()
         } else {
             let newBook = JournalBook(title: t, coverHex: hex)
-            newBook.markDirty()
+            newBook.updatedAt = Date()
             modelContext.insert(newBook)
         }
 

@@ -128,7 +128,7 @@ struct JournalEditorSheet: View {
             e.title = cleanedTitle
             e.bodyAttributedText = bodyRichText
             e.tags = tags
-            e.markDirty()
+            e.updatedAt = Date()
             if e.book?.persistentModelID != book.persistentModelID {
                 e.book = book
             }
@@ -139,7 +139,7 @@ struct JournalEditorSheet: View {
                 tags: tags,
                 book: book
             )
-            e.markDirty()
+            e.updatedAt = Date()
             modelContext.insert(e)
         }
 

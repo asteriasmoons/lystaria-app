@@ -166,7 +166,7 @@ struct StepCountView: View {
                             Button {
                                 Task {
                                     await health.fetchTodaySteps()
-                                    recalculateReachedGoalDates()
+                                    await recalculateReachedGoalDates()
                                 }
                             } label: {
                                 Text("Refresh Steps")
@@ -312,7 +312,9 @@ struct StepCountView: View {
                                         .contentShape(Rectangle())
                                         .onTapGesture {
                                             selectedDate = itemDate
-                                            selectedDaySteps = totalSteps(for: itemDate)
+                                            Task {
+                                                selectedDaySteps = await totalSteps(for: itemDate)
+                                            }
                                         }
                                     } else {
                                         Color.clear
@@ -372,7 +374,9 @@ struct StepCountView: View {
                                 withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                                     showGoalPopup = false
                                 }
-                                recalculateReachedGoalDates()
+                                Task {
+                                    await recalculateReachedGoalDates()
+                                }
                             }
                         } label: {
                             Text("Save Goal")
@@ -433,7 +437,7 @@ struct StepCountView: View {
             await health.requestAuthorization()
             selectedDate = Date()
             selectedDaySteps = health.todaySteps
-            recalculateReachedGoalDates()
+            await recalculateReachedGoalDates()
         }
         .onChange(of: displayedMonth) { _, _ in
             if let selectedDate {
@@ -444,16 +448,22 @@ struct StepCountView: View {
                     self.selectedDaySteps = health.todaySteps
                 }
             }
-            recalculateReachedGoalDates()
+            Task {
+                await recalculateReachedGoalDates()
+            }
         }
         .onChange(of: stepGoal) { _, _ in
-            recalculateReachedGoalDates()
+            Task {
+                await recalculateReachedGoalDates()
+            }
         }
         .onChange(of: health.todaySteps) { _, newValue in
             if let selectedDate, calendar.isDateInToday(selectedDate) {
                 selectedDaySteps = newValue
             }
-            recalculateReachedGoalDates()
+            Task {
+                await recalculateReachedGoalDates()
+            }
         }
         .onChange(of: showGoalPopup) { _, isShowing in
             if !isShowing {
@@ -488,13 +498,13 @@ struct StepCountView: View {
         return formatter.string(from: date)
     }
     
-    private func totalSteps(for date: Date) -> Double {
+    private func totalSteps(for date: Date) async -> Double {
         let startOfDay = calendar.startOfDay(for: date)
         guard let nextDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { return 0 }
-        return health.totalSteps(from: startOfDay, to: nextDay) ?? 0
+        return await health.totalSteps(from: startOfDay, to: nextDay)
     }
 
-    private func recalculateReachedGoalDates() {
+    private func recalculateReachedGoalDates() async {
         let today = Date()
         let monthStart = startOfMonth(for: displayedMonth)
         guard let monthInterval = calendar.dateInterval(of: .month, for: monthStart) else { return }
@@ -506,7 +516,8 @@ struct StepCountView: View {
             let startOfDay = calendar.startOfDay(for: cursor)
             guard let nextDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { break }
 
-            if let total = health.totalSteps(from: startOfDay, to: nextDay), total >= stepGoal {
+            let total = await health.totalSteps(from: startOfDay, to: nextDay)
+            if total >= stepGoal {
                 result.insert(dateKey(for: startOfDay))
             }
 

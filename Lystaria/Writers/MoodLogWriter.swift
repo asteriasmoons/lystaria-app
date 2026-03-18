@@ -30,7 +30,7 @@ enum MoodLogWriter {
             note: finalNote
         )
 
-        log.markDirty()
+        log.touchUpdated()
         modelContext.insert(log)
         try modelContext.save()
     }

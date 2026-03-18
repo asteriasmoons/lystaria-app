@@ -9,7 +9,11 @@ struct MoodLoggerView: View {
     @Environment(\.dismiss) private var dismiss
     
     // Latest logs for display
-    @Query(sort: \MoodLog.createdAt, order: .reverse) private var logs: [MoodLog]
+    @Query(
+        filter: #Predicate<MoodLog> { $0.deletedAt == nil },
+        sort: \MoodLog.createdAt,
+        order: .reverse
+    ) private var logs: [MoodLog]
     
     // UI state
     @State private var selectedMoods: Set<String> = []
@@ -327,7 +331,8 @@ struct MoodLoggerView: View {
     }
 
     private func deleteLog(_ log: MoodLog) {
-        modelContext.delete(log)
+        log.deletedAt = Date()
+        log.touchUpdated()
 
         do {
             try modelContext.save()

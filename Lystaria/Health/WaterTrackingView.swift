@@ -134,13 +134,13 @@ struct WaterTrackingView: View {
         return formatter.string(from: date)
     }
     
-    private func totalWater(for date: Date) -> Double {
+    private func totalWater(for date: Date) async -> Double {
         let startOfDay = calendar.startOfDay(for: date)
         guard let nextDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { return 0 }
-        return water.totalWaterFlOz(from: startOfDay, to: nextDay) ?? 0
+        return await water.totalWaterFlOz(from: startOfDay, to: nextDay)
     }
 
-    private func recalculateReachedGoalDates() {
+    private func recalculateReachedGoalDates() async {
         let today = Date()
         let monthStart = startOfMonth(for: displayedMonth)
         guard let monthInterval = calendar.dateInterval(of: .month, for: monthStart) else { return }
@@ -152,7 +152,8 @@ struct WaterTrackingView: View {
             let startOfDay = calendar.startOfDay(for: cursor)
             guard let nextDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { break }
 
-            if let total = water.totalWaterFlOz(from: startOfDay, to: nextDay), total >= amountGoal {
+            let total = await water.totalWaterFlOz(from: startOfDay, to: nextDay)
+            if total >= amountGoal {
                 result.insert(dateKey(for: startOfDay))
             }
 
@@ -462,7 +463,9 @@ struct WaterTrackingView: View {
                                         .contentShape(Rectangle())
                                         .onTapGesture {
                                             selectedDate = itemDate
-                                            selectedDayWater = totalWater(for: itemDate)
+                                            Task {
+                                                selectedDayWater = await totalWater(for: itemDate)
+                                            }
                                         }
                                     } else {
                                         Color.clear
@@ -613,7 +616,7 @@ struct WaterTrackingView: View {
             await water.requestAuthorization()
             selectedDate = Date()
             selectedDayWater = water.todayWaterFlOz
-            recalculateReachedGoalDates()
+            await recalculateReachedGoalDates()
         }
         .onChange(of: displayedMonth) { _, _ in
             if let selectedDate {
@@ -624,16 +627,22 @@ struct WaterTrackingView: View {
                     self.selectedDayWater = water.todayWaterFlOz
                 }
             }
-            recalculateReachedGoalDates()
+            Task {
+                await recalculateReachedGoalDates()
+            }
         }
         .onChange(of: amountGoal) { _, _ in
-            recalculateReachedGoalDates()
+            Task {
+                await recalculateReachedGoalDates()
+            }
         }
         .onChange(of: water.todayWaterFlOz) { _, newValue in
             if let selectedDate, calendar.isDateInToday(selectedDate) {
                 selectedDayWater = newValue
             }
-            recalculateReachedGoalDates()
+            Task {
+                await recalculateReachedGoalDates()
+            }
         }
         .onChange(of: showCustomAmountPopup) { _, isShowing in
             if isShowing {

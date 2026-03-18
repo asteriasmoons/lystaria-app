@@ -26,10 +26,7 @@ enum BookStatus: String, Codable, CaseIterable {
 
 @Model
 final class Book {
-    // MARK: - Sync metadata
-    var serverId: String?           // Supabase row id
-    var lastSyncedAt: Date?
-    var needsSync: Bool = true      // true = has local changes to push
+    // MARK: - Local metadata
     var deletedAt: Date?
     
     // MARK: - Fields
@@ -63,9 +60,6 @@ final class Book {
         status: BookStatus = .tbr,
         totalPages: Int? = nil,
         currentPage: Int? = nil,
-        serverId: String? = nil,
-        needsSync: Bool = true,
-        lastSyncedAt: Date? = nil,
         deletedAt: Date? = nil
     ) {
         self.title = title
@@ -75,9 +69,6 @@ final class Book {
         self.statusRaw = status.rawValue
         self.totalPages = totalPages
         self.currentPage = currentPage
-        self.serverId = serverId
-        self.needsSync = needsSync
-        self.lastSyncedAt = lastSyncedAt
         self.deletedAt = deletedAt
         self.createdAt = Date()
         self.updatedAt = Date()

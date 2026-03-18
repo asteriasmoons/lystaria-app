@@ -1143,7 +1143,7 @@ struct JournalBookDetailView: View {
 
         if let prompt = editingStoredPrompt {
             prompt.text = trimmed
-            prompt.markDirty()
+            prompt.updatedAt = Date()
         } else {
             let prompt = JournalPrompt(text: trimmed, book: book)
             modelContext.insert(prompt)
@@ -1162,7 +1162,7 @@ struct JournalBookDetailView: View {
 
     private func deleteStoredPrompt(_ prompt: JournalPrompt) {
         prompt.deletedAt = Date()
-        prompt.markDirty()
+        prompt.updatedAt = Date()
         try? modelContext.save()
     }
     

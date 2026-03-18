@@ -218,9 +218,7 @@ struct SaveMoodView: View {
                         .tint(.white)
                 } else {
                     Button {
-                        Task {
-                            await logMood()
-                        }
+                        logMood()
                     } label: {
                         Text("Log Mood")
                             .font(.headline)
@@ -253,7 +251,7 @@ struct SaveMoodView: View {
         .toolbarBackground(.hidden, for: .navigationBar)
     }
 
-    private func logMood() async {
+    private func logMood() {
         isSaving = true
         errorMessage = nil
 
@@ -267,7 +265,6 @@ struct SaveMoodView: View {
 
         do {
             try modelContext.save()
-            try await MoodLogService.shared.saveMoodLog(log, in: modelContext)
             saved = true
             dismiss()
         } catch {

@@ -9,9 +9,6 @@ import SwiftUI
 
 struct WatchProfileView: View {
 
-    @State private var syncing = false
-    @State private var synced = false
-
     var body: some View {
         ZStack {
 
@@ -29,36 +26,15 @@ struct WatchProfileView: View {
             VStack {
                 Spacer()
 
-                if synced {
-                    Text("Synced")
+                VStack(spacing: 8) {
+                    Text("Profile")
                         .foregroundStyle(.white)
-                        .font(.system(size: 14, weight: .medium))
-                } else if syncing {
-                    ProgressView()
-                        .tint(.white)
-                } else {
+                        .font(.system(size: 16, weight: .semibold))
 
-                    Button {
-                        Task {
-                            syncing = true
-                            await SupabaseSessionBridge.syncSessionToWatch()
-                            syncing = false
-                            synced = true
-                        }
-                    } label: {
-                        Text("Sync")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(.white.opacity(0.18))
-                            .clipShape(Capsule())
-                            .overlay(
-                                Capsule()
-                                    .stroke(.white.opacity(0.35), lineWidth: 1)
-                            )
-                    }
-
+                    Text("Your data syncs through iCloud automatically.")
+                        .foregroundStyle(.white.opacity(0.9))
+                        .font(.system(size: 12, weight: .medium))
+                        .multilineTextAlignment(.center)
                 }
 
                 Spacer()

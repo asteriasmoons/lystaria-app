@@ -45,6 +45,7 @@ struct DashboardView: View {
     @State private var showToolbox = false
     @State private var momentumRefreshID = UUID()
     @State private var moonPhaseData = MoonPhaseCalculator.calculate(for: Date())
+    @State private var dashboardDayRefreshID = UUID()
 
 
     @State private var selectedZodiacSign: String = ""
@@ -215,6 +216,13 @@ struct DashboardView: View {
         moonPhaseData = MoonPhaseCalculator.calculate(for: Date())
     }
 
+    private func refreshForNewDay() {
+        dashboardDayRefreshID = UUID()
+        refreshMomentumHealthData()
+        refreshMomentumCard()
+        refreshMoonPhaseData()
+    }
+
 
     // MARK: - System Activation Checks
 
@@ -383,8 +391,22 @@ struct DashboardView: View {
     }
 
     private var readingDayStarts: Set<Date> {
-        guard let date = currentReadingStats?.lastCheckInDate else { return [] }
-        return [dashboardCalendar.startOfDay(for: date)]
+        guard let stats = currentReadingStats else { return [] }
+
+        let formatter = DateFormatter()
+        formatter.calendar = dashboardCalendar
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+
+        let historyDates = stats.checkInHistory.compactMap { formatter.date(from: $0) }
+        let normalizedHistoryDates = historyDates.map { dashboardCalendar.startOfDay(for: $0) }
+
+        if !normalizedHistoryDates.isEmpty {
+            return Set(normalizedHistoryDates)
+        }
+
+        guard let lastCheckInDate = stats.lastCheckInDate else { return [] }
+        return [dashboardCalendar.startOfDay(for: lastCheckInDate)]
     }
 
     private var waterActiveDayStarts: Set<Date> {
@@ -552,6 +574,7 @@ struct DashboardView: View {
                                 strongestStreak: strongestStreakItem,
                                 leastActiveThisWeek: leastActiveArea
                             )
+                            .id(dashboardDayRefreshID)
 
                             WellnessWallCard(items: wellnessInsights)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -570,15 +593,11 @@ struct DashboardView: View {
             }
             // MARK: - REFRESH MOMENTUM CARD HELPERS
             .onAppear {
-                refreshMomentumHealthData()
-                refreshMomentumCard()
-                refreshMoonPhaseData()
+                refreshForNewDay()
             }
             .onChange(of: scenePhase) { _, newPhase in
                 if newPhase == .active {
-                    refreshMomentumHealthData()
-                    refreshMomentumCard()
-                    refreshMoonPhaseData()
+                    refreshForNewDay()
                 }
             }
 
@@ -609,6 +628,9 @@ struct DashboardView: View {
             }
             .onReceive(waterHealth.$todayWaterFlOz) { _ in
                 refreshMomentumCard()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
+                refreshForNewDay()
             }
             .overlayPreferenceValue(OnboardingTargetKey.self) { anchors in
                 ZStack {
