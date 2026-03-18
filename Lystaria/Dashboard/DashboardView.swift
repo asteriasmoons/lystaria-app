@@ -54,6 +54,11 @@ struct DashboardView: View {
     @State private var selectedHoroscopeTab: HoroscopeCardTab = .daily
     @State private var previewHoroscope: DailyHoroscope? = nil
 
+    @State private var waterGoalMoodAverageValue: Double? = nil
+    @State private var stepGoalMoodAverageValue: Double? = nil
+    @State private var waterActiveDayStartsCache: Set<Date> = []
+    @State private var stepActiveDayStartsCache: Set<Date> = []
+
     private var dashboardCalendar: Calendar {
         Calendar.autoupdatingCurrent
     }
@@ -271,6 +276,17 @@ struct DashboardView: View {
         .count
     }
 
+    private var dailyMomentumItems: [DailyMomentumItem] {
+        [
+            DailyMomentumItem(title: "Journal", systemImage: "notesfill", isActive: journaledToday),
+            DailyMomentumItem(title: "Mood", systemImage: "facefill", isActive: moodLoggedToday),
+            DailyMomentumItem(title: "Habits", systemImage: "goalsparkle", isActive: habitCompletedToday),
+            DailyMomentumItem(title: "Water", systemImage: "dropfill", isActive: waterLoggedToday),
+            DailyMomentumItem(title: "Steps", systemImage: "shoefill", isActive: stepsLoggedToday),
+            DailyMomentumItem(title: "Reading", systemImage: "sparklebook", isActive: readingLoggedToday)
+        ]
+    }
+
     private var moodDayAverages: [Date: Double] {
         let grouped = Dictionary(grouping: moodLogs) {
             dashboardCalendar.startOfDay(for: $0.createdAt)
@@ -316,19 +332,11 @@ struct DashboardView: View {
     }
 
     private var waterGoalMoodAverage: Double? {
-        averageMood { day in
-            guard let nextDay = dashboardCalendar.date(byAdding: .day, value: 1, to: day) else { return false }
-            let total = waterHealth.totalWaterFlOz(from: day, to: nextDay) ?? 0
-            return total >= waterGoal
-        }
+        waterGoalMoodAverageValue
     }
 
     private var stepGoalMoodAverage: Double? {
-        averageMood { day in
-            guard let nextDay = dashboardCalendar.date(byAdding: .day, value: 1, to: day) else { return false }
-            let total = stepHealth.totalSteps(from: day, to: nextDay) ?? 0
-            return total >= stepGoal
-        }
+        stepGoalMoodAverageValue
     }
 
     private var wellnessInsights: [WellnessInsightItem] {
@@ -410,23 +418,54 @@ struct DashboardView: View {
     }
 
     private var waterActiveDayStarts: Set<Date> {
-        Set(
-            last7DayStarts.filter { day in
-                guard let nextDay = dashboardCalendar.date(byAdding: .day, value: 1, to: day) else { return false }
-                let total = waterHealth.totalWaterFlOz(from: day, to: nextDay) ?? 0
-                return total > 0
-            }
-        )
+        waterActiveDayStartsCache
     }
 
     private var stepActiveDayStarts: Set<Date> {
-        Set(
-            last7DayStarts.filter { day in
-                guard let nextDay = dashboardCalendar.date(byAdding: .day, value: 1, to: day) else { return false }
-                let total = stepHealth.totalSteps(from: day, to: nextDay) ?? 0
-                return total > 0
+        stepActiveDayStartsCache
+    }
+    private func refreshHealthDerivedStats() async {
+        let moodDays = Array(moodDayAverages.keys).sorted()
+
+        var hydratedMoodDays: Set<Date> = []
+        var activeStepMoodDays: Set<Date> = []
+        var hydratedLast7Days: Set<Date> = []
+        var activeStepLast7Days: Set<Date> = []
+
+        for day in moodDays {
+            guard let nextDay = dashboardCalendar.date(byAdding: .day, value: 1, to: day) else { continue }
+
+            let waterTotal = await waterHealth.totalWaterFlOz(from: day, to: nextDay)
+            if waterTotal >= waterGoal {
+                hydratedMoodDays.insert(day)
             }
-        )
+
+            let stepTotal = await stepHealth.totalSteps(from: day, to: nextDay)
+            if stepTotal >= stepGoal {
+                activeStepMoodDays.insert(day)
+            }
+        }
+
+        for day in last7DayStarts {
+            guard let nextDay = dashboardCalendar.date(byAdding: .day, value: 1, to: day) else { continue }
+
+            let waterTotal = await waterHealth.totalWaterFlOz(from: day, to: nextDay)
+            if waterTotal > 0 {
+                hydratedLast7Days.insert(day)
+            }
+
+            let stepTotal = await stepHealth.totalSteps(from: day, to: nextDay)
+            if stepTotal > 0 {
+                activeStepLast7Days.insert(day)
+            }
+        }
+
+        await MainActor.run {
+            waterGoalMoodAverageValue = averageMood(on: hydratedMoodDays)
+            stepGoalMoodAverageValue = averageMood(on: activeStepMoodDays)
+            waterActiveDayStartsCache = hydratedLast7Days
+            stepActiveDayStartsCache = activeStepLast7Days
+        }
     }
 
     private func currentStreak(from activeDays: Set<Date>) -> Int {
@@ -530,6 +569,63 @@ struct DashboardView: View {
         }
     }
 
+    // MARK: - Dashboard Content Subviews
+    private var dashboardContent: some View {
+        VStack(spacing: 16) {
+            header
+
+            Rectangle()
+                .fill(LColors.glassBorder)
+                .frame(height: 1)
+
+            moonPhaseSection
+            momentumSection
+            tarotSection
+            horoscopeSection
+            consistencySection
+            wellnessSection
+        }
+    }
+
+    private var moonPhaseSection: some View {
+        DashboardMoonPhaseCard(data: moonPhaseData)
+    }
+
+    private var momentumSection: some View {
+        DailyMomentumCard(
+            activatedCount: activatedCount,
+            totalCount: 6,
+            items: dailyMomentumItems
+        )
+        .id(momentumRefreshID)
+    }
+
+    private var tarotSection: some View {
+        DashboardTarotCard(
+            tip: currentDailyTarotTip,
+            onDraw: drawDailyTarotTip
+        )
+    }
+
+    private var horoscopeSection: some View {
+        horoscopeCard
+    }
+
+    private var consistencySection: some View {
+        DashboardConsistencyCard(
+            mostConsistent: mostConsistentArea,
+            needsAttention: leastActiveArea,
+            strongestStreak: strongestStreakItem,
+            leastActiveThisWeek: leastActiveArea
+        )
+        .id(dashboardDayRefreshID)
+    }
+
+    private var wellnessSection: some View {
+        WellnessWallCard(items: wellnessInsights)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -538,51 +634,11 @@ struct DashboardView: View {
 
                 GeometryReader { proxy in
                     ScrollView(.vertical, showsIndicators: false) {
-                        VStack(spacing: 16) {
-                            header
-
-                            Rectangle()
-                                .fill(LColors.glassBorder)
-                                .frame(height: 1)
-
-                            DashboardMoonPhaseCard(data: moonPhaseData)
-
-                            DailyMomentumCard(
-                                activatedCount: activatedCount,
-                                totalCount: 6,
-                                items: [
-                                    .init(title: "Journal", systemImage: "notesfill", isActive: journaledToday),
-                                    .init(title: "Mood", systemImage: "facefill", isActive: moodLoggedToday),
-                                    .init(title: "Habits", systemImage: "goalsparkle", isActive: habitCompletedToday),
-                                    .init(title: "Water", systemImage: "dropfill", isActive: waterLoggedToday),
-                                    .init(title: "Steps", systemImage: "shoefill", isActive: stepsLoggedToday),
-                                    .init(title: "Reading", systemImage: "sparklebook", isActive: readingLoggedToday)
-                                ]
-                            )
-                            .id(momentumRefreshID)
-
-                            DashboardTarotCard(
-                                tip: currentDailyTarotTip,
-                                onDraw: drawDailyTarotTip
-                            )
-
-                            horoscopeCard
-
-                            DashboardConsistencyCard(
-                                mostConsistent: mostConsistentArea,
-                                needsAttention: leastActiveArea,
-                                strongestStreak: strongestStreakItem,
-                                leastActiveThisWeek: leastActiveArea
-                            )
-                            .id(dashboardDayRefreshID)
-
-                            WellnessWallCard(items: wellnessInsights)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .frame(width: max(proxy.size.width - (LSpacing.pageHorizontal * 2), 0), alignment: .topLeading)
-                        .padding(.horizontal, LSpacing.pageHorizontal)
-                        .padding(.top, 14)
-                        .padding(.bottom, 120)
+                        dashboardContent
+                            .frame(width: max(proxy.size.width - (LSpacing.pageHorizontal * 2), 0), alignment: .topLeading)
+                            .padding(.horizontal, LSpacing.pageHorizontal)
+                            .padding(.top, 14)
+                            .padding(.bottom, 120)
                     }
                     .clipped()
                 }
@@ -594,10 +650,16 @@ struct DashboardView: View {
             // MARK: - REFRESH MOMENTUM CARD HELPERS
             .onAppear {
                 refreshForNewDay()
+                Task {
+                    await refreshHealthDerivedStats()
+                }
             }
             .onChange(of: scenePhase) { _, newPhase in
                 if newPhase == .active {
                     refreshForNewDay()
+                    Task {
+                        await refreshHealthDerivedStats()
+                    }
                 }
             }
 
@@ -617,6 +679,21 @@ struct DashboardView: View {
             .onChange(of: readingLoggedToday) { _, _ in
                 refreshMomentumCard()
             }
+            .onChange(of: moodLogs.count) { _, _ in
+                Task {
+                    await refreshHealthDerivedStats()
+                }
+            }
+            .onChange(of: waterGoal) { _, _ in
+                Task {
+                    await refreshHealthDerivedStats()
+                }
+            }
+            .onChange(of: stepGoal) { _, _ in
+                Task {
+                    await refreshHealthDerivedStats()
+                }
+            }
             .onChange(of: selectedZodiacSign) { _, _ in
                 if selectedHoroscopeTab == .picker {
                     previewHoroscope = nil
@@ -625,9 +702,15 @@ struct DashboardView: View {
             }
             .onReceive(stepHealth.$todaySteps) { _ in
                 refreshMomentumCard()
+                Task {
+                    await refreshHealthDerivedStats()
+                }
             }
             .onReceive(waterHealth.$todayWaterFlOz) { _ in
                 refreshMomentumCard()
+                Task {
+                    await refreshHealthDerivedStats()
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
                 refreshForNewDay()
