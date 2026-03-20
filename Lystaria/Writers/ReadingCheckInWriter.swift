@@ -75,6 +75,10 @@ enum ReadingCheckInWriter {
         record.updatedAt = now
 
         try modelContext.save()
+        _ = try? SelfCarePointsManager.awardReadingCheckIn(
+            in: modelContext,
+            date: now
+        )
         return true
     }
 }

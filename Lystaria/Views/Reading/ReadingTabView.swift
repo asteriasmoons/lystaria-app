@@ -25,6 +25,7 @@ struct ReadingTabView: View {
     @State private var showAddBook = false
     @State private var editingBook: Book? = nil
     @State private var visibleBookCount: Int = 4
+    @State private var showBookmarksView = false
 
     @State private var showDeleteConfirm = false
     @State private var bookPendingDeletion: Book? = nil
@@ -79,6 +80,27 @@ struct ReadingTabView: View {
             HStack {
                 GradientTitle(text: "Reading", font: .largeTitle.bold())
                 Spacer()
+
+                Button {
+                    showBookmarksView = true
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.08))
+                            .overlay(
+                                Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                            .frame(width: 34, height: 34)
+
+                        Image("markfill")
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 16, height: 16)
+                            .foregroundColor(.white)
+                    }
+                }
+                .buttonStyle(.plain)
             }
             .padding(.top, 24)
 
@@ -132,82 +154,87 @@ struct ReadingTabView: View {
     }
 
     var body: some View {
-        ZStack {
-            LystariaBackground()
-            mainScrollContent
-            readingPopupsOverlay
-        }
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showBookSummaryPopup)
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showBookRecommendationsPopup)
-        .overlay(alignment: .bottomTrailing) {
-            Button {
-                showAddBook = true
-            } label: {
-                Image(systemName: "plus")
-                    .font(.title2.bold())
-                    .foregroundStyle(.white)
-                    .frame(width: 56, height: 56)
-                    .background(LColors.accent.opacity(0.85))
-                    .clipShape(Circle())
-                    .overlay(Circle().stroke(LColors.glassBorder, lineWidth: 1))
-                    .shadow(color: LColors.accent.opacity(0.25), radius: 18, y: 8)
+        NavigationStack {
+            ZStack {
+                LystariaBackground()
+                mainScrollContent
+                readingPopupsOverlay
             }
-            .buttonStyle(.plain)
-            .padding(.trailing, 26)
-            .padding(.bottom, 26)
-        }
-        .zIndex(9999)
-        .overlay {
-            if showAddBook {
-                AddBookSheet(
-                    onClose: {
-                        showAddBook = false
-                    }
-                )
-                .preferredColorScheme(.dark)
-                .transition(.opacity.combined(with: .scale(scale: 0.96)))
-                .zIndex(70)
-            }
-        }
-        .overlay {
-            if let book = editingBook {
-                EditBookSheet(
-                    book: book,
-                    onClose: {
-                        editingBook = nil
-                    }
-                )
-                .preferredColorScheme(.dark)
-                .transition(.opacity.combined(with: .scale(scale: 0.96)))
-                .zIndex(70)
-            }
-        }
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showAddBook)
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: editingBook != nil)
-        .onChange(of: selectedStatus) { _, _ in
-            visibleBookCount = 4
-        }
-        .onChange(of: tagFilter) { _, _ in
-            visibleBookCount = 4
-        }
-        .alert("Delete book?", isPresented: $showDeleteConfirm) {
-            Button("Delete", role: .destructive) {
-                if let b = bookPendingDeletion {
-                    b.deletedAt = Date()
-                    b.updatedAt = Date()
-                    try? modelContext.save()
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showBookSummaryPopup)
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showBookRecommendationsPopup)
+            .overlay(alignment: .bottomTrailing) {
+                Button {
+                    showAddBook = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.title2.bold())
+                        .foregroundStyle(.white)
+                        .frame(width: 56, height: 56)
+                        .background(LColors.accent.opacity(0.85))
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(LColors.glassBorder, lineWidth: 1))
+                        .shadow(color: LColors.accent.opacity(0.25), radius: 18, y: 8)
                 }
-                bookPendingDeletion = nil
+                .buttonStyle(.plain)
+                .padding(.trailing, 26)
+                .padding(.bottom, 26)
             }
-            Button("Cancel", role: .cancel) {
-                bookPendingDeletion = nil
+            .zIndex(9999)
+            .overlay {
+                if showAddBook {
+                    AddBookSheet(
+                        onClose: {
+                            showAddBook = false
+                        }
+                    )
+                    .preferredColorScheme(.dark)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .zIndex(70)
+                }
             }
-        } message: {
-            Text("This will permanently remove this book.")
-        }
-        .onAppear {
-            ensureReadingStatsRecordExists()
-            visibleBookCount = 4
+            .overlay {
+                if let book = editingBook {
+                    EditBookSheet(
+                        book: book,
+                        onClose: {
+                            editingBook = nil
+                        }
+                    )
+                    .preferredColorScheme(.dark)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .zIndex(70)
+                }
+            }
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showAddBook)
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: editingBook != nil)
+            .onChange(of: selectedStatus) { _, _ in
+                visibleBookCount = 4
+            }
+            .onChange(of: tagFilter) { _, _ in
+                visibleBookCount = 4
+            }
+            .alert("Delete book?", isPresented: $showDeleteConfirm) {
+                Button("Delete", role: .destructive) {
+                    if let b = bookPendingDeletion {
+                        b.deletedAt = Date()
+                        b.updatedAt = Date()
+                        try? modelContext.save()
+                    }
+                    bookPendingDeletion = nil
+                }
+                Button("Cancel", role: .cancel) {
+                    bookPendingDeletion = nil
+                }
+            } message: {
+                Text("This will permanently remove this book.")
+            }
+            .onAppear {
+                ensureReadingStatsRecordExists()
+                visibleBookCount = 4
+            }
+            .navigationDestination(isPresented: $showBookmarksView) {
+                BookmarksView()
+            }
         }
     }
 

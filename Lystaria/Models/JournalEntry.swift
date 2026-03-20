@@ -14,6 +14,8 @@ final class JournalEntry {
     // MARK: - Relationship
     var book: JournalBook?
 
+    var blocks: [JournalBlock]? = nil
+
     // MARK: - Fields
     var title: String = ""
     var body: String = ""
@@ -82,5 +84,58 @@ final class JournalEntry {
         self.createdAt = Date()
         self.updatedAt = Date()
         self.tags = tags
+    }
+    
+    var sortedBlocks: [JournalBlock] {
+        (blocks ?? []).sorted { $0.sortOrder < $1.sortOrder }
+    }
+
+    func ensureStarterBlock() {
+        if blocks == nil {
+            blocks = []
+        }
+
+        if blocks?.isEmpty != false {
+            let block = JournalBlock(type: .paragraph, text: "", sortOrder: 0)
+            block.entry = self
+            blocks?.append(block)
+        }
+    }
+
+    func normalizeBlockSortOrders() {
+        // Build a correctly ordered list that places each block's children
+        // immediately after it, so visibleBlocks can walk sequentially and
+        // correctly hide/show toggle children.
+        let all = (blocks ?? []).sorted { $0.sortOrder < $1.sortOrder }
+
+        var ordered: [JournalBlock] = []
+        var visited = Set<UUID>()
+
+        func append(_ block: JournalBlock) {
+            guard !visited.contains(block.id) else { return }
+            visited.insert(block.id)
+            ordered.append(block)
+            // Append direct children in their current sort order
+            let children = all.filter { $0.parentBlockID == block.id }
+            for child in children {
+                append(child)
+            }
+        }
+
+        // Start with root blocks (no parent)
+        for block in all where block.parentBlockID == nil {
+            append(block)
+        }
+
+        // Catch any orphaned blocks whose parent no longer exists
+        for block in all where !visited.contains(block.id) {
+            block.parentBlockID = nil
+            append(block)
+        }
+
+        for (index, block) in ordered.enumerated() {
+            block.sortOrder = index
+            block.touch()
+        }
     }
 }

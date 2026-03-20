@@ -9,22 +9,62 @@ import SwiftUI
 
 struct HealthMetricDetailPopupView: View {
     let entry: HealthMetricEntry
+    let onDelete: () -> Void
+    let onClose: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            metricRow("Blood Oxygen", value: bloodOxygenText)
-            metricRow("Blood Pressure", value: bloodPressureText)
-            metricRow("BPM", value: bpmText)
-            metricRow("Body Temperature", value: temperatureText)
-            metricRow("Weight", value: weightText)
+        LystariaOverlayPopup(
+            onClose: onClose,
+            width: 520,
+            heightRatio: 0.55,
+            header: {
+                GradientTitle(text: "Health Entry", size: 24)
+            },
+            content: {
+                VStack(alignment: .leading, spacing: 14) {
+                    metricRow("Blood Oxygen", value: bloodOxygenText)
+                    metricRow("Blood Pressure", value: bloodPressureText)
+                    metricRow("BPM", value: bpmText)
+                    metricRow("Body Temperature", value: temperatureText)
+                    metricRow("Weight", value: weightText)
 
-            Divider()
-                .overlay(LColors.glassBorder)
+                    Divider()
+                        .overlay(LColors.glassBorder)
 
-            Text(formattedDate)
-                .font(.footnote)
-                .foregroundStyle(LColors.textSecondary)
-        }
+                    Text(formattedDate)
+                        .font(.footnote)
+                        .foregroundStyle(LColors.textSecondary)
+                }
+            },
+            footer: {
+                HStack {
+                    Spacer()
+
+                    Button {
+                        onDelete()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image("trashfill")
+                                .renderingMode(.template)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 14, height: 14)
+                                .foregroundStyle(.white)
+
+                            Text("Delete")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(.white)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(AnyShapeStyle(LGradients.blue))
+                        .clipShape(Capsule())
+                        .shadow(color: LColors.accent.opacity(0.3), radius: 8, y: 4)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        )
     }
 
     // MARK: - Formatting

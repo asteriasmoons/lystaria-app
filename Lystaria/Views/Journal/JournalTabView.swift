@@ -80,6 +80,7 @@ struct JournalTabView: View {
             }
             .onAppear {
                 migrateEntriesIntoDefaultBookIfNeeded()
+                JournalEntryBlockMigration.migrateEntriesIfNeeded(allEntries, modelContext: modelContext)
             }
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showBookEditor)
             // Prevent the NavigationStack default backgrounds from covering the custom background
@@ -611,12 +612,13 @@ struct JournalBookDetailView: View {
     @Query private var entries: [JournalEntry]
     @Query private var prompts: [JournalPrompt]
     
-    @State private var showEditor = false
     @State private var showPromptSheet = false
     @State private var showStoredPromptsPopup = false
     @State private var showPromptEditorPopup = false
-    @State private var editingEntry: JournalEntry? = nil
-    @State private var viewerEntry: JournalEntry? = nil
+    @State private var editorEntryTarget: JournalEntry? = nil
+    @State private var previewEntryTarget: JournalEntry? = nil
+    @State private var navigateToEditorPage = false
+    @State private var navigateToPreviewPage = false
     @State private var tagFilter: String? = nil
     @State private var editingStoredPrompt: JournalPrompt? = nil
     @State private var storedPromptDraft: String = ""
@@ -682,54 +684,13 @@ struct JournalBookDetailView: View {
                 
                 // Floating "+" adds ENTRY to this book
                 FloatingActionButton {
-                    editingEntry = nil
-                    showEditor = true
+                    editorEntryTarget = nil
+                    navigateToEditorPage = true
                 }
                 .padding(.trailing, 24)
                 .padding(.bottom, 96)
             }
             .navigationBarTitleDisplayMode(.inline)
-            .overlay {
-                if showEditor {
-                    JournalEditorSheet(
-                        entry: editingEntry,
-                        book: book,
-                        onClose: {
-                            showEditor = false
-                            editingEntry = nil
-                        }
-                    )
-                    .preferredColorScheme(.dark)
-                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
-                    .zIndex(60)
-                }
-            }
-            
-            .overlay {
-                if let entry = viewerEntry {
-                    JournalPreviewSheet(
-                        entry: entry,
-                        onClose: {
-                            viewerEntry = nil
-                        },
-                        onEdit: { e in
-                            viewerEntry = nil
-                            editingEntry = e
-                            showEditor = true
-                        },
-                        onDelete: { e in
-                            viewerEntry = nil
-
-                            // Soft-delete locally
-                            e.deletedAt = Date()
-                            try? modelContext.save()
-                        }
-                    )
-                    .preferredColorScheme(.dark)
-                    .transition(.opacity.combined(with: .scale))
-                    .zIndex(50)
-                }
-            }
             .overlay {
                 if showStoredPromptsPopup {
                     storedJournalPromptsOverlay
@@ -746,6 +707,22 @@ struct JournalBookDetailView: View {
                         .zIndex(80)
                 }
             }
+            .navigationDestination(isPresented: $navigateToEditorPage) {
+                JournalBlockEditorPage(
+                    book: book,
+                    existingEntry: editorEntryTarget
+                )
+            }
+            .navigationDestination(isPresented: $navigateToPreviewPage) {
+                Group {
+                    if let entry = previewEntryTarget {
+                        JournalBlockPreviewPage(entry: entry)
+                    } else {
+                        Color.clear
+                            .navigationBarBackButtonHidden(true)
+                    }
+                }
+            }
             
             // MARK: - Journal Prompt Overlay
             if showPromptSheet {
@@ -757,7 +734,9 @@ struct JournalBookDetailView: View {
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showPromptSheet)
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showStoredPromptsPopup)
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showPromptEditorPopup)
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showEditor)
+        .onAppear {
+            JournalEntryBlockMigration.migrateEntriesIfNeeded(entries, modelContext: modelContext)
+        }
     }
     
     private var header: some View {
@@ -788,11 +767,11 @@ struct JournalBookDetailView: View {
                             )
                             .frame(width: 34, height: 34)
 
-                        Image("markfill")
+                        Image("bookmfill")
                             .renderingMode(.template)
                             .resizable()
                             .scaledToFit()
-                            .frame(width: 16, height: 16)
+                            .frame(width: 20, height: 20)
                             .foregroundStyle(.white)
                     }
                 }
@@ -864,7 +843,10 @@ struct JournalBookDetailView: View {
                 ForEach(filteredEntries, id: \.persistentModelID) { entry in
                     JournalCard(
                         entry: entry,
-                        onView: { viewerEntry = $0 },
+                        onView: {
+                            previewEntryTarget = $0
+                            navigateToPreviewPage = true
+                        },
                         onTagSelect: { tagFilter = $0 }
                     )
                     .padding(.horizontal, LSpacing.pageHorizontal)

@@ -319,6 +319,18 @@ struct MoodLoggerView: View {
                 note: note,
                 modelContext: modelContext
             )
+
+            if let newestLog = logs.first {
+                _ = try? SelfCarePointsManager.awardPoints(
+                    in: modelContext,
+                    sourceType: .moodLog,
+                    sourceId: "\(newestLog.persistentModelID)",
+                    sourceKey: "moodLog:\(newestLog.persistentModelID)",
+                    points: SelfCarePointsManager.moodLogPoints,
+                    title: "Mood Log",
+                    earnedAt: newestLog.createdAt
+                )
+            }
             
             selectedMoods.removeAll()
             selectedActivities.removeAll()

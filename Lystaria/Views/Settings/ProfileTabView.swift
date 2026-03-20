@@ -36,11 +36,16 @@ struct ProfileTabView: View {
     @State private var useSystemTimezone: Bool = true
     @State private var showTimezonePicker: Bool = false
     @State private var timezoneSearch: String = ""
+    @State private var showSelfCarePointsPage: Bool = false
+    @AppStorage("isAdminMode") private var isAdminMode: Bool = false
 
     // Cached list of IANA timezones
     private let allTimezones: [String] = TimeZone.knownTimeZoneIdentifiers.sorted()
 
     private var currentUser: AuthUser? { authUsers.first }
+    private var isAdminUser: Bool {
+        currentUser?.appleUserId == "001664.f2fefbb84f024544b98e865fa6c6b49e.1524"
+    }
     private var settings: UserSettings? { userSettings.first }
 
     private func ensureSettings() -> UserSettings {
@@ -72,11 +77,18 @@ struct ProfileTabView: View {
     }
 
     var body: some View {
-        ZStack {
-            LystariaBackground()
+        NavigationStack {
+            ZStack {
+                LystariaBackground()
 
-            ScrollView {
-                mainContent
+                ScrollView {
+                    mainContent
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarHidden(true)
+            .navigationDestination(isPresented: $showSelfCarePointsPage) {
+                SelfCarePointsView()
             }
         }
     }
@@ -393,6 +405,47 @@ struct ProfileTabView: View {
                 Text("Actions")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(LColors.textSecondary)
+
+                Button(action: { showSelfCarePointsPage = true }) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "sparkles.rectangle.stack")
+                        Text("Self Care Points")
+                            .font(.system(size: 16, weight: .semibold))
+                        Spacer()
+                    }
+                    .foregroundStyle(LColors.textPrimary)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: 56)
+                    .padding(.horizontal, 14)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .stroke(LColors.glassBorder, lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+
+
+                if isAdminUser {
+                    Toggle(isOn: $isAdminMode) {
+                        HStack(spacing: 10) {
+                            Image(systemName: "lock.shield")
+                            Text("Admin Mode")
+                                .font(.system(size: 16, weight: .semibold))
+                        }
+                        .foregroundStyle(LColors.textPrimary)
+                    }
+                    .tint(LColors.accent)
+                    .padding(.horizontal, 14)
+                    .frame(minHeight: 56)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .stroke(LColors.glassBorder, lineWidth: 1)
+                    )
+                }
 
                 Button(action: { signOut() }) {
                     HStack(spacing: 8) {

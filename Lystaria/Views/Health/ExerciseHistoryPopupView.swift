@@ -10,22 +10,58 @@ import SwiftData
 
 struct ExerciseHistoryPopupView: View {
     let entries: [ExerciseLogEntry]
-    var onSelect: (ExerciseLogEntry) -> Void
+    let onSelect: (ExerciseLogEntry) -> Void
+    let onClose: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        LystariaOverlayPopup(
+            onClose: onClose,
+            width: 520,
+            heightRatio: 0.55,
+            header: {
+                GradientTitle(text: "Exercise History", size: 24)
+            },
+            content: {
+                VStack(alignment: .leading, spacing: 12) {
 
-            if entries.isEmpty {
-                Text("No exercise entries yet.")
-                    .foregroundStyle(LColors.textSecondary)
-            } else {
-                Text("Select a date")
-                    .font(.subheadline)
-                    .foregroundStyle(LColors.textSecondary)
+                    if entries.isEmpty {
+                        Text("No exercise entries yet.")
+                            .foregroundStyle(LColors.textSecondary)
+                    } else {
+                        Text("Select a date")
+                            .font(.subheadline)
+                            .foregroundStyle(LColors.textSecondary)
 
-                dateBubbleWrap(entries: entries)
+                        dateBubbleWrap(entries: entries)
+                    }
+                }
+            },
+            footer: {
+                HStack {
+                    Spacer()
+
+                    Button {
+                        onClose()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(.white)
+
+                            Text("Close")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(.white)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(AnyShapeStyle(LGradients.blue))
+                        .clipShape(Capsule())
+                        .shadow(color: LColors.accent.opacity(0.3), radius: 8, y: 4)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
-        }
+        )
     }
 
     // MARK: - Date Bubbles

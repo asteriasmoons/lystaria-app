@@ -13,11 +13,8 @@ struct AddHealthMetricsPopupView: View {
 
     var onClose: () -> Void
 
-    /// Parent sets this to true to trigger a save
-    @Binding var saveTrigger: Bool
-    /// Parent reads these to control the footer button
-    @Binding var isSaving: Bool
-    @Binding var isValid: Bool
+    @State private var isSaving = false
+    @State private var isValid = false
 
     @State private var bloodOxygen: String = ""
     @State private var systolic: String = ""
@@ -28,32 +25,66 @@ struct AddHealthMetricsPopupView: View {
     @State private var date: Date = Date()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            inputField("Blood Oxygen (%)", text: $bloodOxygen, keyboard: .numberPad)
-            inputField("Systolic", text: $systolic, keyboard: .numberPad)
-            inputField("Diastolic", text: $diastolic, keyboard: .numberPad)
-            inputField("BPM", text: $bpm, keyboard: .numberPad)
-            inputField("Body Temperature (°F)", text: $bodyTemperature, keyboard: .decimalPad)
-            inputField("Weight (lb)", text: $weight, keyboard: .decimalPad)
+        LystariaOverlayPopup(
+            onClose: onClose,
+            width: 560,
+            heightRatio: 0.70,
+            header: {
+                GradientTitle(text: "Add Metrics", size: 24)
+            },
+            content: {
+                VStack(alignment: .leading, spacing: 16) {
+                    inputField("Blood Oxygen (%)", text: $bloodOxygen, keyboard: .numberPad)
+                    inputField("Systolic", text: $systolic, keyboard: .numberPad)
+                    inputField("Diastolic", text: $diastolic, keyboard: .numberPad)
+                    inputField("BPM", text: $bpm, keyboard: .numberPad)
+                    inputField("Body Temperature (°F)", text: $bodyTemperature, keyboard: .decimalPad)
+                    inputField("Weight (lb)", text: $weight, keyboard: .decimalPad)
 
-            DatePicker(
-                "Date & Time",
-                selection: $date,
-                displayedComponents: [.date, .hourAndMinute]
-            )
-            .labelsHidden()
-            .datePickerStyle(.compact)
-            .tint(LColors.accent)
-        }
-        .onChange(of: bloodOxygen) { _, _ in updateValidity() }
-        .onChange(of: systolic) { _, _ in updateValidity() }
-        .onChange(of: diastolic) { _, _ in updateValidity() }
-        .onChange(of: bpm) { _, _ in updateValidity() }
-        .onChange(of: bodyTemperature) { _, _ in updateValidity() }
-        .onChange(of: weight) { _, _ in updateValidity() }
-        .onChange(of: saveTrigger) { _, newValue in
-            if newValue { save() }
-        }
+                    DatePicker(
+                        "Date & Time",
+                        selection: $date,
+                        displayedComponents: [.date, .hourAndMinute]
+                    )
+                    .labelsHidden()
+                    .datePickerStyle(.compact)
+                    .tint(LColors.accent)
+                }
+                .onChange(of: bloodOxygen) { _, _ in updateValidity() }
+                .onChange(of: systolic) { _, _ in updateValidity() }
+                .onChange(of: diastolic) { _, _ in updateValidity() }
+                .onChange(of: bpm) { _, _ in updateValidity() }
+                .onChange(of: bodyTemperature) { _, _ in updateValidity() }
+                .onChange(of: weight) { _, _ in updateValidity() }
+                .onAppear {
+                    updateValidity()
+                }
+            },
+            footer: {
+                HStack {
+                    Spacer()
+
+                    Button {
+                        save()
+                    } label: {
+                        Text(isSaving ? "Saving..." : "Save")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(LGradients.blue)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                            .opacity(isValid ? 1.0 : 0.5)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isSaving || !isValid)
+                }
+            }
+        )
     }
 
     private func updateValidity() {
@@ -67,30 +98,28 @@ struct AddHealthMetricsPopupView: View {
     }
 
     private func save() {
+        updateValidity()
         guard !isSaving, isValid else {
-            saveTrigger = false
             return
         }
         isSaving = true
 
-        let entry = HealthMetricEntry(
-            date: date,
-            bloodOxygen: Double(bloodOxygen) ?? 0,
-            systolic: Int(systolic) ?? 0,
-            diastolic: Int(diastolic) ?? 0,
-            bpm: Int(bpm) ?? 0,
-            bodyTemperature: Double(bodyTemperature) ?? 0,
-            weight: Double(weight) ?? 0
-        )
-
-        modelContext.insert(entry)
+        let entry: HealthMetricEntry
 
         do {
-            try modelContext.save()
+            entry = try HealthMetricsWriter.createEntry(
+                date: date,
+                bloodOxygen: Double(bloodOxygen) ?? 0,
+                systolic: Int(systolic) ?? 0,
+                diastolic: Int(diastolic) ?? 0,
+                bpm: Int(bpm) ?? 0,
+                bodyTemperature: Double(bodyTemperature) ?? 0,
+                weight: Double(weight) ?? 0,
+                modelContext: modelContext
+            )
         } catch {
             print("SwiftData save error:", error)
             isSaving = false
-            saveTrigger = false
             return
         }
 
@@ -101,7 +130,6 @@ struct AddHealthMetricsPopupView: View {
                 print("HealthKit save error:", error)
             }
             isSaving = false
-            saveTrigger = false
             onClose()
         }
     }

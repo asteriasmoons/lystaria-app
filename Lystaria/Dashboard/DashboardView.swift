@@ -46,6 +46,7 @@ struct DashboardView: View {
     @State private var momentumRefreshID = UUID()
     @State private var moonPhaseData = MoonPhaseCalculator.calculate(for: Date())
     @State private var dashboardDayRefreshID = UUID()
+    @State private var consistencyRefreshID = UUID()
 
 
     @State private var selectedZodiacSign: String = ""
@@ -217,12 +218,17 @@ struct DashboardView: View {
         momentumRefreshID = UUID()
     }
 
+    private func refreshConsistencyCard() {
+        consistencyRefreshID = UUID()
+    }
+
     private func refreshMoonPhaseData() {
         moonPhaseData = MoonPhaseCalculator.calculate(for: Date())
     }
 
     private func refreshForNewDay() {
         dashboardDayRefreshID = UUID()
+        refreshConsistencyCard()
         refreshMomentumHealthData()
         refreshMomentumCard()
         refreshMoonPhaseData()
@@ -414,7 +420,16 @@ struct DashboardView: View {
         }
 
         guard let lastCheckInDate = stats.lastCheckInDate else { return [] }
-        return [dashboardCalendar.startOfDay(for: lastCheckInDate)]
+
+        let normalizedLastCheckIn = dashboardCalendar.startOfDay(for: lastCheckInDate)
+        let inferredStreakDays = max(stats.streakDays, 1)
+
+        let inferredDates = (0..<inferredStreakDays).compactMap { offset in
+            dashboardCalendar.date(byAdding: .day, value: -offset, to: normalizedLastCheckIn)
+                .map { dashboardCalendar.startOfDay(for: $0) }
+        }
+
+        return Set(inferredDates)
     }
 
     private var waterActiveDayStarts: Set<Date> {
@@ -465,6 +480,7 @@ struct DashboardView: View {
             stepGoalMoodAverageValue = averageMood(on: activeStepMoodDays)
             waterActiveDayStartsCache = hydratedLast7Days
             stepActiveDayStartsCache = activeStepLast7Days
+            refreshConsistencyCard()
         }
     }
 
@@ -523,12 +539,36 @@ struct DashboardView: View {
 
     private var consistencyAreaScores: [ConsistencyAreaScore] {
         [
-            ConsistencyAreaScore(title: "Journaling", activeDays: activeDayCount(in: journalDayStarts)),
-            ConsistencyAreaScore(title: "Mood", activeDays: activeDayCount(in: moodDayStarts)),
-            ConsistencyAreaScore(title: "Habits", activeDays: activeDayCount(in: habitDayStarts)),
-            ConsistencyAreaScore(title: "Water Tracking", activeDays: activeDayCount(in: waterActiveDayStarts)),
-            ConsistencyAreaScore(title: "Steps", activeDays: activeDayCount(in: stepActiveDayStarts)),
-            ConsistencyAreaScore(title: "Reading", activeDays: activeDayCount(in: readingDayStarts))
+            ConsistencyAreaScore(
+                title: "Journaling",
+                activeDays: activeDayCount(in: journalDayStarts),
+                currentStreak: journalCurrentStreak
+            ),
+            ConsistencyAreaScore(
+                title: "Mood",
+                activeDays: activeDayCount(in: moodDayStarts),
+                currentStreak: moodCurrentStreak
+            ),
+            ConsistencyAreaScore(
+                title: "Habits",
+                activeDays: activeDayCount(in: habitDayStarts),
+                currentStreak: habitCurrentStreak
+            ),
+            ConsistencyAreaScore(
+                title: "Water Tracking",
+                activeDays: activeDayCount(in: waterActiveDayStarts),
+                currentStreak: waterCurrentStreak
+            ),
+            ConsistencyAreaScore(
+                title: "Steps",
+                activeDays: activeDayCount(in: stepActiveDayStarts),
+                currentStreak: stepCurrentStreak
+            ),
+            ConsistencyAreaScore(
+                title: "Reading",
+                activeDays: activeDayCount(in: readingDayStarts),
+                currentStreak: readingCurrentStreak
+            )
         ]
     }
 
@@ -548,6 +588,37 @@ struct DashboardView: View {
             }
             return lhs.activeDays < rhs.activeDays
         }
+    }
+    
+    private var needsAttentionArea: ConsistencyAreaScore? {
+        let sorted = consistencyAreaScores.sorted { lhs, rhs in
+            let lhsNeedsAttention = lhs.currentStreak == 0
+            let rhsNeedsAttention = rhs.currentStreak == 0
+
+            if lhsNeedsAttention != rhsNeedsAttention {
+                return lhsNeedsAttention && !rhsNeedsAttention
+            }
+
+            if lhs.activeDays != rhs.activeDays {
+                return lhs.activeDays < rhs.activeDays
+            }
+
+            if lhs.currentStreak != rhs.currentStreak {
+                return lhs.currentStreak < rhs.currentStreak
+            }
+
+            return lhs.title < rhs.title
+        }
+
+        guard let first = sorted.first else { return nil }
+
+        if let leastActiveArea,
+           first.title == leastActiveArea.title,
+           let second = sorted.dropFirst().first {
+            return second
+        }
+
+        return first
     }
 
     private var strongestStreakItem: ConsistencyStreakItem? {
@@ -614,11 +685,11 @@ struct DashboardView: View {
     private var consistencySection: some View {
         DashboardConsistencyCard(
             mostConsistent: mostConsistentArea,
-            needsAttention: leastActiveArea,
+            needsAttention: needsAttentionArea,
             strongestStreak: strongestStreakItem,
             leastActiveThisWeek: leastActiveArea
         )
-        .id(dashboardDayRefreshID)
+        .id(consistencyRefreshID)
     }
 
     private var wellnessSection: some View {
@@ -626,95 +697,35 @@ struct DashboardView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    var body: some View {
+    private var dashboardScrollContent: some View {
+        GeometryReader { proxy in
+            ScrollView(.vertical, showsIndicators: false) {
+                dashboardContent
+                    .frame(width: max(proxy.size.width - (LSpacing.pageHorizontal * 2), 0), alignment: .topLeading)
+                    .padding(.horizontal, LSpacing.pageHorizontal)
+                    .padding(.top, 14)
+                    .padding(.bottom, 120)
+            }
+            .clipped()
+        }
+    }
+
+    private var dashboardRootView: some View {
         NavigationStack {
             ZStack {
                 LystariaBackground()
                     .ignoresSafeArea()
 
-                GeometryReader { proxy in
-                    ScrollView(.vertical, showsIndicators: false) {
-                        dashboardContent
-                            .frame(width: max(proxy.size.width - (LSpacing.pageHorizontal * 2), 0), alignment: .topLeading)
-                            .padding(.horizontal, LSpacing.pageHorizontal)
-                            .padding(.top, 14)
-                            .padding(.bottom, 120)
-                    }
-                    .clipped()
-                }
+                dashboardScrollContent
             }
-            .toolbarBackground(.hidden, for: .navigationBar)
             .navigationDestination(isPresented: $showToolbox) {
                 ToolboxView()
             }
-            // MARK: - REFRESH MOMENTUM CARD HELPERS
-            .onAppear {
-                refreshForNewDay()
-                Task {
-                    await refreshHealthDerivedStats()
-                }
-            }
-            .onChange(of: scenePhase) { _, newPhase in
-                if newPhase == .active {
-                    refreshForNewDay()
-                    Task {
-                        await refreshHealthDerivedStats()
-                    }
-                }
-            }
+        }
+    }
 
-
-            .onChange(of: journalEntries.count) { _, _ in
-                refreshMomentumCard()
-            }
-            .onChange(of: moodLogs.count) { _, _ in
-                refreshMomentumCard()
-            }
-            .onChange(of: habitLogs.count) { _, _ in
-                refreshMomentumCard()
-            }
-            .onChange(of: readingCurrentStreak) { _, _ in
-                refreshMomentumCard()
-            }
-            .onChange(of: readingLoggedToday) { _, _ in
-                refreshMomentumCard()
-            }
-            .onChange(of: moodLogs.count) { _, _ in
-                Task {
-                    await refreshHealthDerivedStats()
-                }
-            }
-            .onChange(of: waterGoal) { _, _ in
-                Task {
-                    await refreshHealthDerivedStats()
-                }
-            }
-            .onChange(of: stepGoal) { _, _ in
-                Task {
-                    await refreshHealthDerivedStats()
-                }
-            }
-            .onChange(of: selectedZodiacSign) { _, _ in
-                if selectedHoroscopeTab == .picker {
-                    previewHoroscope = nil
-                    horoscopeError = nil
-                }
-            }
-            .onReceive(stepHealth.$todaySteps) { _ in
-                refreshMomentumCard()
-                Task {
-                    await refreshHealthDerivedStats()
-                }
-            }
-            .onReceive(waterHealth.$todayWaterFlOz) { _ in
-                refreshMomentumCard()
-                Task {
-                    await refreshHealthDerivedStats()
-                }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
-                refreshForNewDay()
-            }
+    var body: some View {
+        dashboardRootViewWithLifecycle
             .overlayPreferenceValue(OnboardingTargetKey.self) { anchors in
                 ZStack {
                     OnboardingOverlay(anchors: anchors)
@@ -726,7 +737,70 @@ struct DashboardView: View {
                     }
                 }
             }
-        }
+    }
+
+    private var dashboardRootViewWithLifecycle: some View {
+        dashboardRootViewWithObservers
+            .onAppear {
+                refreshForNewDay()
+                Task { await refreshHealthDerivedStats() }
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                if newPhase == .active {
+                    refreshForNewDay()
+                    Task { await refreshHealthDerivedStats() }
+                }
+            }
+            .onReceive(stepHealth.$todaySteps) { _ in
+                refreshMomentumCard()
+                refreshConsistencyCard()
+                Task { await refreshHealthDerivedStats() }
+            }
+            .onReceive(waterHealth.$todayWaterFlOz) { _ in
+                refreshMomentumCard()
+                refreshConsistencyCard()
+                Task { await refreshHealthDerivedStats() }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
+                refreshForNewDay()
+            }
+    }
+
+    private var dashboardRootViewWithObservers: some View {
+        dashboardRootView
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .onChange(of: journalEntries.count) { _, _ in
+                refreshMomentumCard()
+                refreshConsistencyCard()
+            }
+            .onChange(of: moodLogs.count) { _, _ in
+                refreshMomentumCard()
+                refreshConsistencyCard()
+            }
+            .onChange(of: habitLogs.count) { _, _ in
+                refreshMomentumCard()
+                refreshConsistencyCard()
+            }
+            .onChange(of: readingCurrentStreak) { _, _ in
+                refreshMomentumCard()
+                refreshConsistencyCard()
+            }
+            .onChange(of: readingLoggedToday) { _, _ in
+                refreshMomentumCard()
+                refreshConsistencyCard()
+            }
+            .onChange(of: waterGoal) { _, _ in
+                Task { await refreshHealthDerivedStats() }
+            }
+            .onChange(of: stepGoal) { _, _ in
+                Task { await refreshHealthDerivedStats() }
+            }
+            .onChange(of: selectedZodiacSign) { _, _ in
+                if selectedHoroscopeTab == .picker {
+                    previewHoroscope = nil
+                    horoscopeError = nil
+                }
+            }
     }
 
     private var header: some View {
@@ -1218,6 +1292,7 @@ private struct ConsistencyAreaScore: Identifiable {
     let id = UUID()
     let title: String
     let activeDays: Int
+    let currentStreak: Int
 }
 
 private struct ConsistencyStreakItem {

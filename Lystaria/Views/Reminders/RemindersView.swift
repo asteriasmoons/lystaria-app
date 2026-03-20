@@ -8,6 +8,7 @@ struct RemindersView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var authUsers: [AuthUser]
     @Query private var habits: [Habit]
+    @Query private var events: [CalendarEvent]
     @Query(sort: \LystariaReminder.nextRunAt) private var allReminders: [LystariaReminder]
 
     @State private var showNewReminder = false
@@ -365,6 +366,35 @@ struct RemindersView: View {
     }
 
 
+    private func awardPointsForReminderCompletion(_ reminder: LystariaReminder, occurrenceDate: Date) {
+        let reminderId = "\(reminder.persistentModelID)"
+        let occurrenceDayKey = SelfCarePointsManager.dayKey(from: occurrenceDate)
+        let isEventReminder = events.contains { $0.reminderServerId == reminderId }
+
+        if reminder.linkedKind == .habit {
+            _ = try? SelfCarePointsManager.awardHabitReminderCompletion(
+                in: modelContext,
+                reminderId: reminderId,
+                occurrenceDayKey: occurrenceDayKey,
+                title: reminder.title
+            )
+        } else if isEventReminder {
+            _ = try? SelfCarePointsManager.awardEventReminderCompletion(
+                in: modelContext,
+                eventId: reminderId,
+                occurrenceDayKey: occurrenceDayKey,
+                title: reminder.title
+            )
+        } else {
+            _ = try? SelfCarePointsManager.awardReminderCompletion(
+                in: modelContext,
+                reminderId: reminderId,
+                occurrenceDayKey: occurrenceDayKey,
+                title: reminder.title
+            )
+        }
+    }
+
     private func resetTodayHabitProgressIfNeeded(for reminder: LystariaReminder, now: Date) {
         guard reminder.linkedKind == .habit,
               let habitID = reminder.linkedHabitId,
@@ -402,6 +432,7 @@ struct RemindersView: View {
 
         // If this reminder is linked to a habit, count it as a habit log.
         logHabitIfLinked(reminder)
+        let completedOccurrenceDate = reminder.nextRunAt
 
         if reminder.isRecurring {
             let now = Date()
@@ -420,6 +451,7 @@ struct RemindersView: View {
             // Persist immediately — this triggers SwiftData to diff and re-render the card,
             // which is what actually unchecks the circle in the UI.
             try? modelContext.save()
+            awardPointsForReminderCompletion(reminder, occurrenceDate: completedOccurrenceDate)
 
             print("[RemindersView] markDone recurring -> nextRunAt=\(reminder.nextRunAt)")
             NotificationManager.shared.cancelReminder(reminder)
@@ -436,6 +468,7 @@ struct RemindersView: View {
 
             // Persist so the view reflects checked state and sync can pick it up.
             try? modelContext.save()
+            awardPointsForReminderCompletion(reminder, occurrenceDate: completedOccurrenceDate)
 
             print("[RemindersView] markDone once -> status=\(reminder.status.rawValue)")
             NotificationManager.shared.cancelReminder(reminder)
@@ -603,11 +636,15 @@ struct ReminderCard: View {
                     }
                 } label: {
                     HStack(spacing: 8) {
-                        Circle()
-                            .stroke(Color.white.opacity(0.7), lineWidth: 1.5)
-                            .frame(width: 10, height: 10)
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.down.circle")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(LColors.textSecondary)
 
-                        Text("\(checklistItems.count) checklist item\(checklistItems.count == 1 ? "" : "s")")
+                            Text("\(checklistItems.count) Checklist Item\(checklistItems.count == 1 ? "" : "s")")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(LColors.textSecondary)
+                        }
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(LColors.textSecondary)
 
@@ -694,7 +731,7 @@ struct ReminderCard: View {
                         Spacer()
 
                         Button { onDone() } label: {
-                            Image(systemName: isDone ? "checkmark.circle.fill" : "checkmark.circle")
+                            Image(systemName: isDone ? "circle.fill" : "circle")
                                 .font(.title2)
                                 .foregroundStyle(isDone ? LColors.success : LColors.textSecondary)
                         }

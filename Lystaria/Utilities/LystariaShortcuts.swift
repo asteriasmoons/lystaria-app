@@ -87,6 +87,26 @@ struct LystariaShortcuts: AppShortcutsProvider {
                 ],
                 shortTitle: "Add Checklist Item",
                 systemImageName: "checklist"
+            ),
+            AppShortcut(
+                intent: LogHealthMetricsIntent(),
+                phrases: [
+                    "Log health metrics in \(.applicationName)",
+                    "Add health metrics in \(.applicationName)",
+                    "Save health metrics in \(.applicationName)"
+                ],
+                shortTitle: "Health Metrics",
+                systemImageName: "heart.text.square"
+            ),
+            AppShortcut(
+                intent: LogExerciseIntent(),
+                phrases: [
+                    "Log exercise in \(.applicationName)",
+                    "Add exercise in \(.applicationName)",
+                    "Save exercise in \(.applicationName)"
+                ],
+                shortTitle: "Log Exercise",
+                systemImageName: "figure.strengthtraining.traditional"
             )
         ]
     }

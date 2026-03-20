@@ -25,6 +25,10 @@
 	<array>
 		<string>iCloud.com.asteriasmoons.LystariaDev</string>
 	</array>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.asteriasmoons.LystariaDev</string>
+	</array>
 	<key>keychain-access-groups</key>
 	<array/>
 </dict>

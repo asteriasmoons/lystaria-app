@@ -13,11 +13,8 @@ struct AddExercisePopupView: View {
 
     var onClose: () -> Void
 
-    /// Parent sets this to true to trigger a save
-    @Binding var saveTrigger: Bool
-    /// Parent reads these to control the footer button
-    @Binding var isSaving: Bool
-    @Binding var isValid: Bool
+    @State private var isSaving = false
+    @State private var isValid = false
 
     @State private var exerciseName: String = ""
     @State private var reps: String = ""
@@ -25,53 +22,86 @@ struct AddExercisePopupView: View {
     @State private var date: Date = Date()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            inputField("Exercise Name", text: $exerciseName, keyboard: .default)
-            inputField("Reps", text: $reps, keyboard: .numberPad)
-            inputField("Duration (minutes)", text: $duration, keyboard: .numberPad)
+        LystariaOverlayPopup(
+            onClose: onClose,
+            width: 560,
+            heightRatio: 0.70,
+            header: {
+                GradientTitle(text: "Add Exercise", size: 24)
+            },
+            content: {
+                VStack(alignment: .leading, spacing: 16) {
+                    inputField("Exercise Name", text: $exerciseName, keyboard: .default)
+                    inputField("Reps", text: $reps, keyboard: .numberPad)
+                    inputField("Duration (minutes)", text: $duration, keyboard: .numberPad)
 
-            DatePicker(
-                "Date & Time",
-                selection: $date,
-                displayedComponents: [.date, .hourAndMinute]
-            )
-            .labelsHidden()
-            .datePickerStyle(.compact)
-            .tint(LColors.accent)
-        }
-        .onChange(of: duration) { _, _ in
-            isValid = (Int(duration) ?? 0) > 0
-        }
-        .onChange(of: saveTrigger) { _, newValue in
-            if newValue { save() }
-        }
+                    DatePicker(
+                        "Date & Time",
+                        selection: $date,
+                        displayedComponents: [.date, .hourAndMinute]
+                    )
+                    .labelsHidden()
+                    .datePickerStyle(.compact)
+                    .tint(LColors.accent)
+                }
+                .onChange(of: duration) { _, _ in updateValidation() }
+                .onChange(of: exerciseName) { _, _ in updateValidation() }
+                .onChange(of: reps) { _, _ in updateValidation() }
+                .onAppear {
+                    updateValidation()
+                }
+            },
+            footer: {
+                HStack {
+                    Spacer()
+
+                    Button {
+                        save()
+                    } label: {
+                        Text(isSaving ? "Saving..." : "Save")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(LGradients.blue)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                            .opacity(isValid ? 1.0 : 0.5)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isSaving || !isValid)
+                }
+            }
+        )
     }
 
     private func save() {
+        updateValidation()
         guard !isSaving, isValid else {
-            saveTrigger = false
             return
         }
         isSaving = true
 
         let trimmedName = exerciseName.trimmingCharacters(in: .whitespacesAndNewlines)
         let durationValue = Int(duration) ?? 0
+        let repsValue = Int(reps) ?? 0
 
-        let entry = ExerciseLogEntry(
-            date: date,
-            exerciseName: trimmedName,
-            reps: Int(reps) ?? 0,
-            durationMinutes: durationValue
-        )
-
-        modelContext.insert(entry)
+        let entry: ExerciseLogEntry
 
         do {
-            try modelContext.save()
+            entry = try ExerciseLogWriter.createEntry(
+                date: date,
+                exerciseName: trimmedName,
+                reps: repsValue,
+                durationMinutes: durationValue,
+                modelContext: modelContext
+            )
         } catch {
             print("SwiftData save error:", error)
             isSaving = false
-            saveTrigger = false
             return
         }
 
@@ -82,9 +112,14 @@ struct AddExercisePopupView: View {
                 print("Exercise HealthKit save error:", error)
             }
             isSaving = false
-            saveTrigger = false
             onClose()
         }
+    }
+
+    private func updateValidation() {
+        let durationValid = (Int(duration) ?? 0) > 0
+        let nameValid = !exerciseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        isValid = durationValid && nameValid
     }
 
     private func inputField(

@@ -19,15 +19,22 @@ struct LystariaApp: App {
             Habit.self,
             HabitLog.self,
             MoodLog.self,
+            BodyStateRecord.self,
             HealthMetricEntry.self,
             ExerciseLogEntry.self,
             ReadingStats.self,
+            BookmarkFolder.self,
+            BookmarkItem.self,
             JournalEntry.self,
+            JournalInlineStyle.self,
+            JournalBlock.self,
             JournalBook.self,
             JournalPrompt.self,
             JournalPromptUsage.self,
             LystariaReminder.self,
             UserSettings.self,
+            SelfCarePointEntry.self,
+            SelfCarePointsProfile.self,
             Checklist.self,
             ChecklistItem.self,
             KanbanBoard.self,
@@ -66,6 +73,8 @@ struct LystariaApp: App {
                     WatchSessionManager.shared.activate()
 
                     appState.bootstrap(modelContext: sharedModelContainer.mainContext)
+                    SharedBookmarkImportManager.importPendingBookmark(modelContext: sharedModelContainer.mainContext)
+                    SharedFolderExportManager.exportFolders(modelContext: sharedModelContainer.mainContext)
 
                     setupNotifications()
                 }
@@ -75,6 +84,8 @@ struct LystariaApp: App {
                 #if os(iOS)
                 .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
                     notificationManager.refreshAuthorizationStatus()
+                    SharedBookmarkImportManager.importPendingBookmark(modelContext: sharedModelContainer.mainContext)
+                    SharedFolderExportManager.exportFolders(modelContext: sharedModelContainer.mainContext)
 
                     Task {
                         do {

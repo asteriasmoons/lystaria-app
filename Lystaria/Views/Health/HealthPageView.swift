@@ -9,11 +9,16 @@ import SwiftUI
 import SwiftData
 
 struct HealthPageView: View {
+    @Environment(\.modelContext) private var modelContext
+    @StateObject private var bodyStateManager = BodyStateHealthKitManager.shared
     @Query(sort: \HealthMetricEntry.date, order: .reverse)
     private var healthEntries: [HealthMetricEntry]
 
     @Query(sort: \ExerciseLogEntry.date, order: .reverse)
     private var exerciseEntries: [ExerciseLogEntry]
+
+    @Query(sort: \BodyStateRecord.updatedAt, order: .reverse)
+    private var bodyStateRecords: [BodyStateRecord]
 
     @State private var showAddMetricsPopup = false
     @State private var showAddExercisePopup = false
@@ -24,15 +29,6 @@ struct HealthPageView: View {
     @State private var selectedExerciseEntry: ExerciseLogEntry?
     @State private var hasRequestedHealthAuthorization = false
 
-    // Add Metrics footer state
-    @State private var metricsSaveTrigger = false
-    @State private var metricsIsSaving = false
-    @State private var metricsIsValid = false
-
-    // Add Exercise footer state
-    @State private var exerciseSaveTrigger = false
-    @State private var exerciseIsSaving = false
-    @State private var exerciseIsValid = false
 
     var body: some View {
         ZStack {
@@ -43,6 +39,7 @@ struct HealthPageView: View {
 
                 VStack(alignment: .leading, spacing: 18) {
                     healthStreaksCard
+                    bodyStateCard
 
                     HealthMetricsCard(latestEntry: latestHealthEntry) {
                         withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
@@ -67,202 +64,100 @@ struct HealthPageView: View {
         .overlay {
             ZStack {
                 if showAddMetricsPopup {
-                    LystariaOverlayPopup(
+                    AddHealthMetricsPopupView(
                         onClose: {
                             withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                                 showAddMetricsPopup = false
                             }
-                        },
-                        width: 560,
-                        heightRatio: 0.70,
-                        header: {
-                            GradientTitle(text: "Add Metrics", size: 24)
-                        },
-                        content: {
-                            AddHealthMetricsPopupView(
-                                onClose: {
-                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                                        showAddMetricsPopup = false
-                                    }
-                                },
-                                saveTrigger: $metricsSaveTrigger,
-                                isSaving: $metricsIsSaving,
-                                isValid: $metricsIsValid
-                            )
-                        },
-                        footer: {
-                            Button {
-                                metricsSaveTrigger = true
-                            } label: {
-                                Text(metricsIsSaving ? "Saving..." : "Save")
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(LColors.accent)
-                                    .foregroundStyle(.black)
-                                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                                    .opacity(metricsIsValid ? 1.0 : 0.5)
-                            }
-                            .disabled(metricsIsSaving || !metricsIsValid)
                         }
                     )
                 }
 
                 if showAddExercisePopup {
-                    LystariaOverlayPopup(
+                    AddExercisePopupView(
                         onClose: {
                             withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                                 showAddExercisePopup = false
                             }
-                        },
-                        width: 560,
-                        heightRatio: 0.55,
-                        header: {
-                            GradientTitle(text: "Add Exercise", size: 24)
-                        },
-                        content: {
-                            AddExercisePopupView(
-                                onClose: {
-                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                                        showAddExercisePopup = false
-                                    }
-                                },
-                                saveTrigger: $exerciseSaveTrigger,
-                                isSaving: $exerciseIsSaving,
-                                isValid: $exerciseIsValid
-                            )
-                        },
-                        footer: {
-                            Button {
-                                exerciseSaveTrigger = true
-                            } label: {
-                                Text(exerciseIsSaving ? "Saving..." : "Save")
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(LColors.accent)
-                                    .foregroundStyle(.black)
-                                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                                    .opacity(exerciseIsValid ? 1.0 : 0.5)
-                            }
-                            .disabled(exerciseIsSaving || !exerciseIsValid)
                         }
                     )
                 }
 
                 if showHealthHistoryPopup {
-                    LystariaOverlayPopup(
-                        onClose: {
-                            showHealthHistoryPopup = false
-                        },
-                        width: 620,
-                        heightRatio: 0.70,
-                        header: {
-                            GradientTitle(text: "Health Metrics", size: 24)
-                        },
-                        content: {
-                            HealthMetricsHistoryPopupView(entries: healthEntries) { entry in
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                                    selectedHealthEntry = entry
-                                }
+                    HealthMetricsHistoryPopupView(
+                        entries: healthEntries,
+                        onSelect: { entry in
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                                selectedHealthEntry = entry
                             }
                         },
-                        footer: {
-                            HStack {
-                                Spacer()
-                                Button("Close") {
-                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                                        showHealthHistoryPopup = false
-                                    }
-                                }
+                        onClose: {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                                showHealthHistoryPopup = false
                             }
                         }
                     )
                 }
 
                 if showExerciseHistoryPopup {
-                    LystariaOverlayPopup(
-                        onClose: {
-                            showExerciseHistoryPopup = false
-                        },
-                        width: 620,
-                        heightRatio: 0.70,
-                        header: {
-                            GradientTitle(text: "Exercise Log", size: 24)
-                        },
-                        content: {
-                            ExerciseHistoryPopupView(entries: exerciseEntries) { entry in
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                                    selectedExerciseEntry = entry
-                                }
+                    ExerciseHistoryPopupView(
+                        entries: exerciseEntries,
+                        onSelect: { entry in
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                                selectedExerciseEntry = entry
                             }
                         },
-                        footer: {
-                            HStack {
-                                Spacer()
-                                Button("Close") {
-                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                                        showExerciseHistoryPopup = false
-                                    }
-                                }
+                        onClose: {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                                showExerciseHistoryPopup = false
                             }
                         }
                     )
                 }
 
                 if let healthEntry = selectedHealthEntry {
-                    LystariaOverlayPopup(
+                    HealthMetricDetailPopupView(
+                        entry: healthEntry,
+                        onDelete: {
+                            modelContext.delete(healthEntry)
+
+                            do {
+                                try modelContext.save()
+                            } catch {
+                                print("Delete health entry error:", error)
+                            }
+
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                                selectedHealthEntry = nil
+                            }
+                        },
                         onClose: {
-                            selectedHealthEntry = nil
-                        },
-                        width: 520,
-                        heightRatio: 0.55,
-                        header: {
-                            GradientTitle(text: "Health Entry", size: 24)
-                        },
-                        content: {
-                            HealthMetricDetailPopupView(entry: healthEntry)
-                        },
-                        footer: {
-                            Button {
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                                    selectedHealthEntry = nil
-                                }
-                            } label: {
-                                Text("Save")
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(LColors.accent)
-                                    .foregroundStyle(.black)
-                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                                selectedHealthEntry = nil
                             }
                         }
                     )
                 }
 
                 if let exerciseEntry = selectedExerciseEntry {
-                    LystariaOverlayPopup(
+                    ExerciseDetailPopupView(
+                        entry: exerciseEntry,
+                        onDelete: {
+                            modelContext.delete(exerciseEntry)
+
+                            do {
+                                try modelContext.save()
+                            } catch {
+                                print("Delete exercise entry error:", error)
+                            }
+
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                                selectedExerciseEntry = nil
+                            }
+                        },
                         onClose: {
-                            selectedExerciseEntry = nil
-                        },
-                        width: 520,
-                        heightRatio: 0.50,
-                        header: {
-                            GradientTitle(text: "Exercise Entry", size: 24)
-                        },
-                        content: {
-                            ExerciseDetailPopupView(entry: exerciseEntry)
-                        },
-                        footer: {
-                            Button {
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                                    selectedExerciseEntry = nil
-                                }
-                            } label: {
-                                Text("Save")
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(LColors.accent)
-                                    .foregroundStyle(.black)
-                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                                selectedExerciseEntry = nil
                             }
                         }
                     )
@@ -276,6 +171,8 @@ struct HealthPageView: View {
             do {
                 try await HealthMetricsHealthKitManager.shared.requestAuthorization()
                 try await ExerciseHealthKitManager.shared.requestAuthorization()
+                try await bodyStateManager.requestAuthorization()
+                await bodyStateManager.refreshAndStore(in: modelContext)
             } catch {
                 print("HealthKit authorization error:", error)
             }
@@ -341,6 +238,147 @@ struct HealthPageView: View {
                     )
                 }
             }
+        }
+    }
+
+    private var bodyStateCard: some View {
+        let record = latestBodyStateRecord
+
+        return GlassCard {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(spacing: 12) {
+                    Image("handheart")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 22, height: 22)
+                        .foregroundStyle(.white)
+
+                    GradientTitle(text: "Current Flow", size: 24)
+
+                    Spacer()
+                }
+
+                bodyStateBar(
+                    title: "Body State",
+                    value: record?.bodyScore ?? 0,
+                    label: record?.bodyLabel.isEmpty == false ? record!.bodyLabel : "Unavailable"
+                )
+
+                bodyStateBar(
+                    title: "Nervous System",
+                    value: record?.nervousSystemScore ?? 0,
+                    label: record?.nervousSystemLabel.isEmpty == false ? record!.nervousSystemLabel : "Unavailable"
+                )
+            }
+        }
+    }
+
+    private func bodyStateBar(title: String, value: Double, label: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title.uppercased())
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(LColors.textSecondary)
+
+                Spacer()
+
+                Text(label)
+                    .foregroundStyle(.white)
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(
+                        Capsule()
+                            .fill(stateGradient(for: label))
+                    )
+                    .overlay(
+                        Capsule()
+                            .stroke(LColors.glassBorder, lineWidth: 1)
+                    )
+            }
+
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.white.opacity(0.08))
+
+                    Capsule()
+                        .fill(stateGradient(for: label))
+                        .frame(width: geo.size.width * max(0, min(1, value)))
+                }
+            }
+            .frame(height: 12)
+            .overlay(
+                Capsule()
+                    .stroke(LColors.glassBorder, lineWidth: 1)
+            )
+        }
+    }
+
+    private var latestBodyStateRecord: BodyStateRecord? {
+        bodyStateRecords.first
+    }
+    
+    private func stateGradient(for label: String) -> LinearGradient {
+        switch label {
+
+        case "Excellent":
+            return LinearGradient(
+                colors: [
+                    Color(red: 255/255, green: 105/255, blue: 180/255), // bubblegum magenta pink
+                    Color(red: 255/255, green: 245/255, blue: 157/255)  // pastel yellow
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+
+        case "Mellow":
+            return LinearGradient(
+                colors: [
+                    Color(red: 64/255, green: 224/255, blue: 208/255), // greenish blue
+                    Color(red: 0/255, green: 150/255, blue: 136/255)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+
+        case "Elevated":
+            return LinearGradient(
+                colors: [
+                    Color(red: 255/255, green: 105/255, blue: 180/255), // bubblegum magenta
+                    Color(red: 255/255, green: 59/255, blue: 48/255)    // candy red
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+
+        case "Stressed":
+            return LinearGradient(
+                colors: [
+                    Color(red: 255/255, green: 59/255, blue: 48/255),   // candy red
+                    Color(red: 255/255, green: 204/255, blue: 0/255)    // yellowish
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+
+        case "Rest Needed":
+            return LinearGradient(
+                colors: [
+                    Color(red: 135/255, green: 206/255, blue: 250/255), // sky blue
+                    Color(red: 144/255, green: 238/255, blue: 144/255)  // soft greenish
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+
+        default:
+            return LinearGradient(
+                colors: [Color.white.opacity(0.3), Color.white.opacity(0.1)],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
         }
     }
 
