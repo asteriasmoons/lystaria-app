@@ -30,7 +30,7 @@ struct AddEditBookmarkFolderView: View {
         LystariaOverlayPopup(
             onClose: onClose,
             width: 520,
-            heightRatio: 0.48
+            heightRatio: 0.70
         ) {
             VStack(alignment: .leading, spacing: 6) {
                 GradientTitle(

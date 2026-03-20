@@ -70,6 +70,14 @@
 		CF20514A2F578DFB006B71AA /* JournalCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF2051492F578DFB006B71AA /* JournalCard.swift */; };
 		CF20514C2F578E11006B71AA /* JournalPreviewSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF20514B2F578E11006B71AA /* JournalPreviewSheet.swift */; };
 		CF2051E12F59EFCD006B71AA /* LilyScriptOne-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = CF2051E02F59EFCD006B71AA /* LilyScriptOne-Regular.ttf */; };
+		CF29FC602F6D8C3600EC47F8 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CF29FC5F2F6D8C3600EC47F8 /* WidgetKit.framework */; };
+		CF29FC622F6D8C3600EC47F8 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CF29FC612F6D8C3600EC47F8 /* SwiftUI.framework */; };
+		CF29FC732F6D8C3700EC47F8 /* Lystaria WidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CF29FC5E2F6D8C3600EC47F8 /* Lystaria WidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		CF29FC792F6D8F1400EC47F8 /* LystariaTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D834B2F5124EB0092FC98 /* LystariaTheme.swift */; };
+		CF29FC7A2F6D8F1C00EC47F8 /* LystariaComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83492F5124C70092FC98 /* LystariaComponents.swift */; };
+		CF29FC7B2F6D960E00EC47F8 /* MoodLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83292F50A4940092FC98 /* MoodLog.swift */; };
+		CF29FC7C2F6D9C7600EC47F8 /* LilyScriptOne-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = CF2051E02F59EFCD006B71AA /* LilyScriptOne-Regular.ttf */; };
+		CF29FC7E2F6DE7A100EC47F8 /* ReadingSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF29FC7D2F6DE79C00EC47F8 /* ReadingSession.swift */; };
 		CF84216D2F5F57520069F12F /* AuthUser.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83222F50A4940092FC98 /* AuthUser.swift */; };
 		CF84217C2F5FA7580069F12F /* HealthKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84217B2F5FA7480069F12F /* HealthKitManager.swift */; };
 		CF84217D2F5FA7580069F12F /* HealthKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84217B2F5FA7480069F12F /* HealthKitManager.swift */; };
@@ -186,6 +194,13 @@
 			remoteGlobalIDString = CF0A09DF2F5F14B200401658;
 			remoteInfo = "Lystaria Watch Watch App";
 		};
+		CF29FC712F6D8C3700EC47F8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CF41A58B2F4DF57000C96018 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CF29FC5D2F6D8C3600EC47F8;
+			remoteInfo = "Lystaria WidgetsExtension";
+		};
 		CF8B7FA92F6C70EC006A7D3B /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = CF41A58B2F4DF57000C96018 /* Project object */;
@@ -213,6 +228,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
+				CF29FC732F6D8C3700EC47F8 /* Lystaria WidgetsExtension.appex in Embed Foundation Extensions */,
 				CF8B7FAB2F6C70EC006A7D3B /* Lystaria Share.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
@@ -280,6 +296,11 @@
 		CF2051492F578DFB006B71AA /* JournalCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalCard.swift; sourceTree = "<group>"; };
 		CF20514B2F578E11006B71AA /* JournalPreviewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalPreviewSheet.swift; sourceTree = "<group>"; };
 		CF2051E02F59EFCD006B71AA /* LilyScriptOne-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "LilyScriptOne-Regular.ttf"; sourceTree = "<group>"; };
+		CF29FC5E2F6D8C3600EC47F8 /* Lystaria WidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Lystaria WidgetsExtension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		CF29FC5F2F6D8C3600EC47F8 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		CF29FC612F6D8C3600EC47F8 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		CF29FC782F6D8CEF00EC47F8 /* Lystaria WidgetsExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Lystaria WidgetsExtension.entitlements"; sourceTree = "<group>"; };
+		CF29FC7D2F6DE79C00EC47F8 /* ReadingSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingSession.swift; sourceTree = "<group>"; };
 		CF41A5932F4DF57000C96018 /* Lystaria.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Lystaria.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CF84217B2F5FA7480069F12F /* HealthKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitManager.swift; sourceTree = "<group>"; };
 		CF8421812F5FBD820069F12F /* WaterHealthKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaterHealthKitManager.swift; sourceTree = "<group>"; };
@@ -381,6 +402,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		CF29FC772F6D8C3700EC47F8 /* Exceptions for "Lystaria Widgets" folder in "Lystaria WidgetsExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = CF29FC5D2F6D8C3600EC47F8 /* Lystaria WidgetsExtension */;
+		};
 		CF8421752F5F5B550069F12F /* Exceptions for "Lystaria Watch Watch App" folder in "Lystaria" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -406,6 +434,14 @@
 			path = "Lystaria Watch Watch App";
 			sourceTree = "<group>";
 		};
+		CF29FC632F6D8C3600EC47F8 /* Lystaria Widgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				CF29FC772F6D8C3700EC47F8 /* Exceptions for "Lystaria Widgets" folder in "Lystaria WidgetsExtension" target */,
+			);
+			path = "Lystaria Widgets";
+			sourceTree = "<group>";
+		};
 		CF8B7FA22F6C70EC006A7D3B /* Lystaria Share */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -421,6 +457,15 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CF29FC5B2F6D8C3600EC47F8 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CF29FC622F6D8C3600EC47F8 /* SwiftUI.framework in Frameworks */,
+				CF29FC602F6D8C3600EC47F8 /* WidgetKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -502,9 +547,11 @@
 		CF41A58A2F4DF57000C96018 = {
 			isa = PBXGroup;
 			children = (
+				CF29FC782F6D8CEF00EC47F8 /* Lystaria WidgetsExtension.entitlements */,
 				CF8D833A2F50A60F0092FC98 /* Lystaria */,
 				CF0A09E12F5F14B200401658 /* Lystaria Watch Watch App */,
 				CF8B7FA22F6C70EC006A7D3B /* Lystaria Share */,
+				CF29FC632F6D8C3600EC47F8 /* Lystaria Widgets */,
 				CF41A5942F4DF57000C96018 /* Products */,
 				CF8D837D2F54855C0092FC98 /* GoogleSignInShim.h */,
 				CF84214C2F5F4EEB0069F12F /* Frameworks */,
@@ -517,6 +564,7 @@
 				CF41A5932F4DF57000C96018 /* Lystaria.app */,
 				CF0A09E02F5F14B200401658 /* Lystaria Watch Watch App.app */,
 				CF8B7FA12F6C70EC006A7D3B /* Lystaria Share.appex */,
+				CF29FC5E2F6D8C3600EC47F8 /* Lystaria WidgetsExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -541,6 +589,8 @@
 		CF84214C2F5F4EEB0069F12F /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				CF29FC5F2F6D8C3600EC47F8 /* WidgetKit.framework */,
+				CF29FC612F6D8C3600EC47F8 /* SwiftUI.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -762,6 +812,7 @@
 		CF8D832C2F50A4940092FC98 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				CF29FC7D2F6DE79C00EC47F8 /* ReadingSession.swift */,
 				CF8B7F8A2F6C4972006A7D3B /* BookmarkItem.swift */,
 				CF8B7F882F6C4955006A7D3B /* BookmarkFolder.swift */,
 				CF8B7F862F6C1D44006A7D3B /* SelfCarePointsResetLog.swift */,
@@ -890,6 +941,28 @@
 			productReference = CF0A09E02F5F14B200401658 /* Lystaria Watch Watch App.app */;
 			productType = "com.apple.product-type.application";
 		};
+		CF29FC5D2F6D8C3600EC47F8 /* Lystaria WidgetsExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CF29FC762F6D8C3700EC47F8 /* Build configuration list for PBXNativeTarget "Lystaria WidgetsExtension" */;
+			buildPhases = (
+				CF29FC5A2F6D8C3600EC47F8 /* Sources */,
+				CF29FC5B2F6D8C3600EC47F8 /* Frameworks */,
+				CF29FC5C2F6D8C3600EC47F8 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				CF29FC632F6D8C3600EC47F8 /* Lystaria Widgets */,
+			);
+			name = "Lystaria WidgetsExtension";
+			packageProductDependencies = (
+			);
+			productName = "Lystaria WidgetsExtension";
+			productReference = CF29FC5E2F6D8C3600EC47F8 /* Lystaria WidgetsExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		CF41A5922F4DF57000C96018 /* Lystaria */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = CF41A59E2F4DF57100C96018 /* Build configuration list for PBXNativeTarget "Lystaria" */;
@@ -905,6 +978,7 @@
 			dependencies = (
 				CF0A09E92F5F14B400401658 /* PBXTargetDependency */,
 				CF8B7FAA2F6C70EC006A7D3B /* PBXTargetDependency */,
+				CF29FC722F6D8C3700EC47F8 /* PBXTargetDependency */,
 			);
 			name = Lystaria;
 			packageProductDependencies = (
@@ -951,6 +1025,9 @@
 					CF0A09DF2F5F14B200401658 = {
 						CreatedOnToolsVersion = 26.3;
 					};
+					CF29FC5D2F6D8C3600EC47F8 = {
+						CreatedOnToolsVersion = 26.3;
+					};
 					CF41A5922F4DF57000C96018 = {
 						CreatedOnToolsVersion = 26.2;
 					};
@@ -980,6 +1057,7 @@
 				CF41A5922F4DF57000C96018 /* Lystaria */,
 				CF0A09DF2F5F14B200401658 /* Lystaria Watch Watch App */,
 				CF8B7FA02F6C70EC006A7D3B /* Lystaria Share */,
+				CF29FC5D2F6D8C3600EC47F8 /* Lystaria WidgetsExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -989,6 +1067,14 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CF29FC5C2F6D8C3600EC47F8 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CF29FC7C2F6D9C7600EC47F8 /* LilyScriptOne-Regular.ttf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1026,6 +1112,16 @@
 				CF8B7F7B2F6B4375006A7D3B /* JournalInlineStyle.swift in Sources */,
 				CF13B6562F678D53008D3CE9 /* JournalBook.swift in Sources */,
 				CF13B6602F68C2CA008D3CE9 /* JournalPrompt.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CF29FC5A2F6D8C3600EC47F8 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CF29FC7B2F6D960E00EC47F8 /* MoodLog.swift in Sources */,
+				CF29FC7A2F6D8F1C00EC47F8 /* LystariaComponents.swift in Sources */,
+				CF29FC792F6D8F1400EC47F8 /* LystariaTheme.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1176,6 +1272,7 @@
 				CF8421BE2F6320590069F12F /* Tarot.swift in Sources */,
 				CF2051482F578D59006B71AA /* JournalEditorSheet.swift in Sources */,
 				CF13B6352F65B582008D3CE9 /* SetDailyIntentionIntent.swift in Sources */,
+				CF29FC7E2F6DE7A100EC47F8 /* ReadingSession.swift in Sources */,
 				CF13B6772F69B6FA008D3CE9 /* ExerciseDetailPopupView.swift in Sources */,
 				CF8D837A2F53E0C40092FC98 /* GoogleAuthTest.swift in Sources */,
 				CF8421C02F6329610069F12F /* DailyHoroscope.swift in Sources */,
@@ -1201,6 +1298,11 @@
 			isa = PBXTargetDependency;
 			target = CF0A09DF2F5F14B200401658 /* Lystaria Watch Watch App */;
 			targetProxy = CF0A09E82F5F14B400401658 /* PBXContainerItemProxy */;
+		};
+		CF29FC722F6D8C3700EC47F8 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CF29FC5D2F6D8C3600EC47F8 /* Lystaria WidgetsExtension */;
+			targetProxy = CF29FC712F6D8C3700EC47F8 /* PBXContainerItemProxy */;
 		};
 		CF8B7FAA2F6C70EC006A7D3B /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -1283,6 +1385,76 @@
 				TARGETED_DEVICE_FAMILY = 4;
 				VALIDATE_PRODUCT = YES;
 				WATCHOS_DEPLOYMENT_TARGET = 26.2;
+			};
+			name = Release;
+		};
+		CF29FC742F6D8C3700EC47F8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = "Lystaria WidgetsExtension.entitlements";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = PLRRW8XCVU;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Lystaria Widgets/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Lystaria Widgets";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.asteriasmoons.LystariaDev.Lystaria-Widgets";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		CF29FC752F6D8C3700EC47F8 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = "Lystaria WidgetsExtension.entitlements";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = PLRRW8XCVU;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Lystaria Widgets/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Lystaria Widgets";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.asteriasmoons.LystariaDev.Lystaria-Widgets";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
 		};
@@ -1633,6 +1805,15 @@
 			buildConfigurations = (
 				CF0A09EC2F5F14B400401658 /* Debug */,
 				CF0A09ED2F5F14B400401658 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CF29FC762F6D8C3700EC47F8 /* Build configuration list for PBXNativeTarget "Lystaria WidgetsExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CF29FC742F6D8C3700EC47F8 /* Debug */,
+				CF29FC752F6D8C3700EC47F8 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

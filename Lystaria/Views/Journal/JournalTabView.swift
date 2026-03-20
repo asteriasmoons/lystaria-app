@@ -7,12 +7,14 @@ import Combine
 
 struct JournalTabView: View {
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var appState: AppState
 
     @Query(filter: #Predicate<JournalBook> { $0.deletedAt == nil }, sort: \JournalBook.createdAt, order: .reverse) private var books: [JournalBook]
     @Query(filter: #Predicate<JournalEntry> { $0.deletedAt == nil }, sort: \JournalEntry.createdAt, order: .reverse) private var allEntries: [JournalEntry] // for migration + counts
 
     @State private var showBookEditor = false
     @State private var editingBook: JournalBook? = nil
+    @State private var openMoodLogger = false
     // Onboarding for hidden header icons
     @StateObject private var onboarding = OnboardingManager()
 
@@ -81,6 +83,14 @@ struct JournalTabView: View {
             .onAppear {
                 migrateEntriesIntoDefaultBookIfNeeded()
                 JournalEntryBlockMigration.migrateEntriesIfNeeded(allEntries, modelContext: modelContext)
+            }
+            .onChange(of: appState.openMoodFromDeepLink) { _, newValue in
+                guard newValue else { return }
+                openMoodLogger = true
+                appState.openMoodFromDeepLink = false
+            }
+            .navigationDestination(isPresented: $openMoodLogger) {
+                MoodLoggerView()
             }
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showBookEditor)
             // Prevent the NavigationStack default backgrounds from covering the custom background
@@ -1317,4 +1327,3 @@ struct JournalBookDetailView: View {
         }
     }
 }
-

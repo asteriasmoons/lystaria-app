@@ -3,6 +3,7 @@
 
 import SwiftUI
 import SwiftData
+import PhotosUI
 
 // Cross-platform: numeric keyboard only exists on iOS/visionOS
 extension View {
@@ -33,7 +34,11 @@ struct ReadingTabView: View {
     @State private var showBookSummaryPopup = false
     @State private var showBookRecommendationsPopup = false
     @State private var tagFilter: String? = nil
-    @State private var selectedStatus: BookStatus? = nil // nil means All
+    @State private var selectedStatus: BookStatus? = nil
+    
+    @State private var loggingSessionForBook: Book? = nil
+    @State private var selectedBookForDetails: Book? = nil
+    @State private var showingSessionHistoryForBook: Book? = nil
 
     private var currentUserId: String? {
         appState.currentAppleUserId
@@ -177,9 +182,10 @@ struct ReadingTabView: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.trailing, 26)
-                .padding(.bottom, 26)
+                .padding(.bottom, 110)
+                .zIndex(10000)
             }
-            .zIndex(9999)
+            .zIndex(10000)
             .overlay {
                 if showAddBook {
                     AddBookSheet(
@@ -205,8 +211,56 @@ struct ReadingTabView: View {
                     .zIndex(70)
                 }
             }
+            .overlay {
+                if let book = loggingSessionForBook {
+                    LogReadingSessionSheet(
+                        book: book,
+                        onClose: {
+                            loggingSessionForBook = nil
+                        }
+                    )
+                    .preferredColorScheme(.dark)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .zIndex(71)
+                }
+            }
+            .overlay {
+                if let book = selectedBookForDetails {
+                    BookDetailSheet(
+                        book: book,
+                        onClose: {
+                            selectedBookForDetails = nil
+                        },
+                        onLogSession: {
+                            loggingSessionForBook = book
+                        },
+                        onShowSessionHistory: {
+                            showingSessionHistoryForBook = book
+                        }
+                    )
+                    .preferredColorScheme(.dark)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .zIndex(72)
+                }
+            }
+            .overlay {
+                if let book = showingSessionHistoryForBook {
+                    BookSessionHistorySheet(
+                        book: book,
+                        onClose: {
+                            showingSessionHistoryForBook = nil
+                        }
+                    )
+                    .preferredColorScheme(.dark)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .zIndex(73)
+                }
+            }
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showAddBook)
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: editingBook != nil)
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: loggingSessionForBook != nil)
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: selectedBookForDetails != nil)
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showingSessionHistoryForBook != nil)
             .onChange(of: selectedStatus) { _, _ in
                 visibleBookCount = 4
             }
@@ -537,89 +591,116 @@ struct ReadingTabView: View {
                                 .padding(.top, 6)
                             }
 
-                            HStack(spacing: 10) {
-                                Button {
-                                    editingBook = book
-                                } label: {
-                                    HStack(spacing: 8) {
-                                        Image(systemName: "pencil")
-                                        Text("Edit")
-                                            .font(.system(size: 13, weight: .semibold))
-                                    }
-                                    .foregroundStyle(LColors.textPrimary)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 9)
-                                    .background(Color.white.opacity(0.08))
-                                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .stroke(LColors.glassBorder, lineWidth: 1)
-                                    )
-                                }
-                                .buttonStyle(.plain)
-
-                                if book.status == .reading,
-                                   let total = book.totalPages, total > 0,
-                                   let current = book.currentPage {
-
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack(spacing: 10) {
                                     Button {
-                                        let newValue = max(current - 1, 0)
-                                        if newValue != current {
-                                            book.currentPage = newValue
-                                            book.updatedAt = Date()
-                                            try? modelContext.save()
-                                        }
+                                        editingBook = book
                                     } label: {
-                                        Image("chevrondownfill")
-                                            .renderingMode(.template)
-                                            .resizable()
-                                            .scaledToFit()
-                                            .frame(width: 14, height: 14)
-                                            .foregroundStyle(.white)
-                                            .frame(width: 38, height: 38)
-                                            .background(Color.white.opacity(0.08))
-                                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 12)
-                                                    .stroke(LColors.glassBorder, lineWidth: 1)
-                                            )
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "pencil")
+                                            Text("Edit")
+                                                .font(.system(size: 13, weight: .semibold))
+                                        }
+                                        .foregroundStyle(LColors.textPrimary)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 9)
+                                        .background(Color.white.opacity(0.08))
+                                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .stroke(LColors.glassBorder, lineWidth: 1)
+                                        )
                                     }
                                     .buttonStyle(.plain)
 
                                     Button {
-                                        let newValue = min(current + 1, total)
-                                        if newValue != current {
-                                            book.currentPage = newValue
-                                            book.updatedAt = Date()
-                                            try? modelContext.save()
-                                        }
+                                        selectedBookForDetails = book
                                     } label: {
-                                        Image("chevronupfill")
-                                            .renderingMode(.template)
-                                            .resizable()
-                                            .scaledToFit()
-                                            .frame(width: 14, height: 14)
-                                            .foregroundStyle(.white)
-                                            .frame(width: 38, height: 38)
-                                            .background(Color.white.opacity(0.08))
-                                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 12)
-                                                    .stroke(LColors.glassBorder, lineWidth: 1)
-                                            )
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "ellipsis.circle")
+                                            Text("Details")
+                                                .font(.system(size: 13, weight: .semibold))
+                                        }
+                                        .foregroundStyle(LColors.textPrimary)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 9)
+                                        .background(Color.white.opacity(0.08))
+                                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .stroke(LColors.glassBorder, lineWidth: 1)
+                                        )
                                     }
                                     .buttonStyle(.plain)
+
+                                    GradientCapsuleButton(title: "Log Session", icon: "booksfill") {
+                                        loggingSessionForBook = book
+                                    }
                                 }
 
-                                GradientCapsuleButton(title: "Delete", icon: "trashfill") {
-                                    bookPendingDeletion = book
-                                    showDeleteConfirm = true
-                                }
+                                HStack(spacing: 10) {
+                                    if book.status == .reading,
+                                       let total = book.totalPages, total > 0,
+                                       let current = book.currentPage {
 
-                                Spacer()
+                                        Button {
+                                            let newValue = max(current - 1, 0)
+                                            if newValue != current {
+                                                book.currentPage = newValue
+                                                book.updatedAt = Date()
+                                                try? modelContext.save()
+                                            }
+                                        } label: {
+                                            Image("chevrondownfill")
+                                                .renderingMode(.template)
+                                                .resizable()
+                                                .scaledToFit()
+                                                .frame(width: 14, height: 14)
+                                                .foregroundStyle(.white)
+                                                .frame(width: 38, height: 38)
+                                                .background(Color.white.opacity(0.08))
+                                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 12)
+                                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                                )
+                                        }
+                                        .buttonStyle(.plain)
+
+                                        Button {
+                                            let newValue = min(current + 1, total)
+                                            if newValue != current {
+                                                book.currentPage = newValue
+                                                book.updatedAt = Date()
+                                                try? modelContext.save()
+                                            }
+                                        } label: {
+                                            Image("chevronupfill")
+                                                .renderingMode(.template)
+                                                .resizable()
+                                                .scaledToFit()
+                                                .frame(width: 14, height: 14)
+                                                .foregroundStyle(.white)
+                                                .frame(width: 38, height: 38)
+                                                .background(Color.white.opacity(0.08))
+                                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 12)
+                                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                                )
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+
+                                    GradientCapsuleButton(title: "Delete", icon: "trashfill") {
+                                        bookPendingDeletion = book
+                                        showDeleteConfirm = true
+                                    }
+                                }
                             }
                             .padding(.top, 10)
                         }
+                        // Removed whole-card tap behavior
                     }
                 }
             }
@@ -1066,6 +1147,567 @@ struct EditBookSheet: View {
         book.updatedAt = Date()
         try? modelContext.save()
         closeAction()
+    }
+}
+
+// MARK: - Log Reading Session Sheet
+struct LogReadingSessionSheet: View {
+    let book: Book
+    @Environment(\.modelContext) private var modelContext
+    var onClose: (() -> Void)? = nil
+
+    @State private var startPageText: String
+    @State private var endPageText: String
+    @State private var minutesReadText: String = ""
+    @State private var sessionDate: Date = Date()
+
+    private var closeAction: () -> Void {
+        onClose ?? {}
+    }
+
+    private var canSave: Bool {
+        let start = Int(startPageText.filter { $0.isNumber })
+        let end = Int(endPageText.filter { $0.isNumber })
+        let minutes = Int(minutesReadText.filter { $0.isNumber })
+
+        return start != nil || end != nil || (minutes ?? 0) > 0
+    }
+
+    init(book: Book, onClose: (() -> Void)? = nil) {
+        self.book = book
+        self.onClose = onClose
+        let current = book.currentPage ?? 0
+        _startPageText = State(initialValue: current > 0 ? "\(current)" : "")
+        _endPageText = State(initialValue: current > 0 ? "\(current)" : "")
+    }
+
+    var body: some View {
+        LystariaOverlayPopup(
+            onClose: {
+                closeAction()
+            },
+            width: 640,
+            heightRatio: 0.68,
+            header: {
+                HStack {
+                    GradientTitle(text: "Log Session", font: .title2.bold())
+                    Spacer()
+                    Button { closeAction() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(LColors.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            },
+            content: {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(book.title)
+                        .font(.headline)
+                        .foregroundStyle(LColors.textPrimary)
+
+                    if !book.author.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(book.author)
+                            .font(.subheadline)
+                            .foregroundStyle(LColors.textSecondary)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("PAGES")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("START PAGE")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(LColors.textSecondary)
+
+                            LystariaNumberField(placeholder: "0", text: $startPageText)
+                                .numericKeyboardIfAvailable()
+                        }
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("END PAGE")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(LColors.textSecondary)
+
+                            LystariaNumberField(placeholder: "0", text: $endPageText)
+                                .numericKeyboardIfAvailable()
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("MINUTES READ")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+
+                    LystariaNumberField(placeholder: "0", text: $minutesReadText)
+                        .numericKeyboardIfAvailable()
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("DATE & TIME")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+
+                    DatePicker(
+                        "",
+                        selection: $sessionDate,
+                        displayedComponents: [.date, .hourAndMinute]
+                    )
+                    .datePickerStyle(.compact)
+                    .labelsHidden()
+                    .padding(12)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .stroke(LColors.glassBorder, lineWidth: 1)
+                    )
+                }
+            },
+            footer: {
+                Button {
+                    save()
+                } label: {
+                    Text("Save Session")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(canSave ? AnyShapeStyle(LGradients.blue) : AnyShapeStyle(Color.gray.opacity(0.3)))
+                        .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
+                        .shadow(color: canSave ? LColors.accent.opacity(0.3) : .clear, radius: 12, y: 6)
+                }
+                .buttonStyle(.plain)
+                .disabled(!canSave)
+            }
+        )
+    }
+
+    private func save() {
+        let start = Int(startPageText.filter { $0.isNumber })
+        let end = Int(endPageText.filter { $0.isNumber })
+        let minutes = Int(minutesReadText.filter { $0.isNumber }) ?? 0
+
+        let session = ReadingSession(
+            book: book,
+            startPage: start,
+            endPage: end,
+            minutesRead: minutes,
+            sessionDate: sessionDate
+        )
+
+        modelContext.insert(session)
+
+        if let end, end >= 0 {
+            if let total = book.totalPages, total > 0 {
+                book.currentPage = min(end, total)
+
+                if end >= total {
+                    book.status = .finished
+                } else if book.status != .reading {
+                    book.status = .reading
+                }
+            } else {
+                book.currentPage = end
+                if book.status != .reading {
+                    book.status = .reading
+                }
+            }
+        }
+
+        book.updatedAt = Date()
+        session.updatedAt = Date()
+
+        try? modelContext.save()
+        closeAction()
+    }
+}
+
+// MARK: - Book Detail Sheet
+struct BookDetailSheet: View {
+    let book: Book
+    var onClose: (() -> Void)? = nil
+    var onLogSession: (() -> Void)? = nil
+    var onShowSessionHistory: (() -> Void)? = nil
+
+    @Environment(\.modelContext) private var modelContext
+    @State private var selectedPhotoItem: PhotosPickerItem? = nil
+
+    private var closeAction: () -> Void { onClose ?? {} }
+
+    private var sessionsSorted: [ReadingSession] {
+        (book.sessions ?? []).sorted { $0.sessionDate > $1.sessionDate }
+    }
+
+    var body: some View {
+        LystariaOverlayPopup(
+            onClose: {
+                closeAction()
+            },
+            width: 680,
+            heightRatio: 0.78,
+            header: {
+                HStack {
+                    GradientTitle(text: "Book Details", font: .title2.bold())
+                    Spacer()
+                    Button { closeAction() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(LColors.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            },
+            content: {
+                HStack(alignment: .top, spacing: 16) {
+                    coverSection
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(book.title)
+                            .font(.title3.bold())
+                            .foregroundStyle(LColors.textPrimary)
+
+                        if !book.author.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text(book.author)
+                                .font(.subheadline)
+                                .foregroundStyle(LColors.textSecondary)
+                        }
+
+                        StatusBadge(status: book.status)
+
+                        HStack(spacing: 8) {
+                            ForEach(1...5, id: \.self) { i in
+                                Button {
+                                    let newValue = (book.rating == i) ? 0 : i
+                                    book.rating = newValue
+                                    book.updatedAt = Date()
+                                    try? modelContext.save()
+                                } label: {
+                                    Image("starfill")
+                                        .renderingMode(.template)
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: 18, height: 18)
+                                        .foregroundStyle(i <= book.rating ? Color.white : LColors.textSecondary.opacity(0.35))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.top, 4)
+                    }
+
+                    Spacer()
+                }
+
+                if !book.shortSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("SUMMARY")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(LColors.textSecondary)
+                            .tracking(0.5)
+
+                        Text(book.shortSummary)
+                            .font(.subheadline)
+                            .foregroundStyle(LColors.textSecondary)
+                    }
+                }
+
+                if book.status == .reading,
+                   let total = book.totalPages, total > 0,
+                   let current = book.currentPage {
+                    let progress = CGFloat(book.progressPercent)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("PROGRESS")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(LColors.textSecondary)
+                            .tracking(0.5)
+
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(Color.white.opacity(0.10))
+                                .frame(height: 10)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                )
+
+                            GeometryReader { geo in
+                                let width = max(0, min(geo.size.width * progress, geo.size.width))
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(AnyShapeStyle(LGradients.blue))
+                                    .frame(width: width, height: 10)
+                            }
+                            .frame(height: 10)
+                        }
+
+                        HStack {
+                            Text("\(current) / \(total) pages")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(LColors.textSecondary)
+
+                            Spacer()
+
+                            Text("\(Int((progress * 100).rounded()))%")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(LColors.textSecondary)
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("READING")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+
+                    HStack(spacing: 10) {
+                        Button {
+                            onShowSessionHistory?()
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "clock.arrow.circlepath")
+                                Text("Session History")
+                                    .font(.system(size: 13, weight: .semibold))
+                            }
+                            .foregroundStyle(LColors.textPrimary)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            },
+            footer: {
+                EmptyView()
+            }
+        )
+        .onChange(of: selectedPhotoItem) { _, newItem in
+            guard let newItem else { return }
+
+            Task {
+                if let data = try? await newItem.loadTransferable(type: Data.self) {
+                    await MainActor.run {
+                        book.coverImageData = data
+                        book.updatedAt = Date()
+                        try? modelContext.save()
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var coverSection: some View {
+        VStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 18)
+                    .fill(Color.white.opacity(0.08))
+                    .frame(width: 110, height: 160)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18)
+                            .stroke(LColors.glassBorder, lineWidth: 1)
+                    )
+
+                if let data = book.coverImageData,
+                   let uiImage = UIImage(data: data) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 110, height: 160)
+                        .clipShape(RoundedRectangle(cornerRadius: 18))
+                } else {
+                    Image("booksfill")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 28, height: 28)
+                        .foregroundStyle(LColors.textSecondary)
+                }
+            }
+
+            PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                Text("Upload Cover")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(LColors.textPrimary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(LColors.glassBorder, lineWidth: 1)
+                    )
+            }
+            .buttonStyle(.plain)
+        }
+    }
+}
+
+// MARK: - Book Session History Sheet
+struct BookSessionHistorySheet: View {
+    let book: Book
+    @Environment(\.modelContext) private var modelContext
+    var onClose: (() -> Void)? = nil
+    @State private var visibleSessionCount: Int = 4
+    @State private var showDeleteSessionConfirm: Bool = false
+    @State private var sessionPendingDeletion: ReadingSession? = nil
+
+    private var closeAction: () -> Void { onClose ?? {} }
+
+    private var sessionsSorted: [ReadingSession] {
+        (book.sessions ?? []).sorted { $0.sessionDate > $1.sessionDate }
+    }
+
+    var body: some View {
+        LystariaOverlayPopup(
+            onClose: {
+                closeAction()
+            },
+            width: 680,
+            heightRatio: 0.75,
+            header: {
+                HStack {
+                    GradientTitle(text: "Session History", font: .title2.bold())
+                    Spacer()
+                    Button { closeAction() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(LColors.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            },
+            content: {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(book.title)
+                        .font(.headline)
+                        .foregroundStyle(LColors.textPrimary)
+
+                    if !book.author.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(book.author)
+                            .font(.subheadline)
+                            .foregroundStyle(LColors.textSecondary)
+                    }
+                }
+
+                if sessionsSorted.isEmpty {
+                    GlassCard {
+                        Text("No sessions logged yet.")
+                            .foregroundStyle(LColors.textSecondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 10)
+                    }
+                } else {
+                    let visibleSessions = Array(sessionsSorted.prefix(visibleSessionCount))
+
+                    ForEach(visibleSessions) { session in
+                        GlassCard {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(session.sessionDate.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundStyle(LColors.textPrimary)
+
+                                HStack(spacing: 12) {
+                                    if let start = session.startPage {
+                                        Text("Start: \(start)")
+                                            .font(.system(size: 12))
+                                            .foregroundStyle(LColors.textSecondary)
+                                    }
+
+                                    if let end = session.endPage {
+                                        Text("End: \(end)")
+                                            .font(.system(size: 12))
+                                            .foregroundStyle(LColors.textSecondary)
+                                    }
+
+                                    Text("Minutes: \(session.minutesRead)")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(LColors.textSecondary)
+
+                                    Text("Pages: \(session.pagesRead)")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(LColors.textSecondary)
+                                }
+                            }
+                        }
+                        .contentShape(Rectangle())
+                        .onLongPressGesture {
+                            sessionPendingDeletion = session
+                            showDeleteSessionConfirm = true
+                        }
+                    }
+
+                    if sessionsSorted.count > visibleSessions.count {
+                        HStack {
+                            Spacer()
+                            LoadMoreButton {
+                                visibleSessionCount += 4
+                            }
+                            Spacer()
+                        }
+                        .padding(.top, 6)
+                    }
+                }
+            },
+            footer: {
+                EmptyView()
+            }
+        )
+        .onAppear {
+            visibleSessionCount = 4
+        }
+        .alert("Delete session?", isPresented: $showDeleteSessionConfirm) {
+            Button("Delete", role: .destructive) {
+                if let session = sessionPendingDeletion {
+                    deleteSession(session)
+                }
+                sessionPendingDeletion = nil
+            }
+            Button("Cancel", role: .cancel) {
+                sessionPendingDeletion = nil
+            }
+        } message: {
+            Text("This will remove this reading session from the book history.")
+        }
+    }
+
+    private func deleteSession(_ session: ReadingSession) {
+        let remainingSessions = (book.sessions ?? [])
+            .filter { $0.persistentModelID != session.persistentModelID }
+            .sorted { $0.sessionDate > $1.sessionDate }
+
+        let latestEndPage = remainingSessions
+            .compactMap { $0.endPage }
+            .first
+
+        if let latestEndPage {
+            if let total = book.totalPages, total > 0 {
+                book.currentPage = min(max(latestEndPage, 0), total)
+            } else {
+                book.currentPage = max(latestEndPage, 0)
+            }
+        } else {
+            book.currentPage = nil
+        }
+
+        book.updatedAt = Date()
+        modelContext.delete(session)
+        try? modelContext.save()
     }
 }
 

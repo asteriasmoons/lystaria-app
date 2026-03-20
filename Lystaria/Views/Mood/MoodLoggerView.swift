@@ -3,10 +3,14 @@
 
 import SwiftUI
 import SwiftData
+import WidgetKit
 
 struct MoodLoggerView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    
+    private let moodWidgetAppGroupID = "group.com.asteriasmoons.LystariaDev"
+    private let lastMoodLogDateKey = "lastMoodLogDate"
     
     // Latest logs for display
     @Query(
@@ -332,6 +336,11 @@ struct MoodLoggerView: View {
                 )
             }
             
+            if let defaults = UserDefaults(suiteName: moodWidgetAppGroupID) {
+                defaults.set(Date(), forKey: lastMoodLogDateKey)
+            }
+            WidgetCenter.shared.reloadTimelines(ofKind: "Lystaria_Widgets")
+
             selectedMoods.removeAll()
             selectedActivities.removeAll()
             note = ""
@@ -348,6 +357,23 @@ struct MoodLoggerView: View {
 
         do {
             try modelContext.save()
+
+            let calendar = Calendar.current
+            let hasRemainingMoodLogToday = logs.contains {
+                $0.persistentModelID != log.persistentModelID &&
+                $0.deletedAt == nil &&
+                calendar.isDate($0.createdAt, inSameDayAs: Date())
+            }
+
+            if let defaults = UserDefaults(suiteName: moodWidgetAppGroupID) {
+                if hasRemainingMoodLogToday {
+                    defaults.set(Date(), forKey: lastMoodLogDateKey)
+                } else {
+                    defaults.removeObject(forKey: lastMoodLogDateKey)
+                }
+            }
+
+            WidgetCenter.shared.reloadTimelines(ofKind: "Lystaria_Widgets")
         } catch {
             print("Failed to delete mood log: \(error)")
         }

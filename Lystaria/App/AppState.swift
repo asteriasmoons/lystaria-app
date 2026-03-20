@@ -19,6 +19,7 @@ final class AppState: ObservableObject {
     }
     
     @Published private(set) var status: SessionStatus = .checking
+    @Published var openMoodFromDeepLink = false
     
     var currentUser: AuthUser? {
         if case .signedIn(let user) = status {

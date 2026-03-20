@@ -78,7 +78,10 @@ struct LystariaOverlayPopup<Header: View, Content: View, Footer: View>: View {
                     footer()
                 }
                 .padding(22)
-                .frame(width: min(proxy.size.width - 40, width), alignment: .topLeading)
+                .frame(
+                    width: max(0, min(proxy.size.width.isFinite ? proxy.size.width - 40 : width, width)),
+                    alignment: .topLeading
+                )
                 .frame(maxHeight: proxy.size.height * heightRatio, alignment: .topLeading)
                 .background(
                     ZStack {

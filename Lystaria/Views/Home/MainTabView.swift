@@ -54,6 +54,9 @@ struct MainTabView: View {
                 .environmentObject(appState)
                 .preferredColorScheme(.dark)
         }
+        .onOpenURL { url in
+            handleDeepLink(url)
+        }
     }
 
     // MARK: - Bottom Nav
@@ -130,6 +133,24 @@ struct MainTabView: View {
             Spacer(minLength: 0)
         }
         .padding(.bottom, 14)
+    }
+
+    private func handleDeepLink(_ url: URL) {
+        guard url.scheme?.lowercased() == "lystaria" else { return }
+
+        switch url.host?.lowercased() {
+        case "mood":
+            // Switch to journal tab first
+            withAnimation(.easeInOut(duration: 0.2)) {
+                selectedTab = .journal
+            }
+            // Wait for JournalTabView to fully appear before triggering navigation
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                appState.openMoodFromDeepLink = true
+            }
+        default:
+            break
+        }
     }
 }
 

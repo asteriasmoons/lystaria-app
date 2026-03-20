@@ -17,12 +17,34 @@ struct DashboardView: View {
     @Query(sort: \JournalEntry.createdAt, order: .reverse)
     private var journalEntries: [JournalEntry]
 
+
     @Query(sort: \MoodLog.createdAt, order: .reverse)
     private var moodLogs: [MoodLog]
+
+    @Query(sort: \ChecklistItem.updatedAt, order: .reverse)
+    private var checklistItems: [ChecklistItem]
+
+    @Query(sort: \LystariaReminder.updatedAt, order: .reverse)
+    private var reminders: [LystariaReminder]
+
+    @Query(sort: \CalendarEvent.updatedAt, order: .reverse)
+    private var calendarEvents: [CalendarEvent]
+
+    @Query(sort: \DailyIntention.updatedAt, order: .reverse)
+    private var dailyIntentions: [DailyIntention]
+
+    @Query(sort: \ExerciseLogEntry.createdAt, order: .reverse)
+    private var exerciseLogs: [ExerciseLogEntry]
+
+    @Query(sort: \HealthMetricEntry.createdAt, order: .reverse)
+    private var healthMetricEntries: [HealthMetricEntry]
 
 
     @Query(sort: \HabitLog.dayStart, order: .reverse)
     private var habitLogs: [HabitLog]
+
+    @Query(sort: \Habit.createdAt, order: .forward)
+    private var habits: [Habit]
 
     @Query(sort: \ReadingStats.updatedAt, order: .reverse)
     private var readingStats: [ReadingStats]
@@ -263,9 +285,169 @@ struct DashboardView: View {
         stepHealth.todaySteps > 0
     }
 
+
     private var readingLoggedToday: Bool {
         guard let lastCheckIn = currentReadingStats?.lastCheckInDate else { return false }
         return dashboardCalendar.isDate(lastCheckIn, inSameDayAs: Date())
+    }
+
+
+    private var todayDailyIntention: DailyIntention? {
+        dailyIntentions.first { $0.dateKey == todayKey }
+    }
+
+    private var hasDailyIntentionToday: Bool {
+        guard let intention = todayDailyIntention else { return false }
+        return !intention.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var exercisedToday: Bool {
+        exerciseLogs.contains { isToday($0.date) }
+    }
+
+    private var loggedHealthMetricsToday: Bool {
+        healthMetricEntries.contains { isToday($0.date) }
+    }
+
+    private var hasEventToday: Bool {
+        calendarEvents.contains { eventOccursToday($0) }
+    }
+
+    private var dueTodayReminders: [LystariaReminder] {
+        reminders.filter { reminder in
+            reminder.status != .deleted && dashboardCalendar.isDate(reminder.nextRunAt, inSameDayAs: Date())
+        }
+    }
+
+    private var hasReminderToday: Bool {
+        !dueTodayReminders.isEmpty
+    }
+
+    private var completedChecklistItemsTodayCount: Int {
+        checklistItems.filter { item in
+            guard item.isCompleted, let completedAt = item.completedAt else { return false }
+            return isToday(completedAt)
+        }.count
+    }
+
+    private var checklistCompletionProgressToday: Double {
+        let totalChecklistItemCount = checklistItems.count
+        guard totalChecklistItemCount > 0 else { return 0 }
+        return min(Double(completedChecklistItemsTodayCount) / Double(totalChecklistItemCount), 1.0)
+    }
+
+    private func reminderCompletedToday(_ reminder: LystariaReminder) -> Bool {
+        if let lastRunAt = reminder.lastRunAt,
+           dashboardCalendar.isDate(lastRunAt, inSameDayAs: Date()) {
+            return true
+        }
+
+        if let acknowledgedAt = reminder.acknowledgedAt,
+           dashboardCalendar.isDate(acknowledgedAt, inSameDayAs: Date()) {
+            return true
+        }
+
+        return false
+    }
+
+    private var remindersRelevantToTodayCompletion: [LystariaReminder] {
+        reminders.filter { reminder in
+            reminder.status != .deleted &&
+            dashboardCalendar.isDate(reminder.nextRunAt, inSameDayAs: Date())
+        }
+    }
+
+    private var completedDueTodayRemindersCount: Int {
+        remindersRelevantToTodayCompletion.filter { reminderCompletedToday($0) }.count
+    }
+
+    private var reminderCompletionProgressToday: Double {
+        guard !remindersRelevantToTodayCompletion.isEmpty else { return 0 }
+        return min(Double(completedDueTodayRemindersCount) / Double(remindersRelevantToTodayCompletion.count), 1.0)
+    }
+
+    private var stepProgressToday: Double {
+        guard stepGoal > 0 else { return stepsLoggedToday ? 1.0 : 0.0 }
+        return min(stepHealth.todaySteps / stepGoal, 1.0)
+    }
+
+    private var waterProgressToday: Double {
+        guard waterGoal > 0 else { return waterLoggedToday ? 1.0 : 0.0 }
+        return min(waterHealth.todayWaterFlOz / waterGoal, 1.0)
+    }
+
+    private func clampedPercent(_ value: Double) -> Double {
+        min(max(value, 0), 1)
+    }
+
+    private func eventOccursToday(_ event: CalendarEvent) -> Bool {
+        if dashboardCalendar.isDate(event.startDate, inSameDayAs: Date()) {
+            return true
+        }
+
+        guard let endDate = event.endDate else { return false }
+
+        return startOfToday >= dashboardCalendar.startOfDay(for: event.startDate)
+            && startOfToday <= dashboardCalendar.startOfDay(for: endDate)
+    }
+
+    private var movementBalanceScore: Double {
+        clampedPercent((stepProgressToday * 0.7) + ((exercisedToday ? 1.0 : 0.0) * 0.3))
+    }
+
+    private var reflectionBalanceScore: Double {
+        let journalValue = journaledToday ? 1.0 : 0.0
+        let moodValue = moodLoggedToday ? 1.0 : 0.0
+        let intentionValue = hasDailyIntentionToday ? 1.0 : 0.0
+        return clampedPercent((journalValue + moodValue + intentionValue) / 3.0)
+    }
+
+    private var careBalanceScore: Double {
+        clampedPercent((waterProgressToday * 0.7) + ((loggedHealthMetricsToday ? 1.0 : 0.0) * 0.3))
+    }
+
+    private var planningBalanceScore: Double {
+        let eventValue = hasEventToday ? 1.0 : 0.0
+        let reminderValue = hasReminderToday ? 1.0 : 0.0
+        let intentionValue = hasDailyIntentionToday ? 1.0 : 0.0
+        return clampedPercent((eventValue + reminderValue + intentionValue) / 3.0)
+    }
+
+    private var completionBalanceScore: Double {
+        let checklistValue = checklistCompletionProgressToday
+        let habitValue = habitCompletionProgressToday
+        let reminderValue = reminderCompletionProgressToday
+        return clampedPercent((checklistValue + habitValue + reminderValue) / 3.0)
+    }
+
+    private var dailyBalanceItems: [DailyBalanceItem] {
+        [
+            DailyBalanceItem(
+                title: "Movement",
+                detail: "Steps + exercise",
+                progress: movementBalanceScore
+            ),
+            DailyBalanceItem(
+                title: "Reflection",
+                detail: "Journal + mood + intention",
+                progress: reflectionBalanceScore
+            ),
+            DailyBalanceItem(
+                title: "Care",
+                detail: "Water + health metrics",
+                progress: careBalanceScore
+            ),
+            DailyBalanceItem(
+                title: "Planning",
+                detail: "Events + reminders + intention",
+                progress: planningBalanceScore
+            ),
+            DailyBalanceItem(
+                title: "Completion",
+                detail: "Checklist + habits + reminders",
+                progress: completionBalanceScore
+            )
+        ]
     }
 
 
@@ -651,6 +833,7 @@ struct DashboardView: View {
 
             moonPhaseSection
             momentumSection
+            dailyBalanceSection
             tarotSection
             horoscopeSection
             consistencySection
@@ -669,6 +852,10 @@ struct DashboardView: View {
             items: dailyMomentumItems
         )
         .id(momentumRefreshID)
+    }
+
+    private var dailyBalanceSection: some View {
+        DailyBalanceCard(items: dailyBalanceItems)
     }
 
     private var tarotSection: some View {
@@ -695,6 +882,27 @@ struct DashboardView: View {
     private var wellnessSection: some View {
         WellnessWallCard(items: wellnessInsights)
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var habitCompletionProgressToday: Double {
+        let activeHabits = habits.filter { !$0.isArchived }
+
+        guard !activeHabits.isEmpty else {
+            return habitCompletedToday ? 1.0 : 0.0
+        }
+
+        let totalTarget = activeHabits.reduce(0) { $0 + max(1, $1.timesPerDay) }
+        guard totalTarget > 0 else { return habitCompletedToday ? 1.0 : 0.0 }
+
+        let todayProgress = activeHabits.reduce(0) { partial, habit in
+            let todayCount = (habit.logs ?? [])
+                .filter { dashboardCalendar.isDate($0.dayStart, inSameDayAs: Date()) }
+                .reduce(0) { $0 + $1.count }
+
+            return partial + min(todayCount, max(1, habit.timesPerDay))
+        }
+
+        return min(Double(todayProgress) / Double(totalTarget), 1.0)
     }
 
     private var dashboardScrollContent: some View {
@@ -1310,7 +1518,7 @@ private struct DashboardConsistencyCard: View {
         GlassCard {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .center, spacing: 10) {
-                    Image("balancefill")
+                    Image("flamefill")
                         .renderingMode(.template)
                         .resizable()
                         .scaledToFit()
@@ -1412,12 +1620,21 @@ private struct WellnessInsightItem: Identifiable {
     let detail: String
 }
 
+
 private struct DailyMomentumItem: Identifiable {
     let id = UUID()
     let title: String
     let systemImage: String
     let isActive: Bool
 }
+
+private struct DailyBalanceItem: Identifiable {
+    let id = UUID()
+    let title: String
+    let detail: String
+    let progress: Double
+}
+
 
 private struct DailyMomentumCard: View {
     let activatedCount: Int
@@ -1521,6 +1738,71 @@ private struct DailyMomentumCard: View {
             color: item.isActive ? LColors.accent.opacity(0.20) : .clear,
             radius: 8,
             y: 4
+        )
+    }
+}
+
+private struct DailyBalanceCard: View {
+    let items: [DailyBalanceItem]
+
+    var body: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .center, spacing: 10) {
+                    Image("balancefill")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 24, height: 24)
+                        .foregroundStyle(.white)
+                        .opacity(1)
+
+                    GradientTitle(text: "Daily Balance", font: .system(size: 20, weight: .bold))
+                    Spacer()
+                }
+
+                Text("See how today is distributed across movement, reflection, care, planning, and completion.")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(LColors.textSecondary)
+
+                VStack(spacing: 12) {
+                    ForEach(items) { item in
+                        balanceRow(item)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func balanceRow(_ item: DailyBalanceItem) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(item.title)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+
+                Spacer()
+
+                Text("\(Int((item.progress * 100).rounded()))%")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+
+            Text(item.detail)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(LColors.textSecondary)
+
+            GlassProgressBar(progress: item.progress, height: 10, gradient: LGradients.blue)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 14)
+        .background(Color.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(LColors.glassBorder, lineWidth: 1)
         )
     }
 }

@@ -515,23 +515,25 @@ struct ReminderCard: View {
     @Bindable var reminder: LystariaReminder
     @State private var isChecklistExpanded = false
     @State private var showingDeleteConfirm = false
+    @State private var showingReschedulePopup = false
+    @State private var rescheduleDateTime = Date()
     let onDone: () -> Void
     let onSnooze: () -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
-
+    
     private var scheduleLabel: String {
         guard let schedule = reminder.schedule else { return "Once" }
-
+        
         if (schedule.interval ?? 1) > 1,
            schedule.kind != .interval,
            schedule.kind != .once {
             return "Custom"
         }
-
+        
         return schedule.kind.label
     }
-
+    
     private var badgeColor: Color {
         if let schedule = reminder.schedule,
            (schedule.interval ?? 1) > 1,
@@ -539,7 +541,7 @@ struct ReminderCard: View {
            schedule.kind != .once {
             return Color(red: 201/255, green: 44/255, blue: 194/255) // #c92cc2
         }
-
+        
         switch reminder.schedule?.kind ?? .once {
         case .once: return LColors.badgeOnce
         case .daily: return LColors.badgeDaily
@@ -549,17 +551,17 @@ struct ReminderCard: View {
         case .interval: return LColors.badgeInterval
         }
     }
-
+    
     private var isDone: Bool {
         guard let ack = reminder.acknowledgedAt else { return false }
         // Consider "done" if acknowledged today.
         return Calendar.current.isDateInToday(ack)
     }
-
+    
     private var displayTimeZone: TimeZone {
         TimeZone(identifier: NotificationManager.shared.effectiveTimezoneID) ?? .current
     }
-
+    
     private var timeText: String {
         let d = reminder.nextRunAt
         let df = DateFormatter()
@@ -569,44 +571,49 @@ struct ReminderCard: View {
         let s = df.string(from: d)
         return s
     }
-
+    
     private var scheduledTimes: [String] {
         guard let schedule = reminder.schedule else { return [] }
         // Interval reminders don't have fixed times-of-day pills.
         if schedule.kind == .interval { return [] }
-
+        
         let raw = (schedule.timesOfDay?.isEmpty == false)
-            ? (schedule.timesOfDay ?? [])
-            : (schedule.timeOfDay != nil ? [schedule.timeOfDay!] : [])
-
+        ? (schedule.timesOfDay ?? [])
+        : (schedule.timeOfDay != nil ? [schedule.timeOfDay!] : [])
+        
         // Normalize + sort by HH:MM
         let parsed: [(hh: Int, mm: Int, raw: String)] = raw.compactMap { s in
             guard let (hh, mm) = ReminderCompute.parseHHMM(s) else { return nil }
             return (hh: hh, mm: mm, raw: s)
         }
-        .sorted { a, b in
-            (a.hh, a.mm) < (b.hh, b.mm)
-        }
-
+            .sorted { a, b in
+                (a.hh, a.mm) < (b.hh, b.mm)
+            }
+        
         guard !parsed.isEmpty else { return [] }
-
+        
         let df = DateFormatter()
         df.timeZone = displayTimeZone
         df.locale = .current
         df.timeStyle = .short
         df.dateStyle = .none
-
+        
         let day = Date()
         return parsed.map { t in
             let d = ReminderCompute.merge(day: day, hour: t.hh, minute: t.mm, in: displayTimeZone)
             return df.string(from: d)
         }
     }
-
+    
     private var checklistItems: [String] {
         reminder.checklistItems
     }
-
+    
+    private func openReschedulePopup() {
+        rescheduleDateTime = reminder.nextRunAt
+        showingReschedulePopup = true
+    }
+    
     @ViewBuilder
     private func timePillsView() -> some View {
         if !scheduledTimes.isEmpty {
@@ -625,7 +632,7 @@ struct ReminderCard: View {
             }
         }
     }
-
+    
     @ViewBuilder
     private func checklistPreviewView() -> some View {
         if !checklistItems.isEmpty {
@@ -640,23 +647,23 @@ struct ReminderCard: View {
                             Image(systemName: "chevron.down.circle")
                                 .font(.system(size: 12, weight: .semibold))
                                 .foregroundStyle(LColors.textSecondary)
-
+                            
                             Text("\(checklistItems.count) Checklist Item\(checklistItems.count == 1 ? "" : "s")")
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(LColors.textSecondary)
                         }
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(LColors.textSecondary)
-
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        
                         Image(systemName: isChecklistExpanded ? "chevron.up" : "chevron.down")
                             .font(.system(size: 9, weight: .bold))
                             .foregroundStyle(LColors.textSecondary.opacity(0.8))
-
+                        
                         Spacer()
                     }
                 }
                 .buttonStyle(.plain)
-
+                
                 if isChecklistExpanded {
                     VStack(alignment: .leading, spacing: 4) {
                         ForEach(checklistItems, id: \.self) { item in
@@ -664,7 +671,7 @@ struct ReminderCard: View {
                                 Circle()
                                     .stroke(Color.white.opacity(0.7), lineWidth: 1.5)
                                     .frame(width: 10, height: 10)
-
+                                
                                 Text(item)
                                     .font(.system(size: 11, weight: .medium))
                                     .foregroundStyle(LColors.textSecondary)
@@ -679,13 +686,89 @@ struct ReminderCard: View {
             .padding(.top, 2)
         }
     }
-
+    
+    @ViewBuilder
+    private var reschedulePopup: some View {
+        LystariaOverlayPopup(
+            onClose: {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                    showingReschedulePopup = false
+                }
+            },
+            width: 560,
+            heightRatio: 0.72
+        ) {
+            HStack {
+                GradientTitle(text: "Reschedule Reminder", font: .title2.bold())
+                Spacer()
+                
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                        showingReschedulePopup = false
+                    }
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(LColors.textSecondary)
+                }
+                .buttonStyle(.plain)
+            }
+        } content: {
+            VStack(spacing: 16) {
+#if os(macOS)
+                LDateStepperRow(label: "Date", dateTime: $rescheduleDateTime)
+                LTimeEntryRow(label: "Time", dateTime: $rescheduleDateTime)
+#else
+                LystariaControlRow(label: "Date") {
+                    DatePicker("", selection: $rescheduleDateTime, displayedComponents: [.date])
+                        .labelsHidden()
+                        .datePickerStyle(.compact)
+                        .tint(LColors.accent)
+                }
+                
+                LystariaControlRow(label: "Time") {
+                    DatePicker("", selection: $rescheduleDateTime, displayedComponents: [.hourAndMinute])
+                        .labelsHidden()
+                        .datePickerStyle(.compact)
+                        .tint(LColors.accent)
+                }
+#endif
+                
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        } footer: {
+            GlassCard(padding: 14) {
+                Button {
+                    reminder.nextRunAt = rescheduleDateTime
+                    reminder.updatedAt = Date()
+                    NotificationManager.shared.scheduleReminder(reminder)
+#if DEBUG
+                    NotificationManager.shared.printPendingNotifications()
+#endif
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                        showingReschedulePopup = false
+                    }
+                } label: {
+                    Text("Save")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(AnyShapeStyle(LGradients.blue))
+                        .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+    
     // --- STATUS BADGE HELPERS ---
     private func isDueNow(now: Date) -> Bool {
         // Due Now appears at the scheduled time and stays until completed.
         // If it's already marked done for today, it is not due.
         if isDone { return false }
-
+        
         // Recurring reminders that were missed on a prior day should not stay
         // visually stuck on "DUE NOW" forever. If the nextRunAt is before today,
         // consider that occurrence missed and let the next reschedule take over.
@@ -695,41 +778,41 @@ struct ReminderCard: View {
                 return false
             }
         }
-
+        
         return now >= reminder.nextRunAt
     }
-
+    
     private func isUpcoming(now: Date) -> Bool {
         // Upcoming is within the next 24 hours (but not yet due), and not completed.
         if isDone { return false }
         if now >= reminder.nextRunAt { return false }
         return reminder.nextRunAt <= now.addingTimeInterval(24 * 60 * 60)
     }
-
+    
     // Transparent status badge colors
     private var upcomingBadgeColor: Color { Color.teal.opacity(0.42) }
     private var dueNowBadgeColor: Color { Color.yellow.opacity(0.48) }
-
+    
     var body: some View {
         // Recompute status badges periodically so they flip at the correct time.
         TimelineView(.periodic(from: .now, by: 30)) { context in
             let now = context.date
             let dueNow = isDueNow(now: now)
             let upcoming = isUpcoming(now: now)
-
+            
             GlassCard {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 8) {
                         LBadge(text: scheduleLabel, color: badgeColor)
-
+                        
                         if dueNow {
                             LBadge(text: "DUE NOW", color: dueNowBadgeColor)
                         } else if upcoming {
                             LBadge(text: "UPCOMING", color: upcomingBadgeColor)
                         }
-
+                        
                         Spacer()
-
+                        
                         Button { onDone() } label: {
                             Image(systemName: isDone ? "circle.fill" : "circle")
                                 .font(.title2)
@@ -737,13 +820,13 @@ struct ReminderCard: View {
                         }
                         .buttonStyle(.plain)
                     }
-
+                    
                     timePillsView()
-
+                    
                     Text(reminder.title)
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(LColors.textPrimary)
-
+                    
                     if let details = reminder.details, !details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Text(details)
                             .font(.system(size: 14))
@@ -751,7 +834,7 @@ struct ReminderCard: View {
                             .lineLimit(3)
                     }
                     checklistPreviewView()
-
+                    
                     HStack(spacing: 8) {
                         Image(systemName: "clock")
                             .font(.caption)
@@ -760,12 +843,18 @@ struct ReminderCard: View {
                             .font(.subheadline)
                             .foregroundStyle(.white)
                     }
-
-                    HStack(spacing: 10) {
-                        LButton(title: "Snooze", icon: "clock.arrow.circlepath", style: .secondary) { onSnooze() }
-                        LButton(title: "Edit", icon: "pencil", style: .secondary) { onEdit() }
-                        GradientCapsuleButton(title: "Delete", icon: "trashfill") {
-                            showingDeleteConfirm = true
+                    
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 10) {
+                            LButton(title: "Snooze", icon: "clock.arrow.circlepath", style: .secondary) { onSnooze() }
+                            LButton(title: "Reschedule", icon: "calendar.badge.clock", style: .secondary) { openReschedulePopup() }
+                        }
+                        
+                        HStack(spacing: 10) {
+                            LButton(title: "Edit", icon: "pencil", style: .secondary) { onEdit() }
+                            GradientCapsuleButton(title: "Delete", icon: "trashfill") {
+                                showingDeleteConfirm = true
+                            }
                         }
                     }
                 }
@@ -781,6 +870,14 @@ struct ReminderCard: View {
                     onDelete()
                 }
             )
+            .fullScreenCover(isPresented: $showingReschedulePopup) {
+                ZStack {
+                    Color.clear
+                        .ignoresSafeArea()
+                    reschedulePopup
+                }
+                .presentationBackground(.clear)
+            }
         }
     }
 }

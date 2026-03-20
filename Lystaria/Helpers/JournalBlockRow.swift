@@ -31,8 +31,10 @@ struct JournalBlockRow: View {
     @FocusState private var isFocused: Bool
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            menuColumn
+        VStack(alignment: .leading, spacing: 4) {
+            if supportsInlineFormatting && selectedRange.length > 0 {
+                selectionFormatMenu
+            }
 
             VStack(alignment: .leading, spacing: 6) {
                 contentColumn
@@ -57,36 +59,39 @@ struct JournalBlockRow: View {
         }
     }
 
-    private var menuColumn: some View {
+
+
+    private var selectionFormatMenu: some View {
         Menu {
-            Section("Formatting") {
-                Button("Bold") { toggleInlineStyle(.bold) }
-                Button("Italic") { toggleInlineStyle(.italic) }
-                Button("Underline") { toggleInlineStyle(.underline) }
-                Button("Add Link") { prepareLinkEditor() }
+            Button(rangeHasStyle(.bold) ? "Remove Bold" : "Bold") {
+                toggleInlineStyle(.bold)
             }
 
-            Button("Move Up") {
-                onMoveUp(block)
+            Button(rangeHasStyle(.italic) ? "Remove Italic" : "Italic") {
+                toggleInlineStyle(.italic)
             }
 
-            Button("Move Down") {
-                onMoveDown(block)
+            Button(rangeHasStyle(.underline) ? "Remove Underline" : "Underline") {
+                toggleInlineStyle(.underline)
             }
 
-            Button("Delete", role: .destructive) {
-                onDelete(block)
+            Button(rangeHasStyle(.link) ? "Edit Link" : "Add Link") {
+                prepareLinkEditor()
             }
         } label: {
-            Image(systemName: "line.3.horizontal")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(LColors.textSecondary)
-                .frame(width: 28, height: 28)
-                .background(Color.white.opacity(0.05))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+            Text("Format")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(LGradients.blue)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.white.opacity(0.06))
+                .clipShape(Capsule())
+                .overlay(
+                    Capsule()
+                        .stroke(LGradients.blue, lineWidth: 1)
+                )
         }
         .buttonStyle(.plain)
-        .padding(.top, 6)
     }
 
 
@@ -186,10 +191,10 @@ struct JournalBlockRow: View {
     }
 
     private var calloutEditor: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: 6) {
             TextField("✦", text: $block.calloutEmoji)
                 .textFieldStyle(.plain)
-                .frame(width: 28)
+                .frame(width: 22)
                 .onChange(of: block.calloutEmoji) {
                     block.touch()
                 }

@@ -1,7 +1,7 @@
+//
 // Book.swift
 // Lystaria
 //
-// SwiftData model — mirrors the MongoDB Book schema
 
 import Foundation
 import SwiftData
@@ -12,7 +12,7 @@ enum BookStatus: String, Codable, CaseIterable {
     case finished = "finished"
     case paused = "paused"
     case dnf = "dnf"
-    
+
     var label: String {
         switch self {
         case .tbr: return "To Be Read"
@@ -28,30 +28,37 @@ enum BookStatus: String, Codable, CaseIterable {
 final class Book {
     // MARK: - Local metadata
     var deletedAt: Date?
-    
+
     // MARK: - Fields
     var title: String = ""
     var author: String = ""
     var shortSummary: String = ""
-    var rating: Int = 0             // 0–5
-    var statusRaw: String = BookStatus.tbr.rawValue   // stored as raw string for SwiftData
+    var rating: Int = 0
+    var statusRaw: String = BookStatus.tbr.rawValue
     var totalPages: Int?
     var currentPage: Int?
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
-    
+
+    // Optional for later if you want cover uploads
+    var coverImageData: Data?
+
+    // MARK: - Relationships
+    @Relationship(deleteRule: .cascade, inverse: \ReadingSession.book)
+    var sessions: [ReadingSession]? = nil
+
     // MARK: - Computed
     var status: BookStatus {
         get { BookStatus(rawValue: statusRaw) ?? .tbr }
         set { statusRaw = newValue.rawValue }
     }
-    
+
     var progressPercent: Double {
         guard let total = totalPages, total > 0,
               let current = currentPage else { return 0 }
         return min(Double(current) / Double(total), 1.0)
     }
-    
+
     init(
         title: String,
         author: String = "",
@@ -60,7 +67,8 @@ final class Book {
         status: BookStatus = .tbr,
         totalPages: Int? = nil,
         currentPage: Int? = nil,
-        deletedAt: Date? = nil
+        deletedAt: Date? = nil,
+        coverImageData: Data? = nil
     ) {
         self.title = title
         self.author = author
@@ -70,6 +78,8 @@ final class Book {
         self.totalPages = totalPages
         self.currentPage = currentPage
         self.deletedAt = deletedAt
+        self.coverImageData = coverImageData
+        self.sessions = nil
         self.createdAt = Date()
         self.updatedAt = Date()
     }
