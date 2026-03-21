@@ -408,7 +408,12 @@ struct ProfileTabView: View {
 
                 Button(action: { showSelfCarePointsPage = true }) {
                     HStack(spacing: 10) {
-                        Image(systemName: "sparkles.rectangle.stack")
+                        Image("balloonheart")
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 18, height: 18)
+                            .foregroundStyle(.white)
                         Text("Self Care Points")
                             .font(.system(size: 16, weight: .semibold))
                         Spacer()
@@ -430,7 +435,12 @@ struct ProfileTabView: View {
                 if isAdminUser {
                     Toggle(isOn: $isAdminMode) {
                         HStack(spacing: 10) {
-                            Image(systemName: "lock.shield")
+                            Image("shieldstar")
+                                .renderingMode(.template)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 18, height: 18)
+                                .foregroundStyle(.white)
                             Text("Admin Mode")
                                 .font(.system(size: 16, weight: .semibold))
                         }

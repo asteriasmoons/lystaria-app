@@ -21,12 +21,16 @@ struct ReadingTabView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Book.createdAt, order: .reverse) private var books: [Book]
     @Query(sort: \ReadingStats.updatedAt, order: .reverse) private var readingStats: [ReadingStats]
+    @Query(sort: \ReadingGoal.updatedAt, order: .reverse) private var readingGoals: [ReadingGoal]
+    @Query(sort: \ReadingSession.sessionDate, order: .reverse) private var readingSessions: [ReadingSession]
     @EnvironmentObject private var appState: AppState
 
     @State private var showAddBook = false
     @State private var editingBook: Book? = nil
     @State private var visibleBookCount: Int = 4
     @State private var showBookmarksView = false
+    @State private var showingReadingGoalSheet = false
+    @State private var editingReadingGoal: ReadingGoal? = nil
 
     @State private var showDeleteConfirm = false
     @State private var bookPendingDeletion: Book? = nil
@@ -61,6 +65,131 @@ struct ReadingTabView: View {
     private var alreadyCheckedInToday: Bool {
         guard let lastCheckInDate else { return false }
         return Calendar.current.isDateInToday(lastCheckInDate)
+    }
+    
+    private var currentGoal: ReadingGoal? {
+        guard let currentUserId else { return nil }
+        let matches = readingGoals.filter { $0.userId == currentUserId && $0.isActive }
+        return matches.max(by: { $0.updatedAt < $1.updatedAt })
+    }
+
+    private var currentGoalTargetDisplay: String {
+        guard let currentGoal else { return "" }
+
+        switch currentGoal.metric {
+        case .minutes:
+            return "\(currentGoal.targetValue) min"
+        case .hours:
+            return "\(currentGoal.targetValue) hr"
+        case .pages:
+            return "\(currentGoal.targetValue) pages"
+        case .books:
+            return "\(currentGoal.targetValue) books"
+        }
+    }
+
+    private var currentGoalProgressValue: Int {
+        guard let goal = currentGoal else { return 0 }
+
+        let range = goalDateRange(for: goal.period)
+
+        switch goal.metric {
+        case .minutes:
+            return readingSessions
+                .filter { session in
+                    session.sessionDate >= range.start &&
+                    session.sessionDate < range.end
+                }
+                .reduce(0) { $0 + $1.minutesRead }
+
+        case .hours:
+            return readingSessions
+                .filter { session in
+                    session.sessionDate >= range.start &&
+                    session.sessionDate < range.end
+                }
+                .reduce(0) { $0 + $1.minutesRead }
+
+        case .pages:
+            return readingSessions
+                .filter { session in
+                    session.sessionDate >= range.start &&
+                    session.sessionDate < range.end
+                }
+                .reduce(0) { $0 + $1.pagesRead }
+
+        case .books:
+            return books.filter { book in
+                guard book.deletedAt == nil else { return false }
+                guard book.status == .finished else { return false }
+                guard let finishedAt = book.finishedAt else { return false }
+                return finishedAt >= range.start && finishedAt < range.end
+            }.count
+        }
+    }
+
+    private var currentGoalProgressDisplay: String {
+        guard let goal = currentGoal else { return "" }
+
+        switch goal.metric {
+        case .minutes:
+            return "\(currentGoalProgressValue) / \(goal.targetValue) min"
+        case .hours:
+            let targetMinutes = goal.targetValue * 60
+            return "\(currentGoalProgressValue) / \(targetMinutes) min"
+        case .pages:
+            return "\(currentGoalProgressValue) / \(goal.targetValue) pages"
+        case .books:
+            return "\(currentGoalProgressValue) / \(goal.targetValue) books"
+        }
+    }
+
+    private var currentGoalProgressFraction: Double {
+        guard let goal = currentGoal else { return 0 }
+
+        let target: Double
+        switch goal.metric {
+        case .minutes:
+            target = Double(goal.targetValue)
+        case .hours:
+            target = Double(goal.targetValue * 60)
+        case .pages:
+            target = Double(goal.targetValue)
+        case .books:
+            target = Double(goal.targetValue)
+        }
+
+        guard target > 0 else { return 0 }
+        return min(max(Double(currentGoalProgressValue) / target, 0), 1)
+    }
+    
+    private var currentGoalSegmentCount: Int {
+        10
+    }
+
+    private var currentGoalFilledSegments: Int {
+        Int((currentGoalProgressFraction * Double(currentGoalSegmentCount)).rounded(.up))
+    }
+
+    private func goalDateRange(for period: ReadingGoalPeriod) -> (start: Date, end: Date) {
+        let calendar = Calendar.current
+        let now = Date()
+
+        switch period {
+        case .daily:
+            let start = calendar.startOfDay(for: now)
+            let end = calendar.date(byAdding: .day, value: 1, to: start) ?? now
+            return (start, end)
+        case .weekly:
+            let interval = calendar.dateInterval(of: .weekOfYear, for: now)
+            return (interval?.start ?? now, interval?.end ?? now)
+        case .monthly:
+            let interval = calendar.dateInterval(of: .month, for: now)
+            return (interval?.start ?? now, interval?.end ?? now)
+        case .yearly:
+            let interval = calendar.dateInterval(of: .year, for: now)
+            return (interval?.start ?? now, interval?.end ?? now)
+        }
     }
 
     @ViewBuilder
@@ -256,8 +385,24 @@ struct ReadingTabView: View {
                     .zIndex(73)
                 }
             }
+            .overlay {
+                if showingReadingGoalSheet {
+                    ReadingGoalSheet(
+                        existingGoal: editingReadingGoal,
+                        currentUserId: currentUserId,
+                        onClose: {
+                            showingReadingGoalSheet = false
+                            editingReadingGoal = nil
+                        }
+                    )
+                    .preferredColorScheme(.dark)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .zIndex(74)
+                }
+            }
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showAddBook)
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: editingBook != nil)
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showingReadingGoalSheet)
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: loggingSessionForBook != nil)
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: selectedBookForDetails != nil)
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showingSessionHistoryForBook != nil)
@@ -406,6 +551,114 @@ struct ReadingTabView: View {
                     }
                 }
 
+                GlassCard {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(alignment: .center, spacing: 12) {
+                            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                                Image(systemName: "target")
+                                    .font(.system(size: 22, weight: .bold))
+                                    .foregroundStyle(.white)
+                                    .padding(.top, 1)
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    GradientTitle(text: "Reading Goal", font: .system(size: 14, weight: .bold))
+
+                                    if let goal = currentGoal {
+                                        Text("\(goal.period.label) • \(goal.metric.label)")
+                                            .font(.subheadline)
+                                            .foregroundStyle(LColors.textSecondary)
+                                    } else {
+                                        Text("No active goal yet")
+                                            .font(.subheadline)
+                                            .foregroundStyle(LColors.textSecondary)
+                                    }
+                                }
+                            }
+
+                            Spacer()
+                        }
+
+                        if let goal = currentGoal {
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack {
+                                    Text(currentGoalProgressDisplay)
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(LColors.textSecondary)
+
+                                    Spacer()
+
+                                    Text(currentGoalTargetDisplay)
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(LColors.textSecondary)
+                                }
+
+                                HStack(spacing: 8) {
+                                    ForEach(0..<currentGoalSegmentCount, id: \.self) { index in
+                                        Capsule()
+                                            .fill(
+                                                index < currentGoalFilledSegments
+                                                ? AnyShapeStyle(LGradients.blue)
+                                                : AnyShapeStyle(Color.white.opacity(0.08))
+                                            )
+                                            .frame(maxWidth: .infinity)
+                                            .frame(height: 10)
+                                            .overlay(
+                                                Capsule()
+                                                    .stroke(
+                                                        index < currentGoalFilledSegments
+                                                        ? AnyShapeStyle(LGradients.blue)
+                                                        : AnyShapeStyle(LColors.glassBorder),
+                                                        lineWidth: 1
+                                                    )
+                                            )
+                                    }
+                                }
+
+                                HStack(spacing: 10) {
+                                    Button {
+                                        editingReadingGoal = goal
+                                        showingReadingGoalSheet = true
+                                    } label: {
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "pencil")
+                                            Text("Edit")
+                                                .font(.system(size: 14, weight: .semibold))
+                                        }
+                                        .foregroundStyle(LColors.textPrimary)
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 10)
+                                        .background(Color.white.opacity(0.08))
+                                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .stroke(LColors.glassBorder, lineWidth: 1)
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+
+                                    Spacer()
+                                }
+                            }
+                        } else {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("Set a goal for pages, minutes, hours, or books across a daily, weekly, monthly, or yearly period.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(LColors.textSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+
+                                HStack(spacing: 10) {
+                                    GradientCapsuleButton(title: "+ Goal", icon: "target") {
+                                        editingReadingGoal = nil
+                                        showingReadingGoalSheet = true
+                                    }
+
+                                    Spacer()
+                                }
+                            }
+                        }
+                    }
+                }
+
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
                         Pill(title: "All", on: selectedStatus == nil) {
@@ -478,11 +731,7 @@ struct ReadingTabView: View {
                 let statusMatches = selectedStatus.map { book.status == $0 } ?? true
                 let tagMatches: Bool
                 if let currentTag = tagFilter, !currentTag.isEmpty {
-                    if let tags = (book as AnyObject).value(forKey: "tags") as? [String] {
-                        tagMatches = tags.contains(where: { $0.caseInsensitiveCompare(currentTag) == .orderedSame })
-                    } else {
-                        tagMatches = true
-                    }
+                    tagMatches = book.tags.contains(where: { $0.caseInsensitiveCompare(currentTag) == .orderedSame })
                 } else {
                     tagMatches = true
                 }
@@ -589,6 +838,35 @@ struct ReadingTabView: View {
                                     }
                                 }
                                 .padding(.top, 6)
+                            }
+
+                            if !book.tags.isEmpty {
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 8) {
+                                        ForEach(book.tags, id: \.self) { tag in
+                                            Button {
+                                                withAnimation {
+                                                    tagFilter = tag
+                                                    visibleBookCount = 4
+                                                }
+                                            } label: {
+                                                Text("#\(tag)")
+                                                    .font(.system(size: 12, weight: .bold))
+                                                    .lineLimit(1)
+                                                    .foregroundStyle(LGradients.tag)
+                                                    .padding(.horizontal, 10)
+                                                    .padding(.vertical, 6)
+                                                    .background(Color.white.opacity(0.06))
+                                                    .clipShape(Capsule())
+                                                    .overlay(
+                                                        Capsule().stroke(LGradients.tag, lineWidth: 1)
+                                                    )
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                    }
+                                    .padding(.top, 6)
+                                }
                             }
 
                             VStack(alignment: .leading, spacing: 10) {
@@ -699,6 +977,7 @@ struct ReadingTabView: View {
                                 }
                             }
                             .padding(.top, 10)
+
                         }
                         // Removed whole-card tap behavior
                     }
@@ -768,6 +1047,7 @@ struct AddBookSheet: View {
     @State private var currentPageText = ""
     @State private var totalPagesText = ""
     @State private var shortSummary = ""
+    @State private var tagsRaw = ""
 
     private var titleTrimmed: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var closeAction: () -> Void {
@@ -819,6 +1099,15 @@ struct AddBookSheet: View {
                         .tracking(0.5)
 
                     LystariaTextArea(placeholder: "Short summary (optional)", text: $shortSummary)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("TAGS")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+
+                    LystariaTextField(placeholder: "Fantasy, Romance, Fae", text: $tagsRaw)
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
@@ -924,10 +1213,11 @@ struct AddBookSheet: View {
         let book = Book(
             title: cleanTitle,
             author: cleanAuthor,
+            shortSummary: cleanSummary,
+            tagsRaw: tagsRaw.trimmingCharacters(in: .whitespacesAndNewlines),
             rating: 0,
             status: status
         )
-        book.shortSummary = cleanSummary
 
         if status == .reading {
             let current = Int(currentPageText.filter { $0.isNumber })
@@ -941,9 +1231,11 @@ struct AddBookSheet: View {
                 book.totalPages = nil
                 book.currentPage = nil
             }
+            book.finishedAt = nil
         } else {
             book.totalPages = nil
             book.currentPage = nil
+            book.finishedAt = status == .finished ? Date() : nil
         }
 
         book.updatedAt = Date()
@@ -968,6 +1260,7 @@ struct EditBookSheet: View {
     @State private var currentPageText: String
     @State private var totalPagesText: String
     @State private var shortSummary: String
+    @State private var tagsRaw: String
 
     private var titleTrimmed: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var closeAction: () -> Void {
@@ -983,6 +1276,7 @@ struct EditBookSheet: View {
         _currentPageText = State(initialValue: book.currentPage.map(String.init) ?? "")
         _totalPagesText = State(initialValue: book.totalPages.map(String.init) ?? "")
         _shortSummary = State(initialValue: book.shortSummary)
+        _tagsRaw = State(initialValue: book.tagsRaw)
     }
 
     var body: some View {
@@ -1030,6 +1324,15 @@ struct EditBookSheet: View {
                         .tracking(0.5)
 
                     LystariaTextArea(placeholder: "Short summary (optional)", text: $shortSummary)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("TAGS")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+
+                    LystariaTextField(placeholder: "Fantasy, Romance, Fae", text: $tagsRaw)
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
@@ -1122,10 +1425,13 @@ struct EditBookSheet: View {
         let cleanAuthor = author.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanSummary = shortSummary.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        let previousStatus = book.status
+
         book.title = cleanTitle
         book.author = cleanAuthor
         book.status = status
         book.shortSummary = cleanSummary
+        book.tagsRaw = tagsRaw.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if status == .reading {
             let current = Int(currentPageText.filter { $0.isNumber })
@@ -1139,9 +1445,18 @@ struct EditBookSheet: View {
                 book.totalPages = nil
                 book.currentPage = nil
             }
+            book.finishedAt = nil
         } else {
             book.totalPages = nil
             book.currentPage = nil
+
+            if status == .finished {
+                if previousStatus != .finished || book.finishedAt == nil {
+                    book.finishedAt = Date()
+                }
+            } else {
+                book.finishedAt = nil
+            }
         }
 
         book.updatedAt = Date()
@@ -1311,12 +1626,19 @@ struct LogReadingSessionSheet: View {
                 book.currentPage = min(end, total)
 
                 if end >= total {
+                    if book.status != .finished || book.finishedAt == nil {
+                        book.finishedAt = Date()
+                    }
                     book.status = .finished
-                } else if book.status != .reading {
-                    book.status = .reading
+                } else {
+                    book.finishedAt = nil
+                    if book.status != .reading {
+                        book.status = .reading
+                    }
                 }
             } else {
                 book.currentPage = end
+                book.finishedAt = nil
                 if book.status != .reading {
                     book.status = .reading
                 }
@@ -1697,12 +2019,27 @@ struct BookSessionHistorySheet: View {
 
         if let latestEndPage {
             if let total = book.totalPages, total > 0 {
-                book.currentPage = min(max(latestEndPage, 0), total)
+                let clamped = min(max(latestEndPage, 0), total)
+                book.currentPage = clamped
+
+                if clamped >= total {
+                    book.status = .finished
+                    book.finishedAt = book.finishedAt ?? Date()
+                } else {
+                    book.status = .reading
+                    book.finishedAt = nil
+                }
             } else {
                 book.currentPage = max(latestEndPage, 0)
+                book.status = .reading
+                book.finishedAt = nil
             }
         } else {
             book.currentPage = nil
+            book.finishedAt = nil
+            if book.status == .finished {
+                book.status = .reading
+            }
         }
 
         book.updatedAt = Date()
@@ -1843,5 +2180,179 @@ struct LystariaNumberField: View {
                     text = filtered
                 }
             }
+    }
+}
+
+// MARK: - Reading Goal Sheet
+struct ReadingGoalSheet: View {
+    @Environment(\.modelContext) private var modelContext
+
+    let existingGoal: ReadingGoal?
+    let currentUserId: String?
+    var onClose: (() -> Void)? = nil
+
+    @Query(sort: \ReadingGoal.updatedAt, order: .reverse) private var readingGoals: [ReadingGoal]
+
+    @State private var period: ReadingGoalPeriod
+    @State private var metric: ReadingGoalMetric
+    @State private var targetValueText: String
+
+    private var closeAction: () -> Void { onClose ?? {} }
+
+    private var canSave: Bool {
+        guard let value = Int(targetValueText.filter { $0.isNumber }) else { return false }
+        return value > 0 && currentUserId != nil
+    }
+
+    init(existingGoal: ReadingGoal?, currentUserId: String?, onClose: (() -> Void)? = nil) {
+        self.existingGoal = existingGoal
+        self.currentUserId = currentUserId
+        self.onClose = onClose
+        _period = State(initialValue: existingGoal?.period ?? .weekly)
+        _metric = State(initialValue: existingGoal?.metric ?? .pages)
+        _targetValueText = State(initialValue: existingGoal.map { String($0.targetValue) } ?? "")
+    }
+
+    var body: some View {
+        LystariaOverlayPopup(
+            onClose: {
+                closeAction()
+            },
+            width: 640,
+            heightRatio: 0.70,
+            header: {
+                HStack {
+                    GradientTitle(text: existingGoal == nil ? "Reading Goal" : "Edit Reading Goal", font: .title2.bold())
+                    Spacer()
+                    Button { closeAction() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(LColors.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            },
+            content: {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("PERIOD")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(ReadingGoalPeriod.allCases, id: \.self) { option in
+                                Button {
+                                    period = option
+                                } label: {
+                                    Text(option.label)
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(period == option ? .white : LColors.textPrimary)
+                                        .lineLimit(1)
+                                        .fixedSize()
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 10)
+                                        .background(period == option ? LColors.accent : Color.white.opacity(0.08))
+                                        .clipShape(Capsule())
+                                        .overlay(
+                                            Capsule().stroke(period == option ? LColors.accent : LColors.glassBorder, lineWidth: 1)
+                                        )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("METRIC")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(ReadingGoalMetric.allCases, id: \.self) { option in
+                                Button {
+                                    metric = option
+                                } label: {
+                                    Text(option.label)
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(metric == option ? .white : LColors.textPrimary)
+                                        .lineLimit(1)
+                                        .fixedSize()
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 10)
+                                        .background(metric == option ? LColors.accent : Color.white.opacity(0.08))
+                                        .clipShape(Capsule())
+                                        .overlay(
+                                            Capsule().stroke(metric == option ? LColors.accent : LColors.glassBorder, lineWidth: 1)
+                                        )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("TARGET")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+
+                    LystariaNumberField(placeholder: "Enter target", text: $targetValueText)
+                        .numericKeyboardIfAvailable()
+                }
+            },
+            footer: {
+                Button {
+                    save()
+                } label: {
+                    Text(existingGoal == nil ? "Save Goal" : "Save Changes")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(canSave ? AnyShapeStyle(LGradients.blue) : AnyShapeStyle(Color.gray.opacity(0.3)))
+                        .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
+                        .shadow(color: canSave ? LColors.accent.opacity(0.3) : .clear, radius: 12, y: 6)
+                }
+                .buttonStyle(.plain)
+                .disabled(!canSave)
+            }
+        )
+    }
+
+    private func save() {
+        guard let currentUserId else { return }
+        guard let targetValue = Int(targetValueText.filter { $0.isNumber }), targetValue > 0 else { return }
+
+        if let existingGoal {
+            existingGoal.period = period
+            existingGoal.metric = metric
+            existingGoal.targetValue = targetValue
+            existingGoal.isActive = true
+            existingGoal.updatedAt = Date()
+        } else {
+            for goal in readingGoals where goal.userId == currentUserId && goal.isActive {
+                goal.isActive = false
+                goal.updatedAt = Date()
+            }
+
+            let goal = ReadingGoal(
+                userId: currentUserId,
+                isActive: true,
+                period: period,
+                metric: metric,
+                targetValue: targetValue,
+                createdAt: Date(),
+                updatedAt: Date()
+            )
+            modelContext.insert(goal)
+        }
+
+        try? modelContext.save()
+        closeAction()
     }
 }

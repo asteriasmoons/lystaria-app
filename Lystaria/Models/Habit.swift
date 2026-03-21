@@ -77,12 +77,19 @@ final class Habit {
     /// Used later for free-tier caps (e.g., only 2 active habits on free plan)
     var isArchived: Bool = false
 
+    /// If set, streak and stats calculations should only count logs on/after this date.
+    var statsResetAt: Date?
+
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
 
     // Relationship: one habit has many logs
     @Relationship(deleteRule: .cascade, inverse: \HabitLog.habit)
     var logs: [HabitLog]?
+
+    // Relationship: one habit has many skipped days
+    @Relationship(deleteRule: .cascade, inverse: \HabitSkip.habit)
+    var skips: [HabitSkip]?
 
     init(
         title: String,
@@ -94,7 +101,8 @@ final class Habit {
         reminderTimeOfDay: String? = nil,
         reminderDaysOfWeek: [Int] = [],
         reminderStartDate: Date? = nil,
-        isArchived: Bool = false
+        isArchived: Bool = false,
+        statsResetAt: Date? = nil
     ) {
         self.id = UUID()
         self.title = title
@@ -129,6 +137,7 @@ final class Habit {
         self.reminderStartDate = reminderStartDate
 
         self.isArchived = isArchived
+        self.statsResetAt = statsResetAt
         self.createdAt = Date()
         self.updatedAt = Date()
         self.logs = nil

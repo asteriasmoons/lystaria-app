@@ -78,6 +78,8 @@
 		CF29FC7B2F6D960E00EC47F8 /* MoodLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83292F50A4940092FC98 /* MoodLog.swift */; };
 		CF29FC7C2F6D9C7600EC47F8 /* LilyScriptOne-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = CF2051E02F59EFCD006B71AA /* LilyScriptOne-Regular.ttf */; };
 		CF29FC7E2F6DE7A100EC47F8 /* ReadingSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF29FC7D2F6DE79C00EC47F8 /* ReadingSession.swift */; };
+		CF29FC802F6E141200EC47F8 /* ReadingGoal.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF29FC7F2F6E140D00EC47F8 /* ReadingGoal.swift */; };
+		CF29FC822F6E4F0C00EC47F8 /* HabitSkip.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF29FC812F6E4F0800EC47F8 /* HabitSkip.swift */; };
 		CF84216D2F5F57520069F12F /* AuthUser.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83222F50A4940092FC98 /* AuthUser.swift */; };
 		CF84217C2F5FA7580069F12F /* HealthKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84217B2F5FA7480069F12F /* HealthKitManager.swift */; };
 		CF84217D2F5FA7580069F12F /* HealthKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84217B2F5FA7480069F12F /* HealthKitManager.swift */; };
@@ -301,6 +303,8 @@
 		CF29FC612F6D8C3600EC47F8 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		CF29FC782F6D8CEF00EC47F8 /* Lystaria WidgetsExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Lystaria WidgetsExtension.entitlements"; sourceTree = "<group>"; };
 		CF29FC7D2F6DE79C00EC47F8 /* ReadingSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingSession.swift; sourceTree = "<group>"; };
+		CF29FC7F2F6E140D00EC47F8 /* ReadingGoal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingGoal.swift; sourceTree = "<group>"; };
+		CF29FC812F6E4F0800EC47F8 /* HabitSkip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitSkip.swift; sourceTree = "<group>"; };
 		CF41A5932F4DF57000C96018 /* Lystaria.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Lystaria.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CF84217B2F5FA7480069F12F /* HealthKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitManager.swift; sourceTree = "<group>"; };
 		CF8421812F5FBD820069F12F /* WaterHealthKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaterHealthKitManager.swift; sourceTree = "<group>"; };
@@ -812,6 +816,8 @@
 		CF8D832C2F50A4940092FC98 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				CF29FC812F6E4F0800EC47F8 /* HabitSkip.swift */,
+				CF29FC7F2F6E140D00EC47F8 /* ReadingGoal.swift */,
 				CF29FC7D2F6DE79C00EC47F8 /* ReadingSession.swift */,
 				CF8B7F8A2F6C4972006A7D3B /* BookmarkItem.swift */,
 				CF8B7F882F6C4955006A7D3B /* BookmarkFolder.swift */,
@@ -1155,6 +1161,7 @@
 				CF8B7F712F6B3A6B006A7D3B /* JournalEntryBlockMigration.swift in Sources */,
 				CF8421A62F607E310069F12F /* OnboardingTargetKey.swift in Sources */,
 				CF8D83202F50A4770092FC98 /* KeychainHelper.swift in Sources */,
+				CF29FC822F6E4F0C00EC47F8 /* HabitSkip.swift in Sources */,
 				CF8B7F832F6B7395006A7D3B /* SelfCarePointsManager.swift in Sources */,
 				CF8421C92F638EAD0069F12F /* KanbanView.swift in Sources */,
 				CF13B6242F644268008D3CE9 /* JournalEntryWriter.swift in Sources */,
@@ -1246,6 +1253,7 @@
 				CF13B65B2F68645C008D3CE9 /* DailyTarotRecord.swift in Sources */,
 				CF8D835A2F5129A50092FC98 /* JournalTabView.swift in Sources */,
 				CF8D838A2F560F700092FC98 /* RemindersView.swift in Sources */,
+				CF29FC802F6E141200EC47F8 /* ReadingGoal.swift in Sources */,
 				CF8D83352F50A4940092FC98 /* Book.swift in Sources */,
 				CF8B7F962F6C4ED7006A7D3B /* AddEditBookmarkFolderView.swift in Sources */,
 				CF8421CB2F638EE00069F12F /* KanbanBoard.swift in Sources */,

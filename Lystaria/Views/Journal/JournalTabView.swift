@@ -14,7 +14,6 @@ struct JournalTabView: View {
 
     @State private var showBookEditor = false
     @State private var editingBook: JournalBook? = nil
-    @State private var openMoodLogger = false
     // Onboarding for hidden header icons
     @StateObject private var onboarding = OnboardingManager()
 
@@ -83,14 +82,6 @@ struct JournalTabView: View {
             .onAppear {
                 migrateEntriesIntoDefaultBookIfNeeded()
                 JournalEntryBlockMigration.migrateEntriesIfNeeded(allEntries, modelContext: modelContext)
-            }
-            .onChange(of: appState.openMoodFromDeepLink) { _, newValue in
-                guard newValue else { return }
-                openMoodLogger = true
-                appState.openMoodFromDeepLink = false
-            }
-            .navigationDestination(isPresented: $openMoodLogger) {
-                MoodLoggerView()
             }
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showBookEditor)
             // Prevent the NavigationStack default backgrounds from covering the custom background

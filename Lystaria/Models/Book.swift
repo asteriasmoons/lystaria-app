@@ -33,10 +33,12 @@ final class Book {
     var title: String = ""
     var author: String = ""
     var shortSummary: String = ""
+    var tagsRaw: String = ""
     var rating: Int = 0
     var statusRaw: String = BookStatus.tbr.rawValue
     var totalPages: Int?
     var currentPage: Int?
+    var finishedAt: Date?
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
 
@@ -53,6 +55,13 @@ final class Book {
         set { statusRaw = newValue.rawValue }
     }
 
+    var tags: [String] {
+        tagsRaw
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
     var progressPercent: Double {
         guard let total = totalPages, total > 0,
               let current = currentPage else { return 0 }
@@ -63,20 +72,24 @@ final class Book {
         title: String,
         author: String = "",
         shortSummary: String = "",
+        tagsRaw: String = "",
         rating: Int = 0,
         status: BookStatus = .tbr,
         totalPages: Int? = nil,
         currentPage: Int? = nil,
+        finishedAt: Date? = nil,
         deletedAt: Date? = nil,
         coverImageData: Data? = nil
     ) {
         self.title = title
         self.author = author
         self.shortSummary = shortSummary
+        self.tagsRaw = tagsRaw
         self.rating = min(max(rating, 0), 5)
         self.statusRaw = status.rawValue
         self.totalPages = totalPages
         self.currentPage = currentPage
+        self.finishedAt = finishedAt
         self.deletedAt = deletedAt
         self.coverImageData = coverImageData
         self.sessions = nil

@@ -7,6 +7,8 @@ import SwiftData
 struct ContentView: View {
     @EnvironmentObject private var appState: AppState
     @AppStorage("hasSeenWelcome") private var hasSeenWelcome = false
+    @State private var showMoodRoute = false
+    @State private var pendingOpenMoodFromWidget = false
     // WELCOME DEV MODE:
     // Set this to `true` while testing the welcome flow.
     // Resets the welcome flag on every fresh app launch so the flow always shows.
@@ -24,9 +26,20 @@ struct ContentView: View {
                     .environmentObject(appState)
                     .preferredColorScheme(.dark)
             } else if case .signedIn = appState.status {
-                MainTabView()
-                    .environmentObject(appState)
-                    .preferredColorScheme(.dark)
+                NavigationStack {
+                    ZStack {
+                        MainTabView()
+                            .environmentObject(appState)
+                            .preferredColorScheme(.dark)
+
+                        NavigationLink(isActive: $showMoodRoute) {
+                            MoodLoggerView()
+                        } label: {
+                            EmptyView()
+                        }
+                        .hidden()
+                    }
+                }
             } else {
                 LystariaBackground().ignoresSafeArea()
             }
@@ -34,6 +47,50 @@ struct ContentView: View {
         .onAppear {
             if alwaysShowWelcomeForDev {
                 hasSeenWelcome = false
+            }
+
+            if case .signedIn = appState.status, pendingOpenMoodFromWidget {
+                openPendingWidgetRoute()
+            }
+        }
+        .onReceive(appState.$status) { newStatus in
+            if case .signedIn = newStatus, pendingOpenMoodFromWidget {
+                openPendingWidgetRoute()
+            }
+        }
+        .onOpenURL { url in
+            print("DEEPLINK URL:", url)
+            handleDeepLink(url)
+        }
+    }
+
+    private func handleDeepLink(_ url: URL) {
+        guard url.scheme?.lowercased() == "lystaria" else { return }
+
+        print("HANDLE DEEPLINK HOST:", url.host ?? "nil")
+        switch url.host?.lowercased() {
+        case "mood":
+            pendingOpenMoodFromWidget = true
+
+            if case .signedIn = appState.status {
+                openPendingWidgetRoute()
+            }
+        default:
+            break
+        }
+    }
+
+    private func openPendingWidgetRoute() {
+        guard pendingOpenMoodFromWidget else { return }
+        print("OPEN PENDING MOOD ROUTE")
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            showMoodRoute = false
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                print("SETTING showMoodRoute = true")
+                showMoodRoute = true
+                pendingOpenMoodFromWidget = false
             }
         }
     }

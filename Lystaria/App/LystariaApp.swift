@@ -17,6 +17,7 @@ struct LystariaApp: App {
             Book.self,
             CalendarEvent.self,
             Habit.self,
+            HabitSkip.self,
             HabitLog.self,
             MoodLog.self,
             BodyStateRecord.self,
@@ -24,6 +25,7 @@ struct LystariaApp: App {
             ExerciseLogEntry.self,
             ReadingStats.self,
             ReadingSession.self,
+            ReadingGoal.self,
             BookmarkFolder.self,
             BookmarkItem.self,
             JournalEntry.self,
@@ -76,16 +78,8 @@ struct LystariaApp: App {
                     appState.bootstrap(modelContext: sharedModelContainer.mainContext)
                     SharedBookmarkImportManager.importPendingBookmark(modelContext: sharedModelContainer.mainContext)
                     SharedFolderExportManager.exportFolders(modelContext: sharedModelContainer.mainContext)
-                    checkWidgetDeepLink()
 
                     setupNotifications()
-                }
-                .onOpenURL { url in
-                    guard url.scheme?.lowercased() == "lystaria",
-                          url.host?.lowercased() == "mood" else { return }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        appState.openMoodFromDeepLink = true
-                    }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .lystariaNotificationAction)) { notification in
                     handleNotificationAction(notification)
@@ -95,7 +89,6 @@ struct LystariaApp: App {
                     notificationManager.refreshAuthorizationStatus()
                     SharedBookmarkImportManager.importPendingBookmark(modelContext: sharedModelContainer.mainContext)
                     SharedFolderExportManager.exportFolders(modelContext: sharedModelContainer.mainContext)
-                    checkWidgetDeepLink()
 
                     Task {
                         do {
@@ -110,18 +103,6 @@ struct LystariaApp: App {
                 #endif
         }
         .modelContainer(sharedModelContainer)
-    }
-
-    private func checkWidgetDeepLink() {
-        // The widget sets this flag in shared App Group defaults when tapped.
-        // We read it here instead of relying on onOpenURL to avoid launch freezes.
-        let defaults = UserDefaults(suiteName: "group.com.asteriasmoons.LystariaDev")
-        let shouldOpen = defaults?.bool(forKey: "openMoodLoggerFromWidget") ?? false
-        guard shouldOpen else { return }
-        defaults?.removeObject(forKey: "openMoodLoggerFromWidget")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            appState.openMoodFromDeepLink = true
-        }
     }
 
     // ─────────────────────────────────────────────

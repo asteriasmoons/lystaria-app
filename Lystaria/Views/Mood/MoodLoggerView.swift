@@ -154,11 +154,11 @@ struct MoodLoggerView: View {
                                     .font(.system(size: 13, weight: .semibold))
                                     .foregroundStyle(LColors.textSecondary)
                                     .tracking(0.5)
-                                
-                                GlassTextEditor(
-                                    placeholder: "How's your day going? (optional)",
+
+                                AutoGrowingMoodNoteEditor(
+                                    placeholder: "How's your day going?",
                                     text: $note,
-                                    minHeight: 120
+                                    minHeight: 80
                                 )
                             }
                             
@@ -397,6 +397,81 @@ private struct FreeFormGlassCard<Content: View>: View {
                             .stroke(LColors.glassBorder, lineWidth: 1)
                     )
             )
+    }
+}
+
+private struct AutoGrowingMoodNoteEditor: View {
+    let placeholder: String
+    @Binding var text: String
+    let minHeight: CGFloat
+
+    @State private var measuredHeight: CGFloat = 80
+
+    private var editorHeight: CGFloat {
+        max(minHeight, measuredHeight)
+    }
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(placeholder)
+                    .font(.system(size: 15))
+                    .foregroundStyle(LColors.textSecondary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .allowsHitTesting(false)
+            }
+
+            TextEditor(text: $text)
+                .font(.system(size: 15))
+                .foregroundStyle(LColors.textPrimary)
+                .frame(height: editorHeight)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .scrollContentBackground(.hidden)
+                .background(Color.clear)
+                .background(
+                    AutoGrowingTextMeasure(text: text, minHeight: minHeight, measuredHeight: $measuredHeight)
+                )
+        }
+        .frame(minHeight: minHeight)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.white.opacity(0.06))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(LColors.glassBorder, lineWidth: 1)
+                )
+        )
+    }
+}
+
+private struct AutoGrowingTextMeasure: View {
+    let text: String
+    let minHeight: CGFloat
+    @Binding var measuredHeight: CGFloat
+
+    var body: some View {
+        Text(text.isEmpty ? " " : text + "\n")
+            .font(.system(size: 15))
+            .lineLimit(nil)
+            .multilineTextAlignment(.leading)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                GeometryReader { proxy in
+                    Color.clear
+                        .onAppear {
+                            measuredHeight = max(minHeight, proxy.size.height)
+                        }
+                        .onChange(of: text) { _, _ in
+                            measuredHeight = max(minHeight, proxy.size.height)
+                        }
+                }
+            )
+            .hidden()
+            .allowsHitTesting(false)
     }
 }
 
@@ -643,14 +718,17 @@ private struct MoodLogCard: View {
                 }
 
                 if let note = log.note, !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Note")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(LColors.textSecondary)
+                    GlassCard(padding: 12) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("NOTE")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(LColors.textSecondary)
+                                .tracking(0.5)
 
-                        Text(note)
-                            .font(.system(size: 13))
-                            .foregroundStyle(LColors.textPrimary)
+                            Text(note)
+                                .font(.system(size: 13))
+                                .foregroundStyle(LColors.textPrimary)
+                        }
                     }
                 }
                 if showsDeleteButton, let onDelete {

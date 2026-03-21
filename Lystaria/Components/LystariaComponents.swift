@@ -554,6 +554,7 @@ struct GlassTextField: View {
     }
 }
 
+
 // MARK: - Glass TextEditor
 
 struct GlassTextEditor: View {
@@ -585,6 +586,92 @@ struct GlassTextEditor: View {
         )
     }
 }
+
+
+// MARK: - Auto Growing Glass TextEditor
+
+struct AutoGrowingGlassTextEditor: View {
+    let placeholder: String
+    @Binding var text: String
+    var minHeight: CGFloat = 100
+
+    @State private var measuredHeight: CGFloat
+
+    init(placeholder: String, text: Binding<String>, minHeight: CGFloat = 100) {
+        self.placeholder = placeholder
+        self._text = text
+        self.minHeight = minHeight
+        self._measuredHeight = State(initialValue: minHeight)
+    }
+
+    private var editorHeight: CGFloat {
+        max(minHeight, measuredHeight)
+    }
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(placeholder)
+                    .foregroundStyle(LColors.textSecondary.opacity(0.6))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .allowsHitTesting(false)
+            }
+
+            TextEditor(text: $text)
+                .foregroundStyle(LColors.textPrimary)
+                .scrollContentBackground(.hidden)
+                .frame(height: editorHeight)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.clear)
+                .background(
+                    AutoGrowingGlassTextMeasure(
+                        text: text,
+                        minHeight: minHeight,
+                        measuredHeight: $measuredHeight
+                    )
+                )
+        }
+        .frame(minHeight: minHeight)
+        .background(Color.white.opacity(0.07))
+        .clipShape(RoundedRectangle(cornerRadius: LSpacing.inputRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: LSpacing.inputRadius)
+                .stroke(LColors.glassBorder, lineWidth: 1)
+        )
+    }
+}
+
+private struct AutoGrowingGlassTextMeasure: View {
+    let text: String
+    let minHeight: CGFloat
+    @Binding var measuredHeight: CGFloat
+
+    var body: some View {
+        Text(text.isEmpty ? " " : text + "\n")
+            .foregroundStyle(.clear)
+            .lineLimit(nil)
+            .multilineTextAlignment(.leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                GeometryReader { proxy in
+                    Color.clear
+                        .onAppear {
+                            measuredHeight = max(minHeight, proxy.size.height)
+                        }
+                        .onChange(of: text) { _, _ in
+                            measuredHeight = max(minHeight, proxy.size.height)
+                        }
+                }
+            )
+            .hidden()
+            .allowsHitTesting(false)
+    }
+}
+
 
 // MARK: - Rich Text Editor (Glass Styled)
 
