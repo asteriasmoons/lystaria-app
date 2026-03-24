@@ -56,7 +56,7 @@ enum ReadingCheckInWriter {
                 }
             }
         } else {
-            let newRecord = ReadingStats(userId: currentUserId, streakDays: 0)
+            let newRecord = ReadingStats(userId: currentUserId, streakDays: 0, bestStreakDays: 0)
             modelContext.insert(newRecord)
             record = newRecord
         }
@@ -71,6 +71,7 @@ enum ReadingCheckInWriter {
         }
 
         record.streakDays = newStreakDays
+        record.bestStreakDays = max(record.bestStreakDays, newStreakDays)
         record.lastCheckInDate = now
         record.updatedAt = now
 

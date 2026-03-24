@@ -10,8 +10,9 @@ import SwiftUI
 import SwiftData
 import UIKit
 
-private extension Notification.Name {
+extension Notification.Name {
     static let journalBlockRequestFocusNextParagraph = Notification.Name("JournalBlockRequestFocusNextParagraph")
+    static let journalBlockRequestFocus = Notification.Name("JournalBlockRequestFocus")
 }
 
 struct JournalBlockRow: View {
@@ -41,7 +42,6 @@ struct JournalBlockRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, 1)
         .alert("Insert Link", isPresented: $showLinkEditor) {
             TextField("https://example.com", text: $linkDraft)
                 .textInputAutocapitalization(.never)
@@ -73,6 +73,10 @@ struct JournalBlockRow: View {
 
             Button(rangeHasStyle(.underline) ? "Remove Underline" : "Underline") {
                 toggleInlineStyle(.underline)
+            }
+
+            Button(rangeHasStyle(.inlineCode) ? "Remove Code" : "Code") {
+                toggleInlineStyle(.inlineCode)
             }
 
             Button(rangeHasStyle(.link) ? "Edit Link" : "Add Link") {
@@ -128,7 +132,8 @@ struct JournalBlockRow: View {
                         placeholder: placeholderText,
                         isCodeBlock: false,
                         onCreateParagraphBelow: { onAddBelow(block, .paragraph) },
-                        onDeleteEmptyBlock: { onDelete(block) }
+                        onDeleteEmptyBlock: { onDelete(block) },
+                        onExitList: nil
                     )
                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 }
@@ -146,13 +151,11 @@ struct JournalBlockRow: View {
                         } label: {
                             prefixView(for: block)
                                 .frame(width: 22, alignment: .leading)
-                                .padding(.top, 10)
                         }
                         .buttonStyle(.plain)
                     } else {
                         prefixView(for: block)
                             .frame(width: 22, alignment: .leading)
-                            .padding(.top, 10)
                     }
 
                     RichEditableBlockTextView(
@@ -163,9 +166,10 @@ struct JournalBlockRow: View {
                         placeholder: placeholderText,
                         isCodeBlock: false,
                         onCreateParagraphBelow: { onAddBelow(block, nextBlockTypeOnReturn(for: block.type)) },
-                        onDeleteEmptyBlock: { onDelete(block) }
+                        onDeleteEmptyBlock: { onDelete(block) },
+                        onExitList: { onAddBelow(block, .paragraph); onDelete(block) }
                     )
-                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.leading, CGFloat(block.indentLevel) * 20)
@@ -178,11 +182,10 @@ struct JournalBlockRow: View {
                     placeholder: placeholderText,
                     isCodeBlock: false,
                     onCreateParagraphBelow: { onAddBelow(block, .paragraph) },
-                    onDeleteEmptyBlock: { onDelete(block) }
-                )
-                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                .padding(.vertical, 8)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                    onDeleteEmptyBlock: { onDelete(block) },
+                            onExitList: nil
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 .background(backgroundForBlockType(block.type))
                 .clipShape(RoundedRectangle(cornerRadius: 0))
                 .padding(.leading, CGFloat(block.indentLevel) * 20)
@@ -191,7 +194,7 @@ struct JournalBlockRow: View {
     }
 
     private var calloutEditor: some View {
-        HStack(alignment: .top, spacing: 6) {
+        HStack(alignment: .center, spacing: 6) {
             TextField("✦", text: $block.calloutEmoji)
                 .textFieldStyle(.plain)
                 .frame(width: 22)
@@ -206,8 +209,9 @@ struct JournalBlockRow: View {
                 textColor: UIColor(LColors.textPrimary),
                 placeholder: "Write callout...",
                 isCodeBlock: false,
-                onCreateParagraphBelow: { onAddBelow(block, .paragraph) }
-                , onDeleteEmptyBlock: { onDelete(block) }
+                onCreateParagraphBelow: { onAddBelow(block, .paragraph) },
+                onDeleteEmptyBlock: { onDelete(block) },
+                onExitList: nil
             )
             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
         }
@@ -222,15 +226,53 @@ struct JournalBlockRow: View {
     }
 
     private var dividerEditor: some View {
-        HStack {
+        let current = DividerStyle(rawValue: block.languageHint) ?? .line
+        return dividerPreview(style: current)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                let all = DividerStyle.allCases
+                let next = all[(all.firstIndex(of: current)! + 1) % all.count]
+                block.languageHint = next.rawValue
+                block.touch()
+            }
+
+    }
+
+    @ViewBuilder
+    private func dividerPreview(style: DividerStyle) -> some View {
+        switch style {
+        case .line:
             Capsule()
                 .fill(LGradients.blue)
+                .frame(maxWidth: .infinity)
                 .frame(height: 3)
-        }
-        .padding(.vertical, 8)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            isFocused = false
+
+        case .dotted:
+            GeometryReader { geo in
+                let dotWidth: CGFloat = 6
+                let gap: CGFloat = 8
+                let count = max(1, Int(geo.size.width / (dotWidth + gap)))
+                HStack(spacing: gap) {
+                    ForEach(0..<count, id: \.self) { _ in
+                        Capsule()
+                            .fill(LGradients.blue)
+                            .frame(width: dotWidth, height: 3)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 3)
+
+        case .dots:
+            HStack(spacing: 12) {
+                ForEach(0..<3, id: \.self) { _ in
+                    Circle()
+                        .fill(LGradients.blue)
+                        .frame(width: 7, height: 7)
+                }
+            }
+            .frame(maxWidth: .infinity)
         }
     }
 
@@ -251,8 +293,9 @@ struct JournalBlockRow: View {
                 textColor: UIColor(LColors.textPrimary),
                 placeholder: "Write code...",
                 isCodeBlock: true,
-                onCreateParagraphBelow: nil
-                , onDeleteEmptyBlock: { onDelete(block) }
+                onCreateParagraphBelow: { onAddBelow(block, .paragraph) },
+                onDeleteEmptyBlock: { onDelete(block) },
+                onExitList: nil
             )
             .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
         }
@@ -459,6 +502,7 @@ struct JournalBlockRow: View {
         let isCodeBlock: Bool
         let onCreateParagraphBelow: (() -> Void)?
         let onDeleteEmptyBlock: (() -> Void)?
+        let onExitList: (() -> Void)?
 
         func makeCoordinator() -> Coordinator {
             Coordinator(parent: self)
@@ -468,7 +512,16 @@ struct JournalBlockRow: View {
             let width = proposal.width ?? uiView.bounds.width
             let targetWidth = max(0, width)
             let fitting = uiView.sizeThatFits(CGSize(width: targetWidth, height: .greatestFiniteMagnitude))
-            let minimumHeight: CGFloat = isCodeBlock ? 64 : 44
+            let minimumHeight: CGFloat
+            if isCodeBlock {
+                minimumHeight = 64
+            } else {
+                // Use the font's actual line height as the minimum so single-line
+                // blocks don't get padded to an arbitrary 44pt tap target.
+                // Headings are already taller than their line height, so this
+                // only affects body-size blocks.
+                minimumHeight = ceil(baseUIFont.lineHeight)
+            }
             return CGSize(width: targetWidth, height: max(minimumHeight, fitting.height))
         }
 
@@ -500,6 +553,19 @@ struct JournalBlockRow: View {
             textView.placeholderLabel.textColor = UIColor(LColors.textSecondary)
             textView.placeholderLabel.font = baseUIFont
             textView.placeholderLabel.isHidden = !block.text.isEmpty
+
+            // Focus this text view when its block ID is requested.
+            let blockID = block.id
+            NotificationCenter.default.addObserver(
+                forName: .journalBlockRequestFocus,
+                object: nil,
+                queue: .main
+            ) { [weak textView] notification in
+                guard let requestedID = notification.object as? UUID,
+                      requestedID == blockID else { return }
+                textView?.becomeFirstResponder()
+            }
+
             return textView
         }
 
@@ -529,6 +595,7 @@ struct JournalBlockRow: View {
             context.coordinator.parent = self
             context.coordinator.onCreateParagraphBelow = self.onCreateParagraphBelow
             context.coordinator.onDeleteEmptyBlock = self.onDeleteEmptyBlock
+            context.coordinator.onExitList = self.onExitList
         }
 
         private func baseAttributes() -> [NSAttributedString.Key: Any] {
@@ -579,6 +646,10 @@ struct JournalBlockRow: View {
                     guard !trimmed.isEmpty, let url = URL(string: trimmed) else { continue }
                     mutable.addAttribute(.link, value: url, range: range)
                     mutable.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+                case .inlineCode:
+                    let monoFont = UIFont.monospacedSystemFont(ofSize: baseUIFont.pointSize * 0.9, weight: .regular)
+                    mutable.addAttribute(.font, value: monoFont, range: range)
+                    mutable.addAttribute(.backgroundColor, value: UIColor.white.withAlphaComponent(0.1), range: range)
                 }
             }
 
@@ -639,11 +710,13 @@ struct JournalBlockRow: View {
             // not the block captured when makeUIView was called.
             var onCreateParagraphBelow: (() -> Void)?
             var onDeleteEmptyBlock: (() -> Void)?
+            var onExitList: (() -> Void)?
 
             init(parent: RichEditableBlockTextView) {
                 self.parent = parent
                 self.onCreateParagraphBelow = parent.onCreateParagraphBelow
                 self.onDeleteEmptyBlock = parent.onDeleteEmptyBlock
+                self.onExitList = parent.onExitList
             }
 
             func textViewDidChangeSelection(_ textView: UITextView) {
@@ -661,32 +734,20 @@ struct JournalBlockRow: View {
                         return false
                     }
                 }
-                guard text == "\n", !parent.isCodeBlock else { return true }
+                guard text == "\n" else { return true }
                 guard range.length == 0 else { return true }
 
-                let currentText = textView.text ?? ""
-                let nsText = currentText as NSString
-                let isAtEnd = range.location == nsText.length
-                guard isAtEnd else { return true }
+                // Code blocks allow raw newlines for multi-line editing.
+                if parent.isCodeBlock { return true }
 
-                let priorIsNewline = range.location > 0 && nsText.substring(with: NSRange(location: range.location - 1, length: 1)) == "\n"
-                guard priorIsNewline else { return true }
-
-                var trimmed = currentText
-                while trimmed.hasSuffix("\n") {
-                    trimmed.removeLast()
+                // Double-enter on an empty bullet/numbered list block exits
+                // list mode and inserts a paragraph below.
+                let isListBlock = parent.block.type == .bulletedList || parent.block.type == .numberedList
+                let isEmpty = (textView.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                if isListBlock && isEmpty {
+                    onExitList?()
+                    return false
                 }
-
-                isApplyingProgrammaticChange = true
-                parent.block.text = trimmed
-                parent.block.touch()
-                textView.attributedText = parent.buildAttributedText()
-                textView.typingAttributes = parent.baseAttributes()
-                textView.selectedRange = NSRange(location: (trimmed as NSString).length, length: 0)
-                if let placeholderTextView = textView as? PlaceholderTextView {
-                    placeholderTextView.placeholderLabel.isHidden = !trimmed.isEmpty
-                }
-                isApplyingProgrammaticChange = false
 
                 NotificationCenter.default.post(
                     name: .journalBlockRequestFocusNextParagraph,

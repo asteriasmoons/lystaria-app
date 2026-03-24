@@ -63,19 +63,17 @@ struct BookmarkFolderDetailView: View {
                 availableFolders: sortedFoldersForMoves
             )
         }
-        .modifier(
-            LystariaConfirmDialog(
-                isPresented: $showDeleteDialog,
-                title: "Delete Bookmark",
-                message: "Are you sure you want to delete this bookmark? This cannot be undone.",
-                confirmTitle: "Delete",
-                confirmRole: .destructive
-            ) {
-                if let bookmarkToDelete {
-                    deleteBookmark(bookmarkToDelete)
-                }
+        .lystariaAlertConfirm(
+            isPresented: $showDeleteDialog,
+            title: "Delete Bookmark",
+            message: "Are you sure you want to delete this bookmark? This cannot be undone.",
+            confirmTitle: "Delete",
+            confirmRole: .destructive
+        ) {
+            if let bookmarkToDelete {
+                deleteBookmark(bookmarkToDelete)
             }
-        )
+        }
     }
 }
 

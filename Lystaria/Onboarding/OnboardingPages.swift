@@ -43,7 +43,12 @@ struct OnboardingPages {
                 targetID: "toolboxIcon",
                 title: "Toolbox",
                 message: "Tap the pause icon to open the Toolbox. Inside you'll find a breathing timer with a calming animation to help you reset, and a burn card where you can type anything weighing on you and press \"Burn\" to watch it disappear in a flame."
-            )
+            ),
+            OnboardingStep(
+                targetID: "healthIcon",
+                title: "Health",
+                message: "Tap here to view your health metrics and exercise logs and to log your health metrics and exercises to your day."
+                )
         ]
     )
 
@@ -67,4 +72,14 @@ struct OnboardingPages {
             )
         ]
     )
+    static let reading = OnboardingPage(
+        pageID: "onboarding_reading",
+        steps: [
+            OnboardingStep(
+                targetID: "bookmarkIcon",
+                title: "Bookmarks",
+                message: "Find and save links to folders or the inbox in the Bookmarks manager. You can also add them through the share sheet."
+                )
+            ]
+        )
 }

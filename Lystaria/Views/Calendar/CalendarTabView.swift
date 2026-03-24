@@ -16,12 +16,22 @@ struct EventSheetConfig: Identifiable {
 
 struct CalendarTabView: View {
     @Environment(\.modelContext) private var modelContext
+    @Query(sort: [SortDescriptor(\EventCalendar.sortOrder), SortDescriptor(\EventCalendar.name)]) private var calendars: [EventCalendar]
     @Query(sort: \CalendarEvent.startDate) private var allEvents: [CalendarEvent]
 
     @State private var currentMonth = Date()
+    @State private var showingAddCalendarPopup = false
+    @State private var selectedCalendarFilter: CalendarFilterOption = .all
+    @State private var newCalendarName = ""
+    @State private var newCalendarColor = "#5b8def"
+    @State private var newCalendarColorUI: Color = Color(ly_hex: "#5b8def")
     @State private var sheetConfig: EventSheetConfig? = nil
     @State private var showingSettingsSheet = false
     @State private var detailOverlayPayload: EventDetailOverlayPayload?
+    @State private var pendingDeleteEvent: CalendarEvent? = nil
+    @State private var pendingDeleteOccurrenceDate: Date? = nil
+    @State private var showDeleteEventDialog = false
+    @State private var showDeleteRecurringDialog = false
     // Onboarding for hidden header icons
     @StateObject private var onboarding = OnboardingManager()
 
@@ -56,6 +66,10 @@ struct CalendarTabView: View {
         }
     }
 
+    enum CalendarFilterOption: Equatable {
+        case all
+        case calendar(String)
+    }
     struct EventInstance: Identifiable {
         let id: String
         let event: CalendarEvent
@@ -78,38 +92,50 @@ struct CalendarTabView: View {
     }
 
     private func computeEventsFor(_ date: Date) -> [EventInstance] {
-        let cal = tzCalendar
-        let dayStart = cal.startOfDay(for: date)
-        let dayEnd = cal.date(byAdding: .day, value: 1, to: dayStart)!
-
-        var results: [EventInstance] = []
-
-        for e in allEvents {
-            let rruleSnapshot = e.recurrenceRRule
-
-            if let rrule = rruleSnapshot, let parsed = ParsedRRule.parse(rrule) {
-                if let occ = occurrence(for: e, parsed: parsed, onDayStarting: dayStart) {
-                    let start = occ.start
-                    let end = occ.end ?? start
-                    if start < dayEnd && end > dayStart {
-                        let stableId = (e.serverId ?? String(describing: e.persistentModelID))
-                        let id = stableId + "::" + isoDayString(dayStart)
-                        results.append(EventInstance(id: id, event: e, occurrenceStart: start, occurrenceEnd: occ.end))
-                    }
-                }
-                continue
+        let filtered: [CalendarEvent] = {
+            switch selectedCalendarFilter {
+            case .all:
+                return allEvents
+            case .calendar(let id):
+                return allEvents.filter { $0.calendarId == id }
             }
+        }()
 
-            let start = e.startDate
-            let end = e.endDate ?? start
-            if start < dayEnd && end > dayStart {
-                let stableId = (e.serverId ?? String(describing: e.persistentModelID))
-                results.append(EventInstance(id: stableId, event: e, occurrenceStart: start, occurrenceEnd: e.endDate))
-            }
+        let resolved = CalendarEventResolver.occurrences(
+            on: date,
+            from: filtered,
+            timeZone: displayTimeZone
+        )
+        
+        let ostaraResolved = resolved.filter {
+            $0.title.localizedCaseInsensitiveContains("Ostara")
         }
 
-        return results.sorted { $0.occurrenceStart < $1.occurrenceStart }
+        print("CHECKING DATE:", date, "resolved count:", resolved.count, "ostara count:", ostaraResolved.count)
+
+        if !ostaraResolved.isEmpty {
+            print("OSTARA RESOLVED ON:", date)
+            for occ in ostaraResolved {
+                print("  -> title:", occ.title)
+                print("  -> start:", occ.startDate)
+                print("  -> end:", String(describing: occ.endDate))
+                print("  -> sourceEventId:", occ.sourceEventId)
+            }
+        } // End of ostaraResolved
+
+        let eventById = Dictionary(allEvents.map { ($0.localEventId, $0) }, uniquingKeysWith: { _, last in last })
+
+        return resolved.compactMap { occ -> EventInstance? in
+            guard let event = eventById[occ.sourceEventId] else { return nil }
+            return EventInstance(
+                id: occ.id,
+                event: event,
+                occurrenceStart: occ.startDate,
+                occurrenceEnd: occ.endDate
+            )
+        }
     }
+
 
     private func isoDayString(_ date: Date) -> String {
         let cal = tzCalendar
@@ -120,202 +146,6 @@ struct CalendarTabView: View {
         return String(format: "%04d-%02d-%02d", y, m, d)
     }
 
-
-    private func occurrence(for event: CalendarEvent, parsed: ParsedRRule, onDayStarting dayStart: Date) -> (start: Date, end: Date?)? {
-        let cal = tzCalendar
-
-        let baseStart = event.startDate
-        let baseEnd = event.endDate
-        let baseDay = cal.startOfDay(for: baseStart)
-
-        if dayStart < baseDay { return nil }
-        if let until = parsed.until, dayStart > cal.startOfDay(for: until) { return nil }
-
-        // Build occurrence start on this day using the original start time.
-        let timeParts = cal.dateComponents([.hour, .minute, .second], from: baseStart)
-        let occStart: Date = {
-            if event.allDay {
-                return cal.startOfDay(for: dayStart)
-            }
-            var comps = cal.dateComponents([.year, .month, .day], from: dayStart)
-            comps.hour = timeParts.hour
-            comps.minute = timeParts.minute
-            comps.second = timeParts.second ?? 0
-            return cal.date(from: comps) ?? dayStart
-        }()
-
-        let duration: TimeInterval? = {
-            guard let eEnd = baseEnd else { return nil }
-            return eEnd.timeIntervalSince(baseStart)
-        }()
-        let occEnd: Date? = {
-            guard let dur = duration else { return nil }
-            return occStart.addingTimeInterval(dur)
-        }()
-
-        guard matches(parsed: parsed, baseStart: baseStart, dayStart: dayStart) else { return nil }
-
-        // COUNT support (bounded iteration to avoid freezes)
-        if let limit = parsed.count {
-            if occurrenceIndex(parsed: parsed, baseStart: baseStart, targetDayStart: dayStart) >= limit {
-                return nil
-            }
-        }
-
-        return (occStart, occEnd)
-    }
-
-    private func matches(parsed: ParsedRRule, baseStart: Date, dayStart: Date) -> Bool {
-        let cal = tzCalendar
-        let baseDay = cal.startOfDay(for: baseStart)
-
-        let interval = max(1, parsed.interval)
-
-        switch parsed.freq {
-        case .daily:
-            let days = cal.dateComponents([.day], from: baseDay, to: dayStart).day ?? 0
-            return days % interval == 0
-
-        case .weekly:
-            let weeks = cal.dateComponents([.weekOfYear], from: baseDay, to: dayStart).weekOfYear ?? 0
-            if weeks % interval != 0 { return false }
-            if let by = parsed.byDay, !by.isEmpty {
-                let wd = cal.component(.weekday, from: dayStart)
-                let code = weekdayCode(from: wd)
-                return by.contains(code)
-            }
-            // Default: same weekday as the start date
-            return cal.component(.weekday, from: dayStart) == cal.component(.weekday, from: baseDay)
-
-        case .monthly:
-            let months = cal.dateComponents([.month], from: baseDay, to: dayStart).month ?? 0
-            if months % interval != 0 { return false }
-
-            if let byMonthDay = parsed.byMonthDay {
-                let day = cal.component(.day, from: dayStart)
-                return byMonthDay.contains(day)
-            }
-
-            if let byDay = parsed.byDay, let pos = parsed.bySetPos {
-                return byDay.contains { code in
-                    matchesNthWeekdayInMonth(dayStart: dayStart, weekdayCode: code, setPos: pos)
-                }
-            }
-
-            if let byDay = parsed.byDay, !byDay.isEmpty {
-                let weekday = cal.component(.weekday, from: dayStart)
-                let code = weekdayCode(from: weekday)
-                return byDay.contains(code)
-                    && cal.component(.day, from: dayStart) == cal.component(.day, from: baseDay)
-            }
-
-            return cal.component(.day, from: dayStart) == cal.component(.day, from: baseDay)
-
-        case .yearly:
-            let years = cal.dateComponents([.year], from: baseDay, to: dayStart).year ?? 0
-            if years % interval != 0 { return false }
-
-            if let byMonth = parsed.byMonth, let byDay = parsed.byDay, let pos = parsed.bySetPos {
-                return byMonth.contains { month in
-                    byDay.contains { code in
-                        matchesNthWeekdayInYear(dayStart: dayStart, month: month, weekdayCode: code, setPos: pos)
-                    }
-                }
-            }
-
-            if let byMonth = parsed.byMonth {
-                let month = cal.component(.month, from: dayStart)
-                if !byMonth.contains(month) { return false }
-            }
-
-            if let byMonthDay = parsed.byMonthDay {
-                let day = cal.component(.day, from: dayStart)
-                return byMonthDay.contains(day)
-            }
-
-            if let byDay = parsed.byDay, !byDay.isEmpty {
-                let weekday = cal.component(.weekday, from: dayStart)
-                let code = weekdayCode(from: weekday)
-                guard byDay.contains(code) else { return false }
-            }
-
-            return cal.component(.month, from: dayStart) == cal.component(.month, from: baseDay)
-                && cal.component(.day, from: dayStart) == cal.component(.day, from: baseDay)
-        }
-    }
-
-    private func matchesNthWeekdayInMonth(dayStart: Date, weekdayCode targetWeekdayCode: String, setPos: Int) -> Bool {
-        let cal = tzCalendar
-        let weekday = cal.component(.weekday, from: dayStart)
-        guard weekdayCode(from: weekday) == targetWeekdayCode else { return false }
-        guard setPos != 0 else { return false }
-        guard let monthInterval = cal.dateInterval(of: .month, for: dayStart) else { return false }
-
-        var matchingDays: [Date] = []
-        var cursor = cal.startOfDay(for: monthInterval.start)
-        let monthEnd = monthInterval.end
-
-        while cursor < monthEnd {
-            let cursorWeekday = cal.component(.weekday, from: cursor)
-            if weekdayCode(from: cursorWeekday) == targetWeekdayCode {
-                matchingDays.append(cursor)
-            }
-            guard let next = cal.date(byAdding: .day, value: 1, to: cursor) else { break }
-            cursor = next
-        }
-
-        guard !matchingDays.isEmpty else { return false }
-
-        let targetIndex: Int
-        if setPos > 0 {
-            targetIndex = setPos - 1
-        } else {
-            targetIndex = matchingDays.count + setPos
-        }
-
-        guard matchingDays.indices.contains(targetIndex) else { return false }
-        return cal.isDate(matchingDays[targetIndex], inSameDayAs: dayStart)
-    }
-
-    private func matchesNthWeekdayInYear(dayStart: Date, month: Int, weekdayCode: String, setPos: Int) -> Bool {
-        let cal = tzCalendar
-        let dayMonth = cal.component(.month, from: dayStart)
-        guard dayMonth == month else { return false }
-        return matchesNthWeekdayInMonth(dayStart: dayStart, weekdayCode: weekdayCode, setPos: setPos)
-    }
-
-
-    private func occurrenceIndex(parsed: ParsedRRule, baseStart: Date, targetDayStart: Date) -> Int {
-        // Returns 0 for the first occurrence day (base day), 1 for the next, etc.
-        // For weekly with BYDAY, we count matched days. Bounded to prevent runaway work.
-        let cal = tzCalendar
-        let baseDay = cal.startOfDay(for: baseStart)
-        if targetDayStart <= baseDay { return 0 }
-
-        // Fast paths for simple cases
-        if parsed.freq == .daily {
-            let days = cal.dateComponents([.day], from: baseDay, to: targetDayStart).day ?? 0
-            return max(0, days / max(1, parsed.interval))
-        }
-
-        // Bounded scan for complex patterns (weekly BYDAY)
-        var idx = 0
-        var cursor = baseDay
-        let maxSteps = 5000
-        var steps = 0
-
-        while cursor < targetDayStart && steps < maxSteps {
-            if matches(parsed: parsed, baseStart: baseStart, dayStart: cursor) {
-                idx += 1
-            }
-            cursor = cal.date(byAdding: .day, value: 1, to: cursor) ?? cursor.addingTimeInterval(86400)
-            steps += 1
-        }
-
-        // idx currently counts occurrences *after* base day if base day matched; normalize so base day is index 0
-        // If the base day itself is an occurrence (it always should be), ensure that.
-        return max(0, idx)
-    }
 
     var body: some View {
         NavigationStack {
@@ -339,7 +169,7 @@ struct CalendarTabView: View {
                     }
                 }
                 .scrollIndicators(.hidden)
-
+                
                 // Detail overlay as a true full-screen ZStack sibling
                 if let payload = detailOverlayPayload {
                     CalendarEventDetailOverlay(
@@ -358,12 +188,82 @@ struct CalendarTabView: View {
             }
             // FIX 5: Build the map on appear and whenever allEvents or the month changes.
             .onAppear {
+                // Ensure at least one calendar exists
+                if calendars.isEmpty {
+                    let defaultCal = EventCalendar(
+                        serverId: UUID().uuidString,
+                        name: "My Calendar",
+                        color: "#5b8def",
+                        sortOrder: 0,
+                        isDefault: true,
+                        isSelectedInCalendarView: true
+                    )
+                    modelContext.insert(defaultCal)
+                    try? modelContext.save()
+                }
+                
+                // Assign existing events without a calendar
+                if let defaultCal = calendars.first(where: { $0.isDefault }) {
+                    let unassigned = allEvents.filter { $0.calendarId == nil }
+                    
+                    if !unassigned.isEmpty {
+                        for e in unassigned {
+                            e.calendarId = defaultCal.serverId
+                            e.calendar = defaultCal
+                        }
+                        try? modelContext.save()
+                    }
+                }
+                
+                // Build UI map
                 rebuildEventsByDay()
+
+                // One-shot dedup: purge exact-duplicate non-exception events
+                // (same title + same startDate), keeping the oldest by createdAt.
+                // Runs in a Task so it fires after the initial render settles.
+                Task { @MainActor in
+                    let cal = tzCalendar
+                    let nonExceptions = allEvents.filter { !$0.isRecurrenceException }
+                    var seen: [String: CalendarEvent] = [:]
+                    var deleted = false
+                    for event in nonExceptions.sorted(by: { $0.createdAt < $1.createdAt }) {
+                        // Key on title + rrule + time-of-day (ignore date for recurring,
+                        // use full date for non-recurring) so yearly events on different
+                        // calendar dates still deduplicate correctly.
+                        let key: String
+                        if let rrule = event.recurrenceRRule, !rrule.isEmpty,
+                           let parsed = ParsedRRule.parse(rrule) {
+                            // For recurring events key on title + frequency only.
+                            // This catches duplicates where each copy has a slightly
+                            // different startDate (and thus different BYMONTHDAY etc).
+                            key = "\(event.title)|recurring|\(parsed.freq.rawValue)"
+                        } else {
+                            let comps = cal.dateComponents([.year, .month, .day, .hour, .minute], from: event.startDate)
+                            key = "\(event.title)|\(comps.year ?? 0)-\(comps.month ?? 0)-\(comps.day ?? 0)T\(comps.hour ?? 0):\(comps.minute ?? 0)"
+                        }
+                        if seen[key] != nil {
+                            modelContext.delete(event)
+                            deleted = true
+                        } else {
+                            seen[key] = event
+                        }
+                    }
+                    if deleted {
+                        try? modelContext.save()
+                        rebuildEventsByDay()
+                    }
+                }
             }
             .onChange(of: allEvents) { _, _ in
                 rebuildEventsByDay()
             }
             .onChange(of: currentMonth) { _, _ in
+                rebuildEventsByDay()
+            }
+            .onChange(of: selectedCalendarFilter) { _, _ in
+                rebuildEventsByDay()
+            }
+            .onChange(of: calendars.count) { _, _ in
                 rebuildEventsByDay()
             }
             .overlay {
@@ -381,6 +281,71 @@ struct CalendarTabView: View {
                     .zIndex(70)
                 }
             }
+            .overlay {
+                if showingAddCalendarPopup {
+                    LystariaOverlayPopup(
+                        onClose: {
+                            showingAddCalendarPopup = false
+                            newCalendarName = ""
+                        },
+                        width: 560,
+                        heightRatio: 0.70,
+                        header: {
+                            HStack {
+                                GradientTitle(text: "New Calendar", font: .title2.bold())
+                                Spacer()
+                                Button {
+                                    showingAddCalendarPopup = false
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.title2)
+                                        .foregroundStyle(LColors.textSecondary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        },
+                        content: {
+                            VStack(alignment: .leading, spacing: 12) {
+                                CalendarLabeledGlassField(label: "NAME") {
+                                    TextField("Calendar name", text: $newCalendarName)
+                                        .textFieldStyle(.plain)
+                                        .foregroundStyle(LColors.textPrimary)
+                                }
+                                
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("COLOR")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(LColors.textSecondary)
+                                        .tracking(0.5)
+                                    
+                                    ColorPicker("", selection: $newCalendarColorUI, supportsOpacity: false)
+                                        .labelsHidden()
+                                        .onChange(of: newCalendarColorUI) { _, newColor in
+                                            newCalendarColor = newColor.toHexString()
+                                        }
+                                }
+                            }
+                        },
+                        footer: {
+                            Button {
+                                saveNewCalendar()
+                            } label: {
+                                Text("Create Calendar")
+                                    .font(.headline)
+                                    .foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 14)
+                                    .background(newCalendarName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? AnyShapeStyle(Color.gray.opacity(0.3)) : AnyShapeStyle(LGradients.blue))
+                                    .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(newCalendarName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        }
+                    )
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .zIndex(80)
+                }
+            }
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: sheetConfig != nil)
             
             .overlayPreferenceValue(OnboardingTargetKey.self) { anchors in
@@ -394,8 +359,48 @@ struct CalendarTabView: View {
                     }
                 }
             }
+            .lystariaAlertConfirm(
+                isPresented: $showDeleteEventDialog,
+                title: "Delete event?",
+                message: "This will permanently delete this event.",
+                confirmTitle: "Delete",
+                confirmRole: .destructive
+            ) {
+                if let event = pendingDeleteEvent {
+                    if let rid = event.reminderServerId {
+                        NotificationManager.shared.cancelAllCalendarNotifications(id: rid)
+                        deleteReminder(withServerId: rid)
+                        event.reminderServerId = nil
+                    }
+                    modelContext.delete(event)
+                    pendingDeleteEvent = nil
+                    pendingDeleteOccurrenceDate = nil
+                    rebuildEventsByDay()
+                }
+            }
+            .confirmationDialog(
+                "Delete recurring event",
+                isPresented: $showDeleteRecurringDialog,
+                titleVisibility: .visible
+            ) {
+                Button("This Event Only", role: .destructive) {
+                    inlineDeleteRecurring(scope: .thisEventOnly)
+                }
+                Button("This and Future", role: .destructive) {
+                    inlineDeleteRecurring(scope: .thisAndFuture)
+                }
+                Button("All Events", role: .destructive) {
+                    inlineDeleteRecurring(scope: .allEvents)
+                }
+                Button("Cancel", role: .cancel) {
+                    pendingDeleteEvent = nil
+                    pendingDeleteOccurrenceDate = nil
+                }
+            } message: {
+                Text("Choose how this recurring event should be deleted.")
+            }
+           }
         }
-    }
 
     // MARK: - Header
 
@@ -437,6 +442,54 @@ struct CalendarTabView: View {
                 }
                 
                 Spacer()
+                
+                // FILTER DROPDOWN
+                Menu {
+                    Button("All") {
+                        selectedCalendarFilter = .all
+                    }
+
+                    ForEach(calendars) { calendar in
+                        Button(calendar.name) {
+                            selectedCalendarFilter = .calendar(calendar.serverId)
+                        }
+                    }
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.08))
+                            .overlay(
+                                Circle()
+                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                            .frame(width: 34, height: 34)
+
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.white)
+                    }
+                }
+                .buttonStyle(.plain)
+
+
+                // ADD CALENDAR BUTTON
+                Button {
+                    showingAddCalendarPopup = true
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.08))
+                            .overlay(
+                                Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                            .frame(width: 34, height: 34)
+
+                        Image(systemName: "plus")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                }
+                .buttonStyle(.plain)
                 
                 NavigationLink {
                     SettingsView()
@@ -551,6 +604,11 @@ struct CalendarTabView: View {
         let event = instance.event
         let eventColor = Color(ly_hex: event.displayColor)
         let hasReminder = (event.reminderServerId != nil)
+        let calendarName =
+            event.calendar?.name
+            ?? calendars.first(where: { $0.serverId == event.calendarId })?.name
+            ?? ""
+        let hasCalendar = !calendarName.isEmpty
         
         return HStack(spacing: 0) {
             RoundedRectangle(cornerRadius: 2)
@@ -560,6 +618,20 @@ struct CalendarTabView: View {
             
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
+                    if hasCalendar {
+                        Text(calendarName)
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(LColors.textPrimary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(Capsule())
+                            .overlay(
+                                Capsule()
+                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                    }
+
                     if hasReminder {
                         Image(systemName: "bell.fill")
                             .font(.system(size: 11, weight: .bold))
@@ -655,12 +727,13 @@ struct CalendarTabView: View {
                 .buttonStyle(.plain)
                 
                 Button {
-                    if let rid = event.reminderServerId {
-                        NotificationManager.shared.cancelAllCalendarNotifications(id: rid)
-                        deleteReminder(withServerId: rid)
-                        event.reminderServerId = nil
+                    pendingDeleteEvent = event
+                    pendingDeleteOccurrenceDate = instance.occurrenceStart
+                    if event.recurrenceRRule != nil {
+                        showDeleteRecurringDialog = true
+                    } else {
+                        showDeleteEventDialog = true
                     }
-                    modelContext.delete(event)
                 } label: {
                     Image(systemName: "trash")
                         .font(.system(size: 12))
@@ -684,6 +757,91 @@ struct CalendarTabView: View {
                 occurrenceEnd: instance.occurrenceEnd
             )
         }
+    }
+
+    private func inlineDeleteRecurring(scope: EventSheet.RecurringEditScope) {
+        guard let event = pendingDeleteEvent else { return }
+        let occurrenceDate = pendingDeleteOccurrenceDate ?? event.startDate
+
+        switch scope {
+        case .thisEventOnly:
+            let cancelException = CalendarEvent(
+                title: event.title,
+                startDate: occurrenceDate,
+                endDate: event.endDate,
+                allDay: event.allDay,
+                eventDescription: event.eventDescription,
+                color: event.color,
+                meetingUrl: event.meetingUrl,
+                location: event.location,
+                recurrenceRRule: nil,
+                timeZoneId: event.timeZoneId,
+                recurrence: nil,
+                recurrenceExceptions: [],
+                calendarId: event.calendarId,
+                serverId: nil,
+                syncState: .newLocal,
+                isRecurringSeriesMaster: false,
+                isRecurrenceException: true,
+                isCancelledOccurrence: true,
+                parentSeriesLocalId: event.localEventId,
+                splitFromSeriesLocalId: nil,
+                originalOccurrenceDate: occurrenceDate,
+                splitEffectiveFrom: nil,
+                exceptionKind: .cancelled
+            )
+            cancelException.calendar = event.calendar
+            modelContext.insert(cancelException)
+
+            var exceptions = event.recurrenceExceptions
+            let df = ISO8601DateFormatter()
+            df.formatOptions = [.withInternetDateTime, .withColonSeparatorInTime, .withDashSeparatorInDate]
+            df.timeZone = displayTimeZone
+            let key = df.string(from: occurrenceDate)
+            if !exceptions.contains(key) {
+                exceptions.append(key)
+                event.recurrenceExceptions = exceptions.sorted()
+            }
+            event.needsSync = true
+            event.syncState = .modifiedLocal
+            event.updatedAt = Date()
+
+        case .thisAndFuture:
+            if let originalRule = event.recurrenceRRule {
+                let body = originalRule.hasPrefix("RRULE:") ? String(originalRule.dropFirst("RRULE:".count)) : originalRule
+                let previousDay = tzCalendar.date(byAdding: .day, value: -1, to: tzCalendar.startOfDay(for: occurrenceDate)) ?? occurrenceDate
+                let parts = body
+                    .split(separator: ";")
+                    .map(String.init)
+                    .filter { !$0.uppercased().hasPrefix("UNTIL=") && !$0.uppercased().hasPrefix("COUNT=") }
+                let c = tzCalendar.dateComponents([.year, .month, .day], from: previousDay)
+                let until = String(format: "UNTIL=%04d%02d%02d", c.year ?? 1970, c.month ?? 1, c.day ?? 1)
+                event.recurrenceRRule = (parts + [until]).joined(separator: ";")
+            }
+            event.needsSync = true
+            event.syncState = .modifiedLocal
+            event.updatedAt = Date()
+
+        case .allEvents:
+            if let rid = event.reminderServerId {
+                NotificationManager.shared.cancelAllCalendarNotifications(id: rid)
+                deleteReminder(withServerId: rid)
+                event.reminderServerId = nil
+            }
+            let masterLocalId = event.localEventId
+            let childDescriptor = FetchDescriptor<CalendarEvent>(
+                predicate: #Predicate { $0.parentSeriesLocalId == masterLocalId }
+            )
+            if let children = try? modelContext.fetch(childDescriptor) {
+                for child in children { modelContext.delete(child) }
+            }
+            modelContext.delete(event)
+        }
+
+        try? modelContext.save()
+        pendingDeleteEvent = nil
+        pendingDeleteOccurrenceDate = nil
+        rebuildEventsByDay()
     }
 
     private func deleteReminder(withServerId id: String) {
@@ -716,14 +874,44 @@ struct CalendarTabView: View {
     private func nextMonth() {
         currentMonth = tzCalendar.date(byAdding: .month, value: 1, to: currentMonth) ?? currentMonth
     }
+    private func saveNewCalendar() {
+        let trimmed = newCalendarName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        let nextOrder = (calendars.map { $0.sortOrder }.max() ?? -1) + 1
+
+        let calendar = EventCalendar(
+            serverId: UUID().uuidString,
+            name: trimmed,
+            color: newCalendarColor,
+            sortOrder: nextOrder,
+            isDefault: false,
+            isSelectedInCalendarView: true
+        )
+
+        modelContext.insert(calendar)
+        if calendars.isEmpty {
+            calendar.isDefault = true
+        }
+
+        do {
+            try modelContext.save()
+        } catch {
+            print("❌ Failed to save calendar: \(error)")
+        }
+
+        newCalendarName = ""
+        showingAddCalendarPopup = false
+    }
+
+    private struct EventDetailOverlayPayload: Identifiable {
+        let id = UUID()
+        let event: CalendarEvent
+        let occurrenceStart: Date
+        let occurrenceEnd: Date?
+    }
 }
 
-private struct EventDetailOverlayPayload: Identifiable {
-    let id = UUID()
-    let event: CalendarEvent
-    let occurrenceStart: Date
-    let occurrenceEnd: Date?
-}
 
 // MARK: - Event Sheet (New/Edit)
 
@@ -748,6 +936,8 @@ struct EventSheet: View {
     @State private var eventDescription = ""
     @State private var eventColor = "#5b8def"
     @State private var eventColorUI: Color = Color(ly_hex: "#5b8def")
+    @Query(sort: [SortDescriptor(\EventCalendar.sortOrder), SortDescriptor(\EventCalendar.name)]) private var calendars: [EventCalendar]
+    @State private var selectedCalendarId: String? = nil
 
     @State private var reminderEnabled = false
     @State private var minutesBefore: Int = 0
@@ -795,6 +985,22 @@ struct EventSheet: View {
         }
     }
 
+    enum RecurringEditScope: String, Identifiable {
+        case thisEventOnly
+        case allEvents
+        case thisAndFuture
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .thisEventOnly: return "This Event Only"
+            case .allEvents: return "All Events"
+            case .thisAndFuture: return "This and Future"
+            }
+        }
+    }
+
     @State private var monthlyRecurrenceMode: MonthlyRecurrenceMode = .sameDay
     @State private var monthlySpecificDaysText: String = ""
     @State private var monthlyOrdinal: RecurrenceOrdinal = .first
@@ -817,6 +1023,9 @@ struct EventSheet: View {
     @State private var recurrenceEndMode: RecurrenceEndMode = .never
     @State private var recurrenceCount: Int = 10
     @State private var recurrenceUntilDay: Date = Date()
+    @State private var showRecurringEditScopeDialog = false
+    @State private var showDeleteConfirm = false
+    @State private var showRecurringDeleteScopeDialog = false
 
     private let colorOptions = ["#5b8def","#a855f7","#ec4899","#4caf50","#ff9800","#f44336","#00dbff"]
 
@@ -833,6 +1042,28 @@ struct EventSheet: View {
         onClose ?? {}
     }
 
+    private var isEditingRecurringSeries: Bool {
+        guard let editingEvent else { return false }
+        return !editingEvent.isRecurrenceException && (editingEvent.isRecurringSeriesMaster || editingEvent.recurrenceRRule != nil)
+    }
+
+    private var isEditingOccurrenceFromSeries: Bool {
+        guard let editingEvent, isEditingRecurringSeries else { return false }
+        return abs(selectedDate.timeIntervalSince(editingEvent.startDate)) > 60
+    }
+
+    private var canDeleteCurrentEvent: Bool {
+        editingEvent != nil
+    }
+
+    private var occurrenceAnchorDate: Date {
+        guard let editingEvent else { return selectedDate }
+        if isEditingOccurrenceFromSeries {
+            return selectedDate
+        }
+        return editingEvent.startDate
+    }
+
     private var displayTimeZone: TimeZone {
         TimeZone(identifier: NotificationManager.shared.effectiveTimezoneID) ?? .current
     }
@@ -843,29 +1074,87 @@ struct EventSheet: View {
     }
 
     var body: some View {
-        LystariaOverlayPopup(
-            onClose: {
-                closeAction()
-            },
-            width: 760,
-            heightRatio: 0.70,
-            header: {
-                HStack {
-                    GradientTitle(
-                        text: editingEvent != nil ? "Edit Event" : "New Event",
-                        font: .title2.bold()
-                    )
-                    Spacer()
+        LystariaFullScreenForm(
+            title: editingEvent != nil ? "Edit Event" : "New Event",
+            onCancel: { closeAction() },
+            canSave: !titleTrimmed.isEmpty,
+            onSave: { handleSaveTapped() }
+        ) {
+            formContent
+        }
+        .onAppear { loadInitialState() }
+        .sheet(isPresented: $showLocationSearchSheet) {
+            LocationSearchSheet { displayName, _, _ in
+                location = displayName
+            }
+        }
+        .confirmationDialog(
+            "Apply changes to recurring event",
+            isPresented: $showRecurringEditScopeDialog,
+            titleVisibility: .visible
+        ) {
+            Button(RecurringEditScope.thisEventOnly.title) {
+                save(editScope: .thisEventOnly)
+            }
+            Button(RecurringEditScope.allEvents.title) {
+                save(editScope: .allEvents)
+            }
+            Button(RecurringEditScope.thisAndFuture.title) {
+                save(editScope: .thisAndFuture)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Choose how these changes should apply to this recurring event.")
+        }
+        .lystariaAlertConfirm(
+            isPresented: $showDeleteConfirm,
+            title: "Delete event?",
+            message: "This event will be removed.",
+            confirmTitle: "Delete",
+            confirmRole: .destructive
+        ) {
+            performDelete(scope: .allEvents)
+        }
+        .confirmationDialog(
+            "Delete recurring event",
+            isPresented: $showRecurringDeleteScopeDialog,
+            titleVisibility: .visible
+        ) {
+            Button(RecurringEditScope.thisEventOnly.title, role: .destructive) {
+                performDelete(scope: .thisEventOnly)
+            }
+            Button(RecurringEditScope.allEvents.title, role: .destructive) {
+                performDelete(scope: .allEvents)
+            }
+            Button(RecurringEditScope.thisAndFuture.title, role: .destructive) {
+                performDelete(scope: .thisAndFuture)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Choose how this recurring event should be deleted.")
+        }
+    }
 
-                    Button { closeAction() } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(LColors.textSecondary)
+    private var formContent: some View {
+        VStack(spacing: 16) {
+                CalendarControlRow(label: "Calendar") {
+                    Picker("", selection: $selectedCalendarId) {
+                        Text("No Calendar").tag(nil as String?)
+                        ForEach(calendars) { calendar in
+                            Text(calendar.name).tag(Optional(calendar.serverId))
+                        }
                     }
-                    .buttonStyle(.plain)
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .onChange(of: selectedCalendarId) { _, newValue in
+                        if let id = newValue,
+                           let selectedCalendar = calendars.first(where: { $0.serverId == id }) {
+                            eventColor = selectedCalendar.color
+                            eventColorUI = Color(ly_hex: selectedCalendar.color)
+                        }
+                    }
                 }
-            },
-            content: {
+
                 CalendarLabeledGlassField(label: "TITLE") {
                     TextField("Event title", text: $title)
                         .textFieldStyle(.plain)
@@ -1281,26 +1570,16 @@ struct EventSheet: View {
                             eventColor = newColor.toHexString()
                         }
                 }
-            },
-            footer: {
-                Button { save() } label: {
-                    Text(editingEvent != nil ? "Save Changes" : "Save Event")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(titleTrimmed.isEmpty ? AnyShapeStyle(Color.gray.opacity(0.3)) : AnyShapeStyle(LGradients.blue))
-                        .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
+
+                if canDeleteCurrentEvent {
+                    LButton(
+                        title: "Delete Event",
+                        icon: "trash",
+                        style: .danger,
+                        action: { handleDeleteTapped() }
+                    )
+                    .padding(.top, 4)
                 }
-                .buttonStyle(.plain)
-                .disabled(titleTrimmed.isEmpty)
-            }
-        )
-        .onAppear { loadInitialState() }
-        .sheet(isPresented: $showLocationSearchSheet) {
-            LocationSearchSheet { displayName, _, _ in
-                location = displayName
-            }
         }
     }
 
@@ -1313,15 +1592,19 @@ struct EventSheet: View {
             eventDescription = e.eventDescription ?? ""
             eventColor = e.color ?? "#5b8def"
             eventColorUI = Color(ly_hex: eventColor)
+            selectedCalendarId = e.calendarId
 
-            startDay = e.startDate
-            startTime = e.startDate
+            let editingStart = occurrenceAnchorDate
+            startDay = editingStart
+            startTime = editingStart
 
             if let end = e.endDate {
-                endDay = end
-                endTime = end
+                let duration = end.timeIntervalSince(e.startDate)
+                let resolvedEnd = duration > 0 ? editingStart.addingTimeInterval(duration) : end
+                endDay = resolvedEnd
+                endTime = resolvedEnd
             } else {
-                let end = tzCalendar.date(byAdding: .hour, value: 1, to: e.startDate) ?? e.startDate
+                let end = tzCalendar.date(byAdding: .hour, value: 1, to: editingStart) ?? editingStart
                 endDay = end
                 endTime = end
             }
@@ -1449,8 +1732,14 @@ struct EventSheet: View {
             location = ""
             meetingUrl = ""
             eventDescription = ""
-            eventColor = "#5b8def"
-            eventColorUI = Color(ly_hex: eventColor)
+            // Set color to selected calendar color if possible, else fallback
+            if let defaultCal = calendars.first(where: { $0.isDefault }) ?? calendars.first {
+                eventColor = defaultCal.color
+                eventColorUI = Color(ly_hex: defaultCal.color)
+            } else {
+                eventColor = "#5b8def"
+                eventColorUI = Color(ly_hex: eventColor)
+            }
 
             startDay = selectedDate
             startTime = selectedDate
@@ -1479,6 +1768,16 @@ struct EventSheet: View {
             recurrenceEndMode = .never
             recurrenceCount = 10
             recurrenceUntilDay = selectedDate
+            if let defaultCal = calendars.first(where: { $0.isDefault }) {
+                selectedCalendarId = defaultCal.serverId
+            } else {
+                selectedCalendarId = calendars.first?.serverId
+            }
+            if let id = selectedCalendarId,
+               let selectedCalendar = calendars.first(where: { $0.serverId == id }) {
+                eventColor = selectedCalendar.color
+                eventColorUI = Color(ly_hex: selectedCalendar.color)
+            }
         }
     }
 
@@ -1490,13 +1789,51 @@ struct EventSheet: View {
         return try? modelContext.fetch(descriptor).first
     }
 
-    private func save() {
+    private func handleSaveTapped() {
+        if isEditingRecurringSeries {
+            showRecurringEditScopeDialog = true
+        } else {
+            save(editScope: .allEvents)
+        }
+    }
+
+    private func recurringExceptionDateKey(_ date: Date) -> String {
+        let df = ISO8601DateFormatter()
+        df.formatOptions = [.withInternetDateTime, .withColonSeparatorInTime, .withDashSeparatorInDate]
+        df.timeZone = displayTimeZone
+        return df.string(from: date)
+    }
+
+    private func applyingUntil(_ rrule: String, before splitDate: Date) -> String {
+        let body = rrule.hasPrefix("RRULE:") ? String(rrule.dropFirst("RRULE:".count)) : rrule
+        let previousDay = tzCalendar.date(byAdding: .day, value: -1, to: tzCalendar.startOfDay(for: splitDate)) ?? splitDate
+        let parts = body
+            .split(separator: ";")
+            .map(String.init)
+            .filter { !$0.uppercased().hasPrefix("UNTIL=") && !$0.uppercased().hasPrefix("COUNT=") }
+
+        let c = tzCalendar.dateComponents([.year, .month, .day], from: previousDay)
+        let y = c.year ?? 1970
+        let m = c.month ?? 1
+        let d = c.day ?? 1
+        let until = String(format: "UNTIL=%04d%02d%02d", y, m, d)
+
+        return (parts + [until]).joined(separator: ";")
+    }
+
+    private func save(editScope: RecurringEditScope) {
         let cleanTitle      = titleTrimmed
         let cleanLocation   = location.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanMeetingUrl = meetingUrl.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanDesc       = eventDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         let isAllDay        = allDay
-        let chosenColor     = eventColorUI.toHexString()
+        let chosenColor: String = {
+            if let id = selectedCalendarId,
+               let selectedCalendar = calendars.first(where: { $0.serverId == id }) {
+                return selectedCalendar.color
+            }
+            return eventColorUI.toHexString()
+        }()
         let isReminderOn    = reminderEnabled
         let minsBefore      = minutesBefore
 
@@ -1542,7 +1879,8 @@ struct EventSheet: View {
             if recurrenceFreq == .monthly {
                 switch monthlyRecurrenceMode {
                 case .sameDay:
-                    break
+                    let dayOfMonth = tzCalendar.component(.day, from: start)
+                    components.append("BYMONTHDAY=\(dayOfMonth)")
                 case .specificMonthDays:
                     let parsedDays = monthlySpecificDaysText
                         .split(separator: ",")
@@ -1561,7 +1899,10 @@ struct EventSheet: View {
             if recurrenceFreq == .yearly {
                 switch yearlyRecurrenceMode {
                 case .sameDate:
-                    break
+                    let month = tzCalendar.component(.month, from: start)
+                    let day = tzCalendar.component(.day, from: start)
+                    components.append("BYMONTH=\(month)")
+                    components.append("BYMONTHDAY=\(day)")
                 case .specificMonthDay:
                     let clampedDay = min(max(yearlyDay, 1), 31)
                     components.append("BYMONTH=\(yearlyMonth)")
@@ -1621,19 +1962,113 @@ struct EventSheet: View {
 
         let targetEvent: CalendarEvent
         if let e = editingEvent {
-            e.title                = cleanTitle
-            e.allDay               = isAllDay
-            e.startDate            = start
-            e.endDate              = end
-            e.location             = cleanLocation.isEmpty ? nil : cleanLocation
-            e.meetingUrl           = cleanMeetingUrl.isEmpty ? nil : cleanMeetingUrl
-            e.eventDescription     = cleanDesc.isEmpty ? nil : cleanDesc
-            e.color                = chosenColor
-            e.updatedAt            = Date()
-            e.needsSync            = true
-            e.recurrenceRRule      = resolvedRRule
-            e.timeZoneId           = NotificationManager.shared.effectiveTimezoneID
-            targetEvent = e
+            switch editScope {
+            case .allEvents:
+                e.title = cleanTitle
+                e.allDay = isAllDay
+                e.startDate = start
+                e.endDate = end
+                e.location = cleanLocation.isEmpty ? nil : cleanLocation
+                e.meetingUrl = cleanMeetingUrl.isEmpty ? nil : cleanMeetingUrl
+                e.eventDescription = cleanDesc.isEmpty ? nil : cleanDesc
+                e.color = chosenColor
+                e.updatedAt = Date()
+                e.recurrenceRRule = resolvedRRule
+                e.timeZoneId = NotificationManager.shared.effectiveTimezoneID
+                e.calendarId = selectedCalendarId
+                e.needsSync = true
+                e.syncState = .modifiedLocal
+                e.isRecurringSeriesMaster = recurrenceEnabled || e.isRecurringSeriesMaster
+                if let id = selectedCalendarId {
+                    e.calendar = calendars.first(where: { $0.serverId == id })
+                } else {
+                    e.calendar = nil
+                }
+                targetEvent = e
+
+            case .thisEventOnly:
+                let exceptionDate = occurrenceAnchorDate
+                let exception = CalendarEvent(
+                    title: cleanTitle,
+                    startDate: start,
+                    endDate: end,
+                    allDay: isAllDay,
+                    eventDescription: cleanDesc.isEmpty ? nil : cleanDesc,
+                    color: chosenColor,
+                    meetingUrl: cleanMeetingUrl.isEmpty ? nil : cleanMeetingUrl,
+                    location: cleanLocation.isEmpty ? nil : cleanLocation,
+                    recurrenceRRule: nil,
+                    timeZoneId: NotificationManager.shared.effectiveTimezoneID,
+                    recurrence: nil,
+                    recurrenceExceptions: [],
+                    calendarId: selectedCalendarId,
+                    serverId: nil,
+                    syncState: .newLocal,
+                    isRecurringSeriesMaster: false,
+                    isRecurrenceException: true,
+                    isCancelledOccurrence: false,
+                    parentSeriesLocalId: e.localEventId,
+                    splitFromSeriesLocalId: nil,
+                    originalOccurrenceDate: exceptionDate,
+                    splitEffectiveFrom: nil,
+                    exceptionKind: start == exceptionDate ? .edited : .moved
+                )
+                if let id = selectedCalendarId {
+                    exception.calendar = calendars.first(where: { $0.serverId == id })
+                }
+                modelContext.insert(exception)
+
+                var exceptions = e.recurrenceExceptions
+                let key = recurringExceptionDateKey(exceptionDate)
+                if !exceptions.contains(key) {
+                    exceptions.append(key)
+                    e.recurrenceExceptions = exceptions.sorted()
+                }
+                e.updatedAt = Date()
+                e.needsSync = true
+                e.syncState = .modifiedLocal
+                targetEvent = exception
+
+            case .thisAndFuture:
+                let splitDate = occurrenceAnchorDate
+                if let originalRule = e.recurrenceRRule {
+                    e.recurrenceRRule = applyingUntil(originalRule, before: splitDate)
+                }
+                e.updatedAt = Date()
+                e.needsSync = true
+                e.syncState = .modifiedLocal
+
+                let splitEvent = CalendarEvent(
+                    title: cleanTitle,
+                    startDate: start,
+                    endDate: end,
+                    allDay: isAllDay,
+                    eventDescription: cleanDesc.isEmpty ? nil : cleanDesc,
+                    color: chosenColor,
+                    meetingUrl: cleanMeetingUrl.isEmpty ? nil : cleanMeetingUrl,
+                    location: cleanLocation.isEmpty ? nil : cleanLocation,
+                    recurrenceRRule: resolvedRRule,
+                    timeZoneId: NotificationManager.shared.effectiveTimezoneID,
+                    recurrence: nil,
+                    recurrenceExceptions: [],
+                    calendarId: selectedCalendarId,
+                    serverId: nil,
+                    syncState: .newLocal,
+                    isRecurringSeriesMaster: recurrenceEnabled,
+                    isRecurrenceException: true,
+                    isCancelledOccurrence: false,
+                    parentSeriesLocalId: e.localEventId,
+                    splitFromSeriesLocalId: e.localEventId,
+                    originalOccurrenceDate: splitDate,
+                    splitEffectiveFrom: splitDate,
+                    exceptionKind: .split
+                )
+                if let id = selectedCalendarId {
+                    splitEvent.calendar = calendars.first(where: { $0.serverId == id })
+                }
+                modelContext.insert(splitEvent)
+                targetEvent = splitEvent
+            }
         } else {
             let e = CalendarEvent(
                 title: cleanTitle,
@@ -1644,11 +2079,28 @@ struct EventSheet: View {
                 color: chosenColor,
                 meetingUrl: cleanMeetingUrl.isEmpty ? nil : cleanMeetingUrl,
                 location: cleanLocation.isEmpty ? nil : cleanLocation,
-                serverId: nil
+                recurrenceRRule: resolvedRRule,
+                timeZoneId: NotificationManager.shared.effectiveTimezoneID,
+                recurrence: nil,
+                recurrenceExceptions: [],
+                calendarId: selectedCalendarId,
+                serverId: nil,
+                syncState: .newLocal,
+                isRecurringSeriesMaster: recurrenceEnabled,
+                isRecurrenceException: false,
+                isCancelledOccurrence: false,
+                parentSeriesLocalId: nil,
+                splitFromSeriesLocalId: nil,
+                originalOccurrenceDate: nil,
+                splitEffectiveFrom: nil,
+                exceptionKind: nil
             )
             modelContext.insert(e)
-            e.recurrenceRRule = resolvedRRule
-            e.timeZoneId = NotificationManager.shared.effectiveTimezoneID
+            if let id = selectedCalendarId {
+                e.calendar = calendars.first(where: { $0.serverId == id })
+            } else {
+                e.calendar = nil
+            }
             targetEvent = e
         }
 
@@ -1663,7 +2115,7 @@ struct EventSheet: View {
             resolvedRunAt: resolvedRunAt,
             resolvedRule: resolvedRuleForNotifications,
             resolvedRRule: resolvedRRule,
-            resolvedExceptions: []
+            resolvedExceptions: editingEvent?.recurrenceExceptions ?? []
         )
 
         do {
@@ -1874,9 +2326,6 @@ struct EventSheet: View {
         default: return ""
         }
     }
-}
-
-
 
     // MARK: - Notification Debug (prints in Xcode console)
     private func debugDumpPendingNotifications(tag: String, filterId: String? = nil) {
@@ -1903,6 +2352,124 @@ struct EventSheet: View {
         }
 #endif
     }
+
+    private func handleDeleteTapped() {
+        if isEditingRecurringSeries {
+            showRecurringDeleteScopeDialog = true
+        } else {
+            showDeleteConfirm = true
+        }
+    }
+
+    private func performDelete(scope: RecurringEditScope) {
+        guard let event = editingEvent else { return }
+
+        switch scope {
+        case .allEvents:
+            deleteReminderIfNeeded(for: event)
+            event.syncState = .pendingDeleteLocal
+            event.needsSync = true
+            event.updatedAt = Date()
+            modelContext.delete(event)
+
+        case .thisEventOnly:
+            let exceptionDate = occurrenceAnchorDate
+
+            let cancelException = CalendarEvent(
+                title: event.title,
+                startDate: exceptionDate,
+                endDate: event.endDate,
+                allDay: event.allDay,
+                eventDescription: event.eventDescription,
+                color: event.color,
+                meetingUrl: event.meetingUrl,
+                location: event.location,
+                recurrenceRRule: nil,
+                timeZoneId: event.timeZoneId,
+                recurrence: nil,
+                recurrenceExceptions: [],
+                calendarId: event.calendarId,
+                serverId: nil,
+                syncState: .newLocal,
+                isRecurringSeriesMaster: false,
+                isRecurrenceException: true,
+                isCancelledOccurrence: true,
+                parentSeriesLocalId: event.localEventId,
+                splitFromSeriesLocalId: nil,
+                originalOccurrenceDate: exceptionDate,
+                splitEffectiveFrom: nil,
+                exceptionKind: .cancelled
+            )
+            cancelException.calendar = event.calendar
+            modelContext.insert(cancelException)
+
+            var exceptions = event.recurrenceExceptions
+            let key = recurringExceptionDateKey(exceptionDate)
+            if !exceptions.contains(key) {
+                exceptions.append(key)
+                event.recurrenceExceptions = exceptions.sorted()
+            }
+            event.needsSync = true
+            event.syncState = .modifiedLocal
+            event.updatedAt = Date()
+
+        case .thisAndFuture:
+            let splitDate = occurrenceAnchorDate
+            if let originalRule = event.recurrenceRRule {
+                event.recurrenceRRule = applyingUntil(originalRule, before: splitDate)
+            }
+            event.needsSync = true
+            event.syncState = .modifiedLocal
+            event.updatedAt = Date()
+
+            let splitDeletionMarker = CalendarEvent(
+                title: event.title,
+                startDate: splitDate,
+                endDate: event.endDate,
+                allDay: event.allDay,
+                eventDescription: event.eventDescription,
+                color: event.color,
+                meetingUrl: event.meetingUrl,
+                location: event.location,
+                recurrenceRRule: nil,
+                timeZoneId: event.timeZoneId,
+                recurrence: nil,
+                recurrenceExceptions: [],
+                calendarId: event.calendarId,
+                serverId: nil,
+                syncState: .newLocal,
+                isRecurringSeriesMaster: false,
+                isRecurrenceException: true,
+                isCancelledOccurrence: true,
+                parentSeriesLocalId: event.localEventId,
+                splitFromSeriesLocalId: event.localEventId,
+                originalOccurrenceDate: splitDate,
+                splitEffectiveFrom: splitDate,
+                exceptionKind: .split
+            )
+            splitDeletionMarker.calendar = event.calendar
+            modelContext.insert(splitDeletionMarker)
+        }
+
+        do {
+            try modelContext.save()
+        } catch {
+            print("❌ Failed to delete event: \(error)")
+        }
+
+        closeAction()
+    }
+
+    private func deleteReminderIfNeeded(for event: CalendarEvent) {
+        guard let rid = event.reminderServerId else { return }
+        NotificationManager.shared.cancelAllCalendarNotifications(id: rid)
+        if let reminder = findReminder(serverId: rid) {
+            modelContext.delete(reminder)
+        }
+        event.reminderServerId = nil
+    }
+}
+
 
 // MARK: - RRULE support (no exception dates)
 
@@ -2028,6 +2595,7 @@ struct ParsedRRule {
 }
 
 /// Convert Calendar weekday int (1=Sun..7=Sat) into an RFC-style RRULE BYDAY code.
+
 func weekdayCode(from weekday: Int) -> String {
     switch weekday {
     case 1: return "SU"
@@ -2038,6 +2606,262 @@ func weekdayCode(from weekday: Int) -> String {
     case 6: return "FR"
     case 7: return "SA"
     default: return "MO"
+    }
+}
+
+struct ResolvedCalendarOccurrence: Identifiable, Hashable {
+    let id: String
+    let sourceEventId: String
+    let originalOccurrenceDate: Date?
+    let startDate: Date
+    let endDate: Date?
+    let allDay: Bool
+    let title: String
+    let color: String?
+    let eventDescription: String?
+    let location: String?
+    let meetingUrl: String?
+    let calendarId: String?
+    let isException: Bool
+    let isCancelled: Bool
+}
+
+enum CalendarEventResolver {
+    static func occurrences(on day: Date, from events: [CalendarEvent], timeZone: TimeZone? = nil) -> [ResolvedCalendarOccurrence] {
+        let tz = timeZone ?? CalendarCompute.displayTimeZone
+        var cal = Calendar.current
+        cal.timeZone = tz
+
+        let dayStart = cal.startOfDay(for: day)
+        let dayEnd = cal.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+
+        let masters = events.filter { !$0.isRecurrenceException }
+        let exceptions = events.filter { $0.isRecurrenceException }
+
+        let exceptionsByParent = Dictionary(grouping: exceptions) { $0.parentSeriesLocalId ?? "" }
+
+        var resolved: [ResolvedCalendarOccurrence] = []
+
+        for master in masters {
+            let masterExceptions = exceptionsByParent[master.localEventId] ?? []
+
+            if master.recurrenceRRule == nil {
+                if occursInRange(start: master.startDate, end: master.endDate, dayStart: dayStart, dayEnd: dayEnd, calendar: cal) {
+                    resolved.append(makeOccurrence(from: master, startDate: master.startDate, endDate: master.endDate, originalOccurrenceDate: nil, isException: false, isCancelled: false))
+                }
+                continue
+            }
+
+            guard let rrule = master.recurrenceRRule,
+                  let parsed = ParsedRRule.parse(rrule) else {
+                continue
+            }
+
+            if hasSplitBlocking(masterExceptions: masterExceptions, on: dayStart, calendar: cal) {
+                continue
+            }
+
+            guard recurringMaster(master, occursOn: dayStart, parsed: parsed, calendar: cal) else {
+                continue
+            }
+
+            let occurrenceStart = occurrenceDate(for: dayStart, matching: master.startDate, calendar: cal, allDay: master.allDay)
+            let occurrenceEnd: Date? = {
+                guard let end = master.endDate else { return nil }
+                let duration = end.timeIntervalSince(master.startDate)
+                return occurrenceStart.addingTimeInterval(duration)
+            }()
+
+            let matchingExceptions = masterExceptions.filter {
+                guard let original = $0.originalOccurrenceDate else { return false }
+                return cal.isDate(original, inSameDayAs: dayStart)
+            }
+
+            if let cancelled = matchingExceptions.first(where: { $0.isCancelledOccurrence }) {
+                resolved.append(makeOccurrence(from: cancelled, startDate: occurrenceStart, endDate: occurrenceEnd, originalOccurrenceDate: cancelled.originalOccurrenceDate, isException: true, isCancelled: true))
+                continue
+            }
+
+            if let replacement = matchingExceptions.first(where: { !$0.isCancelledOccurrence }) {
+                if occursInRange(start: replacement.startDate, end: replacement.endDate, dayStart: dayStart, dayEnd: dayEnd, calendar: cal) {
+                    resolved.append(makeOccurrence(from: replacement, startDate: replacement.startDate, endDate: replacement.endDate, originalOccurrenceDate: replacement.originalOccurrenceDate, isException: true, isCancelled: false))
+                }
+                continue
+            }
+
+            resolved.append(makeOccurrence(from: master, startDate: occurrenceStart, endDate: occurrenceEnd, originalOccurrenceDate: occurrenceStart, isException: false, isCancelled: false))
+        }
+
+        return resolved
+            .filter { !$0.isCancelled }
+            .sorted { lhs, rhs in
+                if lhs.startDate == rhs.startDate {
+                    return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+                }
+                return lhs.startDate < rhs.startDate
+            }
+    }
+
+    private static func makeOccurrence(
+        from event: CalendarEvent,
+        startDate: Date,
+        endDate: Date?,
+        originalOccurrenceDate: Date?,
+        isException: Bool,
+        isCancelled: Bool
+    ) -> ResolvedCalendarOccurrence {
+        let originalKey: String = {
+            guard let originalOccurrenceDate else { return "base" }
+            return ISO8601DateFormatter().string(from: originalOccurrenceDate)
+        }()
+
+        return ResolvedCalendarOccurrence(
+            id: "\(event.localEventId)|\(originalKey)|\(isException ? "exception" : "base")",
+            sourceEventId: event.localEventId,
+            originalOccurrenceDate: originalOccurrenceDate,
+            startDate: startDate,
+            endDate: endDate,
+            allDay: event.allDay,
+            title: event.title,
+            color: event.color,
+            eventDescription: event.eventDescription,
+            location: event.location,
+            meetingUrl: event.meetingUrl,
+            calendarId: event.calendarId,
+            isException: isException,
+            isCancelled: isCancelled
+        )
+    }
+
+    private static func occursInRange(start: Date, end: Date?, dayStart: Date, dayEnd: Date, calendar: Calendar) -> Bool {
+        if calendar.isDate(start, inSameDayAs: dayStart) { return true }
+        if let end {
+            return start < dayEnd && end > dayStart
+        }
+        return false
+    }
+
+    private static func hasSplitBlocking(masterExceptions: [CalendarEvent], on day: Date, calendar: Calendar) -> Bool {
+        masterExceptions.contains { exception in
+            guard exception.exceptionKind == .split,
+                  exception.isCancelledOccurrence,
+                  let splitFrom = exception.splitEffectiveFrom ?? exception.originalOccurrenceDate else {
+                return false
+            }
+            return day >= calendar.startOfDay(for: splitFrom)
+        }
+    }
+
+    private static func occurrenceDate(for occurrenceDay: Date, matching sourceStart: Date, calendar: Calendar, allDay: Bool) -> Date {
+        if allDay {
+            return calendar.startOfDay(for: occurrenceDay)
+        }
+        let time = calendar.dateComponents([.hour, .minute, .second], from: sourceStart)
+        var day = calendar.dateComponents([.year, .month, .day], from: occurrenceDay)
+        day.hour = time.hour
+        day.minute = time.minute
+        day.second = time.second
+        return calendar.date(from: day) ?? occurrenceDay
+    }
+
+    private static func recurringMaster(_ event: CalendarEvent, occursOn day: Date, parsed: ParsedRRule, calendar: Calendar) -> Bool {
+        let seriesStartDay = calendar.startOfDay(for: event.startDate)
+        let targetDay = calendar.startOfDay(for: day)
+
+        if targetDay < seriesStartDay { return false }
+        if let until = parsed.until, targetDay > calendar.startOfDay(for: until) { return false }
+
+        let dayOffset = calendar.dateComponents([.day], from: seriesStartDay, to: targetDay).day ?? 0
+        let interval = max(1, parsed.interval)
+
+        switch parsed.freq {
+        case .daily:
+            return dayOffset % interval == 0
+
+        case .weekly:
+            let weekOffset = dayOffset / 7
+            guard weekOffset % interval == 0 else { return false }
+            let weekdayCodeForTarget = weekdayCode(from: calendar.component(.weekday, from: targetDay))
+            let byDay = parsed.byDay ?? [weekdayCode(from: calendar.component(.weekday, from: event.startDate))]
+            return byDay.contains(weekdayCodeForTarget)
+
+        case .monthly:
+            let monthDelta = monthsBetween(seriesStartDay, targetDay, calendar: calendar)
+            guard monthDelta >= 0, monthDelta % interval == 0 else { return false }
+
+            if let byMonthDay = parsed.byMonthDay, !byMonthDay.isEmpty {
+                let dayOfMonth = calendar.component(.day, from: targetDay)
+                return byMonthDay.contains(dayOfMonth)
+            }
+
+            if let byDay = parsed.byDay?.first,
+               let bySetPos = parsed.bySetPos {
+                return matchesNthWeekday(targetDay, weekdayCode: byDay, setPos: bySetPos, calendar: calendar)
+            }
+
+            return calendar.component(.day, from: targetDay) == calendar.component(.day, from: event.startDate)
+
+        case .yearly:
+            let yearDelta = (calendar.component(.year, from: targetDay) - calendar.component(.year, from: seriesStartDay))
+            guard yearDelta >= 0, yearDelta % interval == 0 else { return false }
+
+            let targetMonth = calendar.component(.month, from: targetDay)
+            let fallbackMonth = calendar.component(.month, from: event.startDate)
+            let allowedMonths = (parsed.byMonth?.isEmpty == false) ? parsed.byMonth! : [fallbackMonth]
+            guard allowedMonths.contains(targetMonth) else { return false }
+
+            if let byMonthDay = parsed.byMonthDay, !byMonthDay.isEmpty {
+                return byMonthDay.contains(calendar.component(.day, from: targetDay))
+            }
+
+            if let byDay = parsed.byDay?.first,
+               let bySetPos = parsed.bySetPos {
+                return matchesNthWeekday(targetDay, weekdayCode: byDay, setPos: bySetPos, calendar: calendar)
+            }
+
+            return targetMonth == fallbackMonth
+                && calendar.component(.day, from: targetDay) == calendar.component(.day, from: event.startDate)
+        }
+    }
+
+    private static func monthsBetween(_ start: Date, _ end: Date, calendar: Calendar) -> Int {
+        let startComps = calendar.dateComponents([.year, .month], from: start)
+        let endComps = calendar.dateComponents([.year, .month], from: end)
+        let startYear = startComps.year ?? 0
+        let startMonth = startComps.month ?? 1
+        let endYear = endComps.year ?? 0
+        let endMonth = endComps.month ?? 1
+        return (endYear - startYear) * 12 + (endMonth - startMonth)
+    }
+
+    private static func matchesNthWeekday(_ date: Date, weekdayCode: String, setPos: Int, calendar: Calendar) -> Bool {
+        let weekdayMap: [String: Int] = ["SU": 1, "MO": 2, "TU": 3, "WE": 4, "TH": 5, "FR": 6, "SA": 7]
+        guard let targetWeekday = weekdayMap[weekdayCode.uppercased()],
+              calendar.component(.weekday, from: date) == targetWeekday else {
+            return false
+        }
+
+        guard let monthInterval = calendar.dateInterval(of: .month, for: date) else { return false }
+        var matches: [Date] = []
+        var cursor = monthInterval.start
+
+        while cursor < monthInterval.end {
+            if calendar.component(.weekday, from: cursor) == targetWeekday,
+               calendar.isDate(cursor, equalTo: date, toGranularity: .month) {
+                matches.append(cursor)
+            }
+            cursor = calendar.date(byAdding: .day, value: 1, to: cursor) ?? monthInterval.end
+        }
+
+        guard !matches.isEmpty else { return false }
+
+        if setPos > 0 {
+            let index = setPos - 1
+            return matches.indices.contains(index) && calendar.isDate(matches[index], inSameDayAs: date)
+        } else {
+            let index = matches.count + setPos
+            return matches.indices.contains(index) && calendar.isDate(matches[index], inSameDayAs: date)
+        }
     }
 }
 
@@ -2299,7 +3123,6 @@ enum CalendarCompute {
     }
 }
 
-// MARK: - WeekdayPicker and ExceptionPills
 
 struct WeekdayPicker: View {
     @Binding var selected: Set<Int>
@@ -2366,3 +3189,4 @@ struct ExceptionPills: View {
         }
     }
 }
+

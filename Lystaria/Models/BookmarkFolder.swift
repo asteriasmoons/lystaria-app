@@ -13,6 +13,7 @@ final class BookmarkFolder {
     var name: String = ""
     var systemKey: String = ""   // use "inbox" for the default folder
     var iconName: String = "folder.fill"
+    var sortOrder: Int = 0
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
 
@@ -23,12 +24,14 @@ final class BookmarkFolder {
         name: String = "",
         systemKey: String = "",
         iconName: String = "folder.fill",
+        sortOrder: Int = 0,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
         self.name = name
         self.systemKey = systemKey
         self.iconName = iconName
+        self.sortOrder = sortOrder
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }

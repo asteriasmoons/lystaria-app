@@ -65,32 +65,22 @@ struct RemindersView: View {
                     }
                 }
             }
-            .overlay {
-                if showNewReminder {
-                    NewReminderSheet(onClose: {
-                        showNewReminder = false
-                    })
-                    .preferredColorScheme(.dark)
-                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
-                    .zIndex(50)
-                }
+            .fullScreenCover(isPresented: $showNewReminder) {
+                NewReminderSheet(onClose: {
+                    showNewReminder = false
+                })
+                .preferredColorScheme(.dark)
+            }
+            .fullScreenCover(item: $editingReminder) { r in
+                EditReminderSheet(
+                    onClose: { editingReminder = nil },
+                    reminder: r
+                )
+                .preferredColorScheme(.dark)
             }
             .navigationDestination(isPresented: $showKanban) {
                 KanbanView()
                     .preferredColorScheme(.dark)
-            }
-            .overlay {
-                if let r = editingReminder {
-                    EditReminderSheet(
-                        onClose: {
-                            editingReminder = nil
-                        },
-                        reminder: r
-                    )
-                    .preferredColorScheme(.dark)
-                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
-                    .zIndex(60)
-                }
             }
             .onReceive(NotificationCenter.default.publisher(for: .lystariaNotificationAction)) { note in
                 guard let info = note.userInfo,
@@ -129,18 +119,19 @@ struct RemindersView: View {
     }
 
     private var mainContent: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                headerSection
-                filtersSection
-                remindersSection
-                Spacer(minLength: 96)
+        GeometryReader { geo in
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 18) {
+                    headerSection
+                    filtersSection
+                    remindersSection
+                    Spacer(minLength: 96)
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 96)
+                .frame(width: geo.size.width, alignment: .leading)
             }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 96)
         }
-        .frame(maxWidth: .infinity)
-        .clipped()
     }
 
     private var headerSection: some View {
@@ -696,7 +687,7 @@ struct ReminderCard: View {
                 }
             },
             width: 560,
-            heightRatio: 0.72
+            heightRatio: 0.82
         ) {
             HStack {
                 GradientTitle(text: "Reschedule Reminder", font: .title2.bold())
@@ -859,17 +850,15 @@ struct ReminderCard: View {
                     }
                 }
             }
-            .modifier(
-                LystariaConfirmDialog(
-                    isPresented: $showingDeleteConfirm,
-                    title: "Delete Reminder?",
-                    message: "This reminder will be removed.",
-                    confirmTitle: "Delete",
-                    confirmRole: .destructive
-                ) {
-                    onDelete()
-                }
-            )
+            .lystariaAlertConfirm(
+                isPresented: $showingDeleteConfirm,
+                title: "Delete Reminder?",
+                message: "This reminder will be removed.",
+                confirmTitle: "Delete",
+                confirmRole: .destructive
+            ) {
+                onDelete()
+            }
             .fullScreenCover(isPresented: $showingReschedulePopup) {
                 ZStack {
                     Color.clear
@@ -894,6 +883,7 @@ struct NewReminderSheet: View {
     @FocusState private var focusedChecklistIndex: Int?
 
     @State private var onceDateTime = Date()
+    @FocusState private var detailsFocused: Bool
 
     @State private var scheduleKind: ReminderScheduleKind = .once
     @State private var startDay = Date()
@@ -904,16 +894,8 @@ struct NewReminderSheet: View {
     @State private var dayOfMonth: Int = Calendar.current.component(.day, from: Date())
     @State private var anchorMonth: Int = Calendar.current.component(.month, from: Date())
     @State private var anchorDay: Int = Calendar.current.component(.day, from: Date())
-
-    private let weekdays = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]
-    private var monthSymbols: [String] { Calendar.current.monthSymbols }
-
-    private var maxAnchorDay: Int {
-        var comps = DateComponents()
-        comps.year = 2024
-        comps.month = anchorMonth
-        return Calendar.current.range(of: .day, in: .month, for: Calendar.current.date(from: comps) ?? Date())?.count ?? 31
-    }
+    @State private var monthlyMode: ReminderScheduleForm.MonthlyMode = .sameDay
+    @State private var yearlyMode: ReminderScheduleForm.YearlyMode = .sameDay
 
     private var canSave: Bool {
         if titleTrimmed.isEmpty { return false }
@@ -923,58 +905,17 @@ struct NewReminderSheet: View {
     private var titleTrimmed: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     var body: some View {
-        LystariaOverlayPopup(
-            onClose: {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                    onClose()
-                }
-            },
-            width: 560,
-            heightRatio: 0.82
+        LystariaFullScreenForm(
+            title: "New Reminder",
+            onCancel: { onClose() },
+            canSave: canSave,
+            onSave: { save() }
         ) {
-            header
-        } content: {
-            content
-        } footer: {
-            footer
-        }
-        .onAppear {
-            // nothing to preload for new reminders
-        }
-        .onChange(of: checklistEntries) { _, _ in
-            // items saved on Save tap
+            formContent
         }
     }
 
-    private var header: some View {
-        HStack {
-            GradientTitle(text: "New Reminder", font: .title2.bold())
-            Spacer()
-
-            Button("Save") { save() }
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(canSave ? LColors.accent : Color.gray.opacity(0.3))
-                .clipShape(Capsule())
-                .buttonStyle(.plain)
-                .disabled(!canSave)
-
-            Button {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                    onClose()
-                }
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.title2)
-                    .foregroundStyle(LColors.textSecondary)
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    private var content: some View {
+    private var formContent: some View {
         VStack(spacing: 20) {
             LabeledGlassField(label: "TEXT") {
                 TextField("Reminder title", text: $title)
@@ -991,6 +932,7 @@ struct NewReminderSheet: View {
                     .frame(minHeight: 120)
                     .scrollContentBackground(.hidden)
                     .foregroundStyle(LColors.textPrimary)
+                    .focused($detailsFocused)
 #if os(iOS) || os(visionOS)
                     .textInputAutocapitalization(.sentences)
                     .disableAutocorrection(false)
@@ -1050,260 +992,22 @@ struct NewReminderSheet: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("REPEAT")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(LColors.textSecondary)
-                    .tracking(0.5)
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(ReminderScheduleKind.allCases, id: \.self) { kind in
-                            let on = scheduleKind == kind
-                            Button { scheduleKind = kind } label: {
-                                Text(kind.label)
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(on ? .white : LColors.textPrimary)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 8)
-                                    .background(on ? LColors.accent : Color.white.opacity(0.08))
-                                    .clipShape(Capsule())
-                                    .overlay(
-                                        Capsule().stroke(on ? LColors.accent : LColors.glassBorder, lineWidth: 1)
-                                    )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-            }
-
-            GlassCard(padding: 16) {
-                VStack(spacing: 12) {
-                    if scheduleKind == .once {
-#if os(macOS)
-                        LDateStepperRow(label: "Date", dateTime: $onceDateTime)
-                        LTimeEntryRow(label: "Time", dateTime: $onceDateTime)
-#else
-                        LystariaControlRow(label: nil) {
-                            DatePicker("", selection: $onceDateTime, displayedComponents: [.date, .hourAndMinute])
-                                .labelsHidden()
-                                .datePickerStyle(.compact)
-                                .tint(LColors.accent)
-                        }
-#endif
-                    } else {
-#if os(macOS)
-                        LDateStepperRow(label: "Start Day", dateTime: $startDay)
-                        VStack(alignment: .leading, spacing: 10) {
-                            ForEach(Array(timesOfDay.indices), id: \.self) { idx in
-                                LTimeEntryRow(label: idx == 0 ? "Time" : "Time \(idx + 1)", dateTime: Binding(
-                                    get: { timesOfDay[idx] },
-                                    set: { timesOfDay[idx] = $0 }
-                                ))
-                            }
-
-                            timeButtons
-                        }
-#else
-                        LystariaControlRow(label: "Start Day") {
-                            DatePicker("", selection: $startDay, in: Date()..., displayedComponents: [.date])
-                                .labelsHidden()
-                                .datePickerStyle(.compact)
-                                .tint(LColors.accent)
-                        }
-
-                        VStack(alignment: .leading, spacing: 10) {
-                            ForEach(Array(timesOfDay.indices), id: \.self) { idx in
-                                LystariaControlRow(label: idx == 0 ? "Time" : "Time \(idx + 1)") {
-                                    DatePicker(
-                                        "",
-                                        selection: Binding(
-                                            get: { timesOfDay[idx] },
-                                            set: { timesOfDay[idx] = $0 }
-                                        ),
-                                        displayedComponents: .hourAndMinute
-                                    )
-                                    .labelsHidden()
-                                    .datePickerStyle(.compact)
-                                    .tint(LColors.accent)
-                                }
-                            }
-
-                            timeButtons
-                        }
-#endif
-
-                        if scheduleKind != .interval {
-                            LystariaControlRow(label: nil) {
-                                let unit: String = {
-                                    switch scheduleKind {
-                                    case .daily: return recurrenceInterval == 1 ? "day" : "days"
-                                    case .weekly: return recurrenceInterval == 1 ? "week" : "weeks"
-                                    case .monthly: return recurrenceInterval == 1 ? "month" : "months"
-                                    case .yearly: return recurrenceInterval == 1 ? "year" : "years"
-                                    default: return "unit"
-                                    }
-                                }()
-
-                                HStack(spacing: 10) {
-                                    Text("Every")
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(LColors.textPrimary)
-
-                                    Picker("Every", selection: $recurrenceInterval) {
-                                        ForEach(1...30, id: \.self) { n in
-                                            Text("\(n)").tag(n)
-                                        }
-                                    }
-                                    .pickerStyle(.menu)
-                                    .tint(LColors.accent)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .background(Color.white.opacity(0.06))
-                                    .clipShape(Capsule())
-                                    .overlay(
-                                        Capsule().stroke(LColors.glassBorder, lineWidth: 1)
-                                    )
-
-                                    Text(unit)
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(LColors.textPrimary)
-
-                                    Spacer()
-                                }
-                            }
-                        }
-
-                        if scheduleKind == .weekly {
-                            HStack(spacing: 6) {
-                                ForEach(0..<7, id: \.self) { d in
-                                    let on = selectedDays.contains(d)
-                                    Button {
-                                        if on { selectedDays.remove(d) } else { selectedDays.insert(d) }
-                                    } label: {
-                                        Text(weekdays[d])
-                                            .font(.system(size: 12, weight: .semibold))
-                                            .frame(width: 36, height: 36)
-                                            .background(on ? LColors.accent : Color.white.opacity(0.08))
-                                            .foregroundStyle(on ? .white : LColors.textPrimary)
-                                            .clipShape(Circle())
-                                            .overlay(Circle().stroke(on ? .clear : LColors.glassBorder, lineWidth: 1))
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                            .padding(.top, 4)
-                        }
-
-                        if scheduleKind == .monthly {
-                            LystariaControlRow(label: "Day of Month") {
-                                Stepper(value: $dayOfMonth, in: 1...31, step: 1) {
-                                    Text("\(dayOfMonth)")
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(LColors.textPrimary)
-                                }
-                                .labelsHidden()
-                            }
-                        }
-
-                        if scheduleKind == .yearly {
-                            LystariaControlRow(label: "Month") {
-                                Picker("Month", selection: $anchorMonth) {
-                                    ForEach(1...12, id: \.self) { month in
-                                        Text(monthSymbols[month - 1]).tag(month)
-                                    }
-                                }
-                                .pickerStyle(.menu)
-                                .tint(LColors.accent)
-                                .onChange(of: anchorMonth) { _, _ in
-                                    anchorDay = min(anchorDay, maxAnchorDay)
-                                }
-                            }
-
-                            LystariaControlRow(label: "Day") {
-                                Picker("Day", selection: $anchorDay) {
-                                    ForEach(1...maxAnchorDay, id: \.self) { day in
-                                        Text("\(day)").tag(day)
-                                    }
-                                }
-                                .pickerStyle(.menu)
-                                .tint(LColors.accent)
-                            }
-                        }
-
-                        if scheduleKind == .interval {
-                            LystariaControlRow(label: "Interval") {
-                                Stepper(value: $intervalMinutes, in: 5...1440, step: 5) {
-                                    Text("\(intervalMinutes) min")
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(LColors.textPrimary)
-                                }
-                                .labelsHidden()
-                            }
-                        }
-                    }
-                }
-            }
+            ReminderScheduleForm(
+                scheduleKind: $scheduleKind,
+                startDay: $startDay,
+                onceDateTime: $onceDateTime,
+                timesOfDay: $timesOfDay,
+                selectedDays: $selectedDays,
+                recurrenceInterval: $recurrenceInterval,
+                intervalMinutes: $intervalMinutes,
+                monthlyMode: $monthlyMode,
+                dayOfMonth: $dayOfMonth,
+                yearlyMode: $yearlyMode,
+                anchorMonth: $anchorMonth,
+                anchorDay: $anchorDay
+            )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var footer: some View {
-        GlassCard(padding: 14) {
-            Button { save() } label: {
-                Text("Save")
-                    .font(.headline)
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(
-                        canSave
-                        ? AnyShapeStyle(LGradients.blue)
-                        : AnyShapeStyle(Color.gray.opacity(0.3))
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
-            }
-            .buttonStyle(.plain)
-            .disabled(!canSave)
-        }
-    }
-
-    private var timeButtons: some View {
-        HStack(spacing: 10) {
-            Button {
-                timesOfDay.append(timesOfDay.last ?? Date())
-            } label: {
-                Text("Add Time")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(LColors.accent)
-                    .clipShape(Capsule())
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                if timesOfDay.count > 1 {
-                    timesOfDay.removeLast()
-                }
-            } label: {
-                Text("Remove")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color.white.opacity(0.10))
-                    .clipShape(Capsule())
-                    .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
-            }
-            .buttonStyle(.plain)
-            .disabled(timesOfDay.count <= 1)
-
-            Spacer()
-        }
-        .padding(.top, 2)
     }
 
     private func save() {
@@ -1330,15 +1034,31 @@ struct NewReminderSheet: View {
 
                 let primary = timeStrings.first
 
+                let resolvedDayOfMonth: Int? = {
+                    guard self.scheduleKind == .monthly else { return nil }
+                    if self.monthlyMode == .specificDay { return self.dayOfMonth }
+                    return nil // sameDay = engine uses start day
+                }()
+                let resolvedAnchorMonth: Int? = {
+                    guard self.scheduleKind == .yearly else { return nil }
+                    if self.yearlyMode == .specificDate { return self.anchorMonth }
+                    return nil
+                }()
+                let resolvedAnchorDay: Int? = {
+                    guard self.scheduleKind == .yearly else { return nil }
+                    if self.yearlyMode == .specificDate { return self.anchorDay }
+                    return nil
+                }()
+
                 schedule = ReminderSchedule(
                     kind: self.scheduleKind,
                     timeOfDay: primary,
                     timesOfDay: timeStrings,
                     interval: self.scheduleKind == .interval ? nil : self.recurrenceInterval,
                     daysOfWeek: self.scheduleKind == .weekly ? Array(self.selectedDays).sorted() : nil,
-                    dayOfMonth: self.scheduleKind == .monthly ? self.dayOfMonth : nil,
-                    anchorMonth: self.scheduleKind == .yearly ? self.anchorMonth : nil,
-                    anchorDay: self.scheduleKind == .yearly ? self.anchorDay : nil,
+                    dayOfMonth: resolvedDayOfMonth,
+                    anchorMonth: resolvedAnchorMonth,
+                    anchorDay: resolvedAnchorDay,
                     intervalMinutes: self.scheduleKind == .interval ? self.intervalMinutes : nil
                 )
 
@@ -1349,9 +1069,9 @@ struct NewReminderSheet: View {
                     daysOfWeek: self.scheduleKind == .weekly ? Array(self.selectedDays) : nil,
                     intervalMinutes: self.scheduleKind == .interval ? self.intervalMinutes : nil,
                     recurrenceInterval: self.scheduleKind == .interval ? nil : self.recurrenceInterval,
-                    dayOfMonth: self.scheduleKind == .monthly ? self.dayOfMonth : nil,
-                    anchorMonth: self.scheduleKind == .yearly ? self.anchorMonth : nil,
-                    anchorDay: self.scheduleKind == .yearly ? self.anchorDay : nil
+                    dayOfMonth: resolvedDayOfMonth,
+                    anchorMonth: resolvedAnchorMonth,
+                    anchorDay: resolvedAnchorDay
                 )
             }
 
@@ -1393,6 +1113,7 @@ struct EditReminderSheet: View {
 
     @State private var scheduleKind: ReminderScheduleKind = .once
     @State private var onceDateTime = Date()
+    @FocusState private var detailsFocused: Bool
 
     @State private var startDay = Date()
     @State private var timesOfDay: [Date] = [Date()]
@@ -1402,16 +1123,8 @@ struct EditReminderSheet: View {
     @State private var dayOfMonth: Int = Calendar.current.component(.day, from: Date())
     @State private var anchorMonth: Int = Calendar.current.component(.month, from: Date())
     @State private var anchorDay: Int = Calendar.current.component(.day, from: Date())
-
-    private let weekdays = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]
-    private var monthSymbols: [String] { Calendar.current.monthSymbols }
-
-    private var maxAnchorDay: Int {
-        var comps = DateComponents()
-        comps.year = 2024
-        comps.month = anchorMonth
-        return Calendar.current.range(of: .day, in: .month, for: Calendar.current.date(from: comps) ?? Date())?.count ?? 31
-    }
+    @State private var monthlyMode: ReminderScheduleForm.MonthlyMode = .sameDay
+    @State private var yearlyMode: ReminderScheduleForm.YearlyMode = .sameDay
 
     private var canSave: Bool {
         if titleTrimmed.isEmpty { return false }
@@ -1421,56 +1134,18 @@ struct EditReminderSheet: View {
     private var titleTrimmed: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     var body: some View {
-        LystariaOverlayPopup(
-            onClose: {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                    onClose()
-                }
-            },
-            width: 560,
-            heightRatio: 0.82
+        LystariaFullScreenForm(
+            title: "Edit Reminder",
+            onCancel: { onClose() },
+            canSave: canSave,
+            onSave: { apply() }
         ) {
-            header
-        } content: {
-            content
-        } footer: {
-            footer
+            formContent
         }
         .onAppear { loadFromModel() }
-        .onChange(of: checklistEntries) { _, _ in
-            // items saved on Save tap
-        }
     }
 
-    private var header: some View {
-        HStack {
-            GradientTitle(text: "Edit Reminder", font: .title2.bold())
-            Spacer()
-
-            Button("Save") { apply() }
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(canSave ? LColors.accent : Color.gray.opacity(0.3))
-                .clipShape(Capsule())
-                .buttonStyle(.plain)
-                .disabled(!canSave)
-
-            Button {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                    onClose()
-                }
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.title2)
-                    .foregroundStyle(LColors.textSecondary)
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    private var content: some View {
+    private var formContent: some View {
         VStack(spacing: 20) {
             LabeledGlassField(label: "TEXT") {
                 TextField("Reminder title", text: $title)
@@ -1489,6 +1164,7 @@ struct EditReminderSheet: View {
                     .frame(minHeight: 120)
                     .scrollContentBackground(.hidden)
                     .foregroundStyle(LColors.textPrimary)
+                    .focused($detailsFocused)
 #if os(iOS) || os(visionOS)
                     .textInputAutocapitalization(.sentences)
                     .disableAutocorrection(false)
@@ -1552,269 +1228,22 @@ struct EditReminderSheet: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("REPEAT")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(LColors.textSecondary)
-                    .tracking(0.5)
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(ReminderScheduleKind.allCases, id: \.self) { kind in
-                            let on = scheduleKind == kind
-                            Button { scheduleKind = kind } label: {
-                                Text(kind.label)
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(on ? .white : LColors.textPrimary)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 8)
-                                    .background(on ? LColors.accent : Color.white.opacity(0.08))
-                                    .clipShape(Capsule())
-                                    .overlay(
-                                        Capsule().stroke(on ? LColors.accent : LColors.glassBorder, lineWidth: 1)
-                                    )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-            }
-
-            GlassCard(padding: 16) {
-                VStack(spacing: 12) {
-                    if scheduleKind == .once {
-#if os(macOS)
-                        LDateStepperRow(label: "Date", dateTime: $onceDateTime)
-                        LTimeEntryRow(label: "Time", dateTime: $onceDateTime)
-#else
-                        LystariaControlRow(label: "Date & Time") {
-                            DatePicker("", selection: $onceDateTime, displayedComponents: [.date, .hourAndMinute])
-                                .labelsHidden()
-                                .datePickerStyle(.compact)
-                                .tint(LColors.accent)
-                        }
-#endif
-                    } else {
-#if os(macOS)
-                        LDateStepperRow(label: "Start Day", dateTime: $startDay)
-                        VStack(alignment: .leading, spacing: 10) {
-                            ForEach(Array(timesOfDay.indices), id: \.self) { idx in
-                                LTimeEntryRow(
-                                    label: idx == 0 ? "Time" : "Time \(idx + 1)",
-                                    dateTime: Binding(
-                                        get: { timesOfDay[idx] },
-                                        set: { timesOfDay[idx] = $0 }
-                                    )
-                                )
-                            }
-
-                            recurringTimeButtons
-                        }
-#else
-                        LystariaControlRow(label: "Start Day") {
-                            DatePicker("", selection: $startDay, displayedComponents: [.date])
-                                .labelsHidden()
-                                .datePickerStyle(.compact)
-                                .tint(LColors.accent)
-                        }
-
-                        VStack(alignment: .leading, spacing: 10) {
-                            ForEach(Array(timesOfDay.indices), id: \.self) { idx in
-                                LystariaControlRow(label: idx == 0 ? "Time" : "Time \(idx + 1)") {
-                                    DatePicker(
-                                        "",
-                                        selection: Binding(
-                                            get: { timesOfDay[idx] },
-                                            set: { timesOfDay[idx] = $0 }
-                                        ),
-                                        displayedComponents: .hourAndMinute
-                                    )
-                                    .labelsHidden()
-                                    .datePickerStyle(.compact)
-                                    .tint(LColors.accent)
-                                }
-                            }
-
-                            recurringTimeButtons
-                        }
-#endif
-
-                        if scheduleKind != .interval {
-                            LystariaControlRow(label: nil) {
-                                let unit: String = {
-                                    switch scheduleKind {
-                                    case .daily: return recurrenceInterval == 1 ? "day" : "days"
-                                    case .weekly: return recurrenceInterval == 1 ? "week" : "weeks"
-                                    case .monthly: return recurrenceInterval == 1 ? "month" : "months"
-                                    case .yearly: return recurrenceInterval == 1 ? "year" : "years"
-                                    default: return "unit"
-                                    }
-                                }()
-
-                                HStack(spacing: 10) {
-                                    Text("Every")
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(LColors.textPrimary)
-
-                                    Picker("Every", selection: $recurrenceInterval) {
-                                        ForEach(1...30, id: \.self) { n in
-                                            Text("\(n)").tag(n)
-                                        }
-                                    }
-                                    .pickerStyle(.menu)
-                                    .tint(LColors.accent)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .background(Color.white.opacity(0.06))
-                                    .clipShape(Capsule())
-                                    .overlay(
-                                        Capsule().stroke(LColors.glassBorder, lineWidth: 1)
-                                    )
-
-                                    Text(unit)
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(LColors.textPrimary)
-
-                                    Spacer()
-                                }
-                            }
-                        }
-
-                        if scheduleKind == .weekly {
-                            HStack(spacing: 6) {
-                                ForEach(0..<7, id: \.self) { d in
-                                    let on = selectedDays.contains(d)
-                                    Button {
-                                        if on {
-                                            selectedDays.remove(d)
-                                        } else {
-                                            selectedDays.insert(d)
-                                        }
-                                    } label: {
-                                        Text(weekdays[d])
-                                            .font(.system(size: 12, weight: .semibold))
-                                            .frame(width: 36, height: 36)
-                                            .background(on ? LColors.accent : Color.white.opacity(0.08))
-                                            .foregroundStyle(on ? .white : LColors.textPrimary)
-                                            .clipShape(Circle())
-                                            .overlay(
-                                                Circle().stroke(on ? .clear : LColors.glassBorder, lineWidth: 1)
-                                            )
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                            .padding(.top, 4)
-                        }
-
-                        if scheduleKind == .monthly {
-                            LystariaControlRow(label: "Day of Month") {
-                                Stepper(value: $dayOfMonth, in: 1...31, step: 1) {
-                                    Text("\(dayOfMonth)")
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(LColors.textPrimary)
-                                }
-                                .labelsHidden()
-                            }
-                        }
-
-                        if scheduleKind == .yearly {
-                            LystariaControlRow(label: "Month") {
-                                Picker("Month", selection: $anchorMonth) {
-                                    ForEach(1...12, id: \.self) { month in
-                                        Text(monthSymbols[month - 1]).tag(month)
-                                    }
-                                }
-                                .pickerStyle(.menu)
-                                .tint(LColors.accent)
-                                .onChange(of: anchorMonth) { _, _ in
-                                    anchorDay = min(anchorDay, maxAnchorDay)
-                                }
-                            }
-
-                            LystariaControlRow(label: "Day") {
-                                Picker("Day", selection: $anchorDay) {
-                                    ForEach(1...maxAnchorDay, id: \.self) { day in
-                                        Text("\(day)").tag(day)
-                                    }
-                                }
-                                .pickerStyle(.menu)
-                                .tint(LColors.accent)
-                            }
-                        }
-
-                        if scheduleKind == .interval {
-                            LystariaControlRow(label: "Interval") {
-                                Stepper(value: $intervalMinutes, in: 5...1440, step: 5) {
-                                    Text("\(intervalMinutes) min")
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(LColors.textPrimary)
-                                }
-                                .labelsHidden()
-                            }
-                        }
-                    }
-                }
-            }
+            ReminderScheduleForm(
+                scheduleKind: $scheduleKind,
+                startDay: $startDay,
+                onceDateTime: $onceDateTime,
+                timesOfDay: $timesOfDay,
+                selectedDays: $selectedDays,
+                recurrenceInterval: $recurrenceInterval,
+                intervalMinutes: $intervalMinutes,
+                monthlyMode: $monthlyMode,
+                dayOfMonth: $dayOfMonth,
+                yearlyMode: $yearlyMode,
+                anchorMonth: $anchorMonth,
+                anchorDay: $anchorDay
+            )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var footer: some View {
-        GlassCard(padding: 14) {
-            Button { apply() } label: {
-                Text("Save")
-                    .font(.headline)
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(
-                        canSave
-                        ? AnyShapeStyle(LGradients.blue)
-                        : AnyShapeStyle(Color.gray.opacity(0.3))
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
-            }
-            .buttonStyle(.plain)
-            .disabled(!canSave)
-        }
-    }
-
-    private var recurringTimeButtons: some View {
-        HStack(spacing: 10) {
-            Button {
-                timesOfDay.append(timesOfDay.last ?? Date())
-            } label: {
-                Text("Add Time")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(LColors.accent)
-                    .clipShape(Capsule())
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                if timesOfDay.count > 1 {
-                    timesOfDay.removeLast()
-                }
-            } label: {
-                Text("Remove")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color.white.opacity(0.10))
-                    .clipShape(Capsule())
-                    .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
-            }
-            .buttonStyle(.plain)
-            .disabled(timesOfDay.count <= 1)
-
-            Spacer()
-        }
-        .padding(.top, 2)
     }
 
     private func loadFromModel() {
@@ -1863,11 +1292,28 @@ struct EditReminderSheet: View {
 
             selectedDays = Set(reminder.schedule?.daysOfWeek ?? [])
             recurrenceInterval = max(1, reminder.schedule?.interval ?? 1)
-            dayOfMonth = reminder.schedule?.dayOfMonth ?? Calendar.current.component(.day, from: reminder.nextRunAt)
-            anchorMonth = reminder.schedule?.anchorMonth ?? Calendar.current.component(.month, from: reminder.nextRunAt)
-            anchorDay = reminder.schedule?.anchorDay ?? Calendar.current.component(.day, from: reminder.nextRunAt)
-            anchorDay = min(anchorDay, maxAnchorDay)
             intervalMinutes = reminder.schedule?.intervalMinutes ?? 60
+
+            // Monthly: restore mode from stored dayOfMonth
+            if let storedDay = reminder.schedule?.dayOfMonth {
+                dayOfMonth = storedDay
+                monthlyMode = .specificDay
+            } else {
+                dayOfMonth = Calendar.current.component(.day, from: reminder.nextRunAt)
+                monthlyMode = .sameDay
+            }
+
+            // Yearly: restore mode from stored anchorMonth/anchorDay
+            if let storedMonth = reminder.schedule?.anchorMonth,
+               let storedDay = reminder.schedule?.anchorDay {
+                anchorMonth = storedMonth
+                anchorDay = storedDay
+                yearlyMode = .specificDate
+            } else {
+                anchorMonth = Calendar.current.component(.month, from: reminder.nextRunAt)
+                anchorDay = Calendar.current.component(.day, from: reminder.nextRunAt)
+                yearlyMode = .sameDay
+            }
             print("[EditReminderSheet] Recurring: startDay=\(startDay), timesOfDay=\(self.timesOfDay), days=\(selectedDays.sorted()), intervalMinutes=\(intervalMinutes)")
         }
     }
@@ -1906,15 +1352,31 @@ struct EditReminderSheet: View {
 
                 let primary = timeStrings.first
 
+                let resolvedDayOfMonth: Int? = {
+                    guard self.scheduleKind == .monthly else { return nil }
+                    if self.monthlyMode == .specificDay { return self.dayOfMonth }
+                    return nil // sameDay = engine uses start day
+                }()
+                let resolvedAnchorMonth: Int? = {
+                    guard self.scheduleKind == .yearly else { return nil }
+                    if self.yearlyMode == .specificDate { return self.anchorMonth }
+                    return nil
+                }()
+                let resolvedAnchorDay: Int? = {
+                    guard self.scheduleKind == .yearly else { return nil }
+                    if self.yearlyMode == .specificDate { return self.anchorDay }
+                    return nil
+                }()
+
                 schedule = ReminderSchedule(
                     kind: self.scheduleKind,
                     timeOfDay: primary,
                     timesOfDay: timeStrings,
                     interval: self.scheduleKind == .interval ? nil : self.recurrenceInterval,
                     daysOfWeek: self.scheduleKind == .weekly ? Array(self.selectedDays).sorted() : nil,
-                    dayOfMonth: self.scheduleKind == .monthly ? self.dayOfMonth : nil,
-                    anchorMonth: self.scheduleKind == .yearly ? self.anchorMonth : nil,
-                    anchorDay: self.scheduleKind == .yearly ? self.anchorDay : nil,
+                    dayOfMonth: resolvedDayOfMonth,
+                    anchorMonth: resolvedAnchorMonth,
+                    anchorDay: resolvedAnchorDay,
                     intervalMinutes: self.scheduleKind == .interval ? self.intervalMinutes : nil
                 )
 
@@ -1925,9 +1387,9 @@ struct EditReminderSheet: View {
                     daysOfWeek: self.scheduleKind == .weekly ? Array(self.selectedDays) : nil,
                     intervalMinutes: self.scheduleKind == .interval ? self.intervalMinutes : nil,
                     recurrenceInterval: self.scheduleKind == .interval ? nil : self.recurrenceInterval,
-                    dayOfMonth: self.scheduleKind == .monthly ? self.dayOfMonth : nil,
-                    anchorMonth: self.scheduleKind == .yearly ? self.anchorMonth : nil,
-                    anchorDay: self.scheduleKind == .yearly ? self.anchorDay : nil
+                    dayOfMonth: resolvedDayOfMonth,
+                    anchorMonth: resolvedAnchorMonth,
+                    anchorDay: resolvedAnchorDay
                 )
             }
 
@@ -1946,6 +1408,459 @@ struct EditReminderSheet: View {
 
             self.onClose()
         }
+    }
+}
+
+
+// MARK: - Shared Schedule Form
+
+/// Drop-in schedule configuration UI used by both NewReminderSheet and EditReminderSheet.
+/// Covers every schedule kind the engine supports with proper pickers instead of steppers.
+struct ReminderScheduleForm: View {
+
+    // MARK: Bindings
+    @Binding var scheduleKind: ReminderScheduleKind
+    @Binding var startDay: Date
+    @Binding var onceDateTime: Date
+    @Binding var timesOfDay: [Date]           // recurring times
+    @Binding var selectedDays: Set<Int>       // weekly days (0=Sun … 6=Sat)
+    @Binding var recurrenceInterval: Int      // every N days/weeks/months/years
+    @Binding var intervalMinutes: Int         // for .interval kind
+    @Binding var monthlyMode: MonthlyMode     // .sameDay | .specificDay
+    @Binding var dayOfMonth: Int              // 1-31 for .specificDay
+    @Binding var yearlyMode: YearlyMode       // .sameDay | .specificDate
+    @Binding var anchorMonth: Int
+    @Binding var anchorDay: Int
+
+    // MARK: Supporting types
+    enum MonthlyMode: String, CaseIterable {
+        case sameDay    = "Same day as start"
+        case specificDay = "Specific day"
+    }
+
+    enum YearlyMode: String, CaseIterable {
+        case sameDay     = "Same day as start"
+        case specificDate = "Specific date"
+    }
+
+    // MARK: Private helpers
+    private let weekdays = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]
+    private var monthSymbols: [String] { Calendar.current.monthSymbols }
+
+    private var intervalUnit: String {
+        let plural = recurrenceInterval != 1
+        switch scheduleKind {
+        case .daily:   return plural ? "days"   : "day"
+        case .weekly:  return plural ? "weeks"  : "week"
+        case .monthly: return plural ? "months" : "month"
+        case .yearly:  return plural ? "years"  : "year"
+        default:       return ""
+        }
+    }
+
+    private var maxAnchorDay: Int {
+        var comps = DateComponents()
+        comps.year  = 2024
+        comps.month = anchorMonth
+        return Calendar.current.range(of: .day, in: .month,
+            for: Calendar.current.date(from: comps) ?? Date())?.count ?? 31
+    }
+
+    private func intervalLabel(for minutes: Int) -> String {
+        if minutes % 60 == 0 {
+            let hours = minutes / 60
+            return hours == 1 ? "1 hour" : "\(hours) hours"
+        }
+        return "\(minutes) min"
+    }
+
+    // MARK: Body
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+
+            // ── Kind picker ──────────────────────────────────────────────
+            VStack(alignment: .leading, spacing: 8) {
+                Text("REPEAT")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(LColors.textSecondary)
+                    .tracking(0.5)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(ReminderScheduleKind.allCases, id: \.self) { kind in
+                            let on = scheduleKind == kind
+                            Button { scheduleKind = kind } label: {
+                                Text(kind.label)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(on ? .white : LColors.textPrimary)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 8)
+                                    .background(on ? LColors.accent : Color.white.opacity(0.08))
+                                    .clipShape(Capsule())
+                                    .overlay(Capsule().stroke(on ? LColors.accent : LColors.glassBorder, lineWidth: 1))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+
+            // ── Schedule details card ────────────────────────────────────
+            GlassCard(padding: 16) {
+                VStack(spacing: 14) {
+
+                    // ── Once ────────────────────────────────────────────
+                    if scheduleKind == .once {
+#if os(macOS)
+                        LDateStepperRow(label: "Date & Time", dateTime: $onceDateTime)
+                        LTimeEntryRow(label: "Time", dateTime: $onceDateTime)
+#else
+                        LystariaControlRow(label: "Date & Time") {
+                            DatePicker("", selection: $onceDateTime,
+                                       displayedComponents: [.date, .hourAndMinute])
+                                .labelsHidden()
+                                .datePickerStyle(.compact)
+                                .tint(LColors.accent)
+                        }
+#endif
+
+                    // ── Interval ─────────────────────────────────────────
+                    } else if scheduleKind == .interval {
+                        LystariaControlRow(label: "Repeat every") {
+                            Picker("", selection: $intervalMinutes) {
+                                ForEach(Array(stride(from: 5, through: 1440, by: 5)), id: \.self) { minutes in
+                                    Text(intervalLabel(for: minutes)).tag(minutes)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .tint(LColors.accent)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(Capsule())
+                            .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
+                        }
+
+                    // ── Daily / Weekly / Monthly / Yearly ─────────────────
+                    } else {
+                        // Start day
+#if os(macOS)
+                        LDateStepperRow(label: "Start Day", dateTime: $startDay)
+#else
+                        LystariaControlRow(label: "Start Day") {
+                            DatePicker("", selection: $startDay,
+                                       in: Date()..., displayedComponents: [.date])
+                                .labelsHidden()
+                                .datePickerStyle(.compact)
+                                .tint(LColors.accent)
+                        }
+#endif
+
+                        // Times of day
+                        timeOfDaySection
+
+                        // Every N
+                        LystariaControlRow(label: nil) {
+                            HStack(spacing: 12) {
+                                Text("Every")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(LColors.textPrimary)
+
+                                Button {
+                                    if recurrenceInterval > 1 {
+                                        recurrenceInterval -= 1
+                                    }
+                                } label: {
+                                    Image(systemName: "minus")
+                                        .font(.system(size: 12, weight: .bold))
+                                        .foregroundStyle(recurrenceInterval <= 1 ? LColors.textSecondary.opacity(0.5) : .white)
+                                        .frame(width: 32, height: 32)
+                                        .background(recurrenceInterval <= 1 ? Color.white.opacity(0.05) : LColors.accent.opacity(0.85))
+                                        .clipShape(Circle())
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(recurrenceInterval <= 1)
+
+                                Text("\(recurrenceInterval)")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(LColors.textPrimary)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 8)
+                                    .background(Color.white.opacity(0.08))
+                                    .clipShape(Capsule())
+                                    .overlay(
+                                        Capsule()
+                                            .stroke(LColors.glassBorder, lineWidth: 1)
+                                    )
+
+                                Button {
+                                    if recurrenceInterval < 30 {
+                                        recurrenceInterval += 1
+                                    }
+                                } label: {
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 12, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .frame(width: 32, height: 32)
+                                        .background(LColors.accent.opacity(0.85))
+                                        .clipShape(Circle())
+                                }
+                                .buttonStyle(.plain)
+
+                                Text(intervalUnit)
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(LColors.textPrimary)
+
+                                Spacer()
+                            }
+                        }
+
+                        // ── Weekly: day picker ───────────────────────────
+                        if scheduleKind == .weekly {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("ON THESE DAYS")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(LColors.textSecondary)
+                                    .tracking(0.5)
+
+                                HStack(spacing: 6) {
+                                    ForEach(0..<7, id: \.self) { d in
+                                        let on = selectedDays.contains(d)
+                                        Button {
+                                            if on { selectedDays.remove(d) }
+                                            else  { selectedDays.insert(d) }
+                                        } label: {
+                                            Text(weekdays[d])
+                                                .font(.system(size: 12, weight: .semibold))
+                                                .frame(width: 38, height: 38)
+                                                .background(on ? LColors.accent : Color.white.opacity(0.08))
+                                                .foregroundStyle(on ? .white : LColors.textPrimary)
+                                                .clipShape(Circle())
+                                                .overlay(Circle().stroke(on ? .clear : LColors.glassBorder, lineWidth: 1))
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                            }
+                        }
+
+                        // ── Monthly: day mode ────────────────────────────
+                        if scheduleKind == .monthly {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("ON")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(LColors.textSecondary)
+                                    .tracking(0.5)
+
+                                // Mode selector
+                                HStack(spacing: 8) {
+                                    ForEach(MonthlyMode.allCases, id: \.self) { mode in
+                                        let on = monthlyMode == mode
+                                        Button { monthlyMode = mode } label: {
+                                            Text(mode.rawValue)
+                                                .font(.system(size: 12, weight: .semibold))
+                                                .foregroundStyle(on ? .white : LColors.textPrimary)
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 7)
+                                                .background(on ? LColors.accent : Color.white.opacity(0.08))
+                                                .clipShape(Capsule())
+                                                .overlay(Capsule().stroke(on ? LColors.accent : LColors.glassBorder, lineWidth: 1))
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+
+                                // Specific day picker
+                                if monthlyMode == .specificDay {
+                                    LystariaControlRow(label: "Day of month") {
+                                        Picker("", selection: $dayOfMonth) {
+                                            ForEach(1...31, id: \.self) { d in
+                                                Text("\(ordinal(d))").tag(d)
+                                            }
+                                        }
+                                        .pickerStyle(.menu)
+                                        .tint(LColors.accent)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(Color.white.opacity(0.06))
+                                        .clipShape(Capsule())
+                                        .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
+                                    }
+                                }
+                            }
+                        }
+
+                        // ── Yearly: date mode ────────────────────────────
+                        if scheduleKind == .yearly {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("ON")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(LColors.textSecondary)
+                                    .tracking(0.5)
+
+                                // Mode selector
+                                HStack(spacing: 8) {
+                                    ForEach(YearlyMode.allCases, id: \.self) { mode in
+                                        let on = yearlyMode == mode
+                                        Button { yearlyMode = mode } label: {
+                                            Text(mode.rawValue)
+                                                .font(.system(size: 12, weight: .semibold))
+                                                .foregroundStyle(on ? .white : LColors.textPrimary)
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 7)
+                                                .background(on ? LColors.accent : Color.white.opacity(0.08))
+                                                .clipShape(Capsule())
+                                                .overlay(Capsule().stroke(on ? LColors.accent : LColors.glassBorder, lineWidth: 1))
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+
+                                // Specific month + day
+                                if yearlyMode == .specificDate {
+                                    LystariaControlRow(label: "Month") {
+                                        Picker("", selection: $anchorMonth) {
+                                            ForEach(1...12, id: \.self) { m in
+                                                Text(monthSymbols[m - 1]).tag(m)
+                                            }
+                                        }
+                                        .pickerStyle(.menu)
+                                        .tint(LColors.accent)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(Color.white.opacity(0.06))
+                                        .clipShape(Capsule())
+                                        .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
+                                        .onChange(of: anchorMonth) { _, _ in
+                                            anchorDay = min(anchorDay, maxAnchorDay)
+                                        }
+                                    }
+
+                                    LystariaControlRow(label: "Day") {
+                                        Picker("", selection: $anchorDay) {
+                                            ForEach(1...maxAnchorDay, id: \.self) { d in
+                                                Text("\(ordinal(d))").tag(d)
+                                            }
+                                        }
+                                        .pickerStyle(.menu)
+                                        .tint(LColors.accent)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(Color.white.opacity(0.06))
+                                        .clipShape(Capsule())
+                                        .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .onAppear {
+            recurrenceInterval = min(max(recurrenceInterval, 1), 30)
+            dayOfMonth = min(max(dayOfMonth, 1), 31)
+            anchorMonth = min(max(anchorMonth, 1), 12)
+            anchorDay = min(max(anchorDay, 1), maxAnchorDay)
+            intervalMinutes = normalizedIntervalMinutes(intervalMinutes)
+        }
+        .onChange(of: anchorMonth) { _, _ in
+            anchorDay = min(max(anchorDay, 1), maxAnchorDay)
+        }
+        .onChange(of: intervalMinutes) { _, newValue in
+            intervalMinutes = normalizedIntervalMinutes(newValue)
+        }
+    }
+
+    // MARK: Time-of-day sub-section
+    @ViewBuilder
+    private var timeOfDaySection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(Array(timesOfDay.indices), id: \.self) { idx in
+#if os(macOS)
+                LTimeEntryRow(
+                    label: idx == 0 ? "Time" : "Time \(idx + 1)",
+                    dateTime: Binding(
+                        get: { timesOfDay[idx] },
+                        set: { timesOfDay[idx] = $0 }
+                    )
+                )
+#else
+                LystariaControlRow(label: idx == 0 ? "Time" : "Time \(idx + 1)") {
+                    DatePicker("",
+                        selection: Binding(
+                            get: { timesOfDay[idx] },
+                            set: { timesOfDay[idx] = $0 }
+                        ),
+                        displayedComponents: .hourAndMinute
+                    )
+                    .labelsHidden()
+                    .datePickerStyle(.compact)
+                    .tint(LColors.accent)
+                }
+#endif
+            }
+
+            HStack(spacing: 8) {
+                Button {
+                    timesOfDay.append(timesOfDay.last ?? Date())
+                } label: {
+                    Label("Add Time", systemImage: "plus.circle.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(LColors.accent)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+
+                if timesOfDay.count > 1 {
+                    Button {
+                        timesOfDay.removeLast()
+                    } label: {
+                        Label("Remove", systemImage: "minus.circle")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(LColors.textPrimary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(Capsule())
+                            .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Spacer()
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    // MARK: Ordinal helper
+    private func ordinal(_ n: Int) -> String {
+        let suffix: String
+        let ones = n % 10
+        let tens = (n / 10) % 10
+        if tens == 1 {
+            suffix = "th"
+        } else {
+            switch ones {
+            case 1: suffix = "st"
+            case 2: suffix = "nd"
+            case 3: suffix = "rd"
+            default: suffix = "th"
+            }
+        }
+        return "\(n)\(suffix)"
+    }
+
+    private func normalizedIntervalMinutes(_ value: Int) -> Int {
+        let clamped = min(max(value, 5), 1440)
+        let remainder = clamped % 5
+        if remainder == 0 { return clamped }
+        let rounded = clamped + (5 - remainder)
+        return min(max(rounded, 5), 1440)
     }
 }
 

@@ -9,47 +9,41 @@ import Foundation
 
 enum SharedBookmarkInbox {
     static let appGroupID = "group.com.asteriasmoons.LystariaDev"
-    static let fileName = "shared_bookmark.json"
+    static let payloadKey = "shared_bookmark_payload"
 
-    static var containerURL: URL? {
-        FileManager.default.containerURL(
-            forSecurityApplicationGroupIdentifier: appGroupID
-        )
-    }
-
-    static var fileURL: URL? {
-        containerURL?.appendingPathComponent(fileName)
+    static var sharedDefaults: UserDefaults? {
+        UserDefaults(suiteName: appGroupID)
     }
 
     static func save(_ payload: SharedBookmarkPayload) throws {
-        guard let fileURL else {
+        guard let sharedDefaults else {
             throw NSError(domain: "SharedBookmarkInbox", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "Could not resolve shared container file URL."
+                NSLocalizedDescriptionKey: "Could not resolve shared App Group user defaults."
             ])
         }
 
         let data = try JSONEncoder().encode(payload)
-        try data.write(to: fileURL, options: .atomic)
+        sharedDefaults.set(data, forKey: payloadKey)
+        sharedDefaults.synchronize()
     }
 
     static func load() throws -> SharedBookmarkPayload? {
-        guard let fileURL else {
+        guard let sharedDefaults else {
             throw NSError(domain: "SharedBookmarkInbox", code: 2, userInfo: [
-                NSLocalizedDescriptionKey: "Could not resolve shared container file URL."
+                NSLocalizedDescriptionKey: "Could not resolve shared App Group user defaults."
             ])
         }
 
-        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+        guard let data = sharedDefaults.data(forKey: payloadKey) else {
             return nil
         }
 
-        let data = try Data(contentsOf: fileURL)
         return try JSONDecoder().decode(SharedBookmarkPayload.self, from: data)
     }
 
     static func clear() throws {
-        guard let fileURL else { return }
-        guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
-        try FileManager.default.removeItem(at: fileURL)
+        guard let sharedDefaults else { return }
+        sharedDefaults.removeObject(forKey: payloadKey)
+        sharedDefaults.synchronize()
     }
 }

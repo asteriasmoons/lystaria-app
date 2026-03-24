@@ -13,7 +13,52 @@ private extension NSAttributedString.Key {
     static let lystariaDivider = NSAttributedString.Key("lystariaDivider")
 }
 
+
 // MARK: - DELETE CONFIRMATION DIALOGUE
+
+struct LystariaAlertConfirm: ViewModifier {
+    @Binding var isPresented: Bool
+
+    let title: String
+    let message: String
+    let confirmTitle: String
+    let confirmRole: ButtonRole?
+    let onConfirm: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .alert(title, isPresented: $isPresented) {
+                Button(confirmTitle, role: confirmRole) {
+                    onConfirm()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(message)
+            }
+    }
+}
+
+extension View {
+    func lystariaAlertConfirm(
+        isPresented: Binding<Bool>,
+        title: String,
+        message: String,
+        confirmTitle: String = "Delete",
+        confirmRole: ButtonRole? = .destructive,
+        onConfirm: @escaping () -> Void
+    ) -> some View {
+        self.modifier(
+            LystariaAlertConfirm(
+                isPresented: isPresented,
+                title: title,
+                message: message,
+                confirmTitle: confirmTitle,
+                confirmRole: confirmRole,
+                onConfirm: onConfirm
+            )
+        )
+    }
+}
 
 struct LystariaConfirmDialog: ViewModifier {
     @Binding var isPresented: Bool
@@ -98,6 +143,63 @@ struct LystariaOverlayPopup<Header: View, Content: View, Footer: View>: View {
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        }
+    }
+}
+
+// MARK: - Full Screen Form Container (Reusable)
+
+/// A full-screen form presentation built on NavigationStack with the Lystaria
+/// background, scrollable content, and a keyboard toolbar "Done" button.
+/// Use inside .fullScreenCover for any add/edit flow.
+///
+/// Usage:
+///     LystariaFullScreenForm(
+///         title: "New Entry",
+///         cancelLabel: "Cancel", onCancel: { dismiss() },
+///         saveLabel: "Save", canSave: canSave, onSave: { save() }
+///     ) {
+///         // your form fields here
+///     }
+struct LystariaFullScreenForm<Content: View>: View {
+    let title: String
+    var cancelLabel: String = "Cancel"
+    let onCancel: () -> Void
+    var saveLabel: String = "Save"
+    let canSave: Bool
+    let onSave: () -> Void
+    var horizontalPadding: CGFloat = 20
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                LystariaBackground().ignoresSafeArea()
+                ScrollView {
+                    content()
+                        .padding(.horizontal, horizontalPadding)
+                        .padding(.top, 16)
+                        .padding(.bottom, 40)
+                }
+                .scrollDismissesKeyboard(.interactively)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    GradientTitle(text: title, size: 20)
+                }
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(cancelLabel) { onCancel() }
+                        .foregroundStyle(LColors.textPrimary)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(saveLabel) { onSave() }
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(canSave ? .white : LColors.textSecondary)
+                        .disabled(!canSave)
+                }
+            }
+            .toolbarBackground(.hidden, for: .navigationBar)
         }
     }
 }

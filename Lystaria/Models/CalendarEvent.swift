@@ -21,6 +21,23 @@ enum RecurrenceEndKind: String {
     case count = "count"
 }
 
+enum CalendarEventSyncState: String {
+    case synced = "synced"
+    case newLocal = "new_local"
+    case modifiedLocal = "modified_local"
+    case modifiedExternal = "modified_external"
+    case conflicted = "conflicted"
+    case pendingDeleteLocal = "pending_delete_local"
+    case pendingDeleteExternal = "pending_delete_external"
+}
+
+enum RecurrenceExceptionKind: String {
+    case edited = "edited"
+    case moved = "moved"
+    case cancelled = "cancelled"
+    case split = "split"
+}
+
 /// Codable struct stored as JSON in SwiftData
 struct RecurrenceEnd: Equatable, Sendable {
     var kind: RecurrenceEndKind
@@ -56,15 +73,22 @@ extension RecurrenceEndKind: nonisolated Codable {}
 extension RecurrenceEnd: nonisolated Codable {}
 extension RecurrenceRule: nonisolated Codable {}
 extension LocationCoords: nonisolated Codable {}
+extension CalendarEventSyncState: nonisolated Codable {}
+extension RecurrenceExceptionKind: nonisolated Codable {}
 
 // MARK: - CalendarEvent Model
 
 @Model
 final class CalendarEvent {
     // MARK: - Sync metadata
+    var localEventId: String = UUID().uuidString
     var serverId: String?
     var lastSyncedAt: Date?
+    var externalLastModifiedAt: Date?
     var needsSync: Bool = true
+    var syncStateRaw: String = CalendarEventSyncState.newLocal.rawValue
+    var lastSyncedHash: String?
+    var lastExternalHash: String?
     var appleCalendarItemIdentifier: String? = nil
     var appleCalendarIdentifier: String? = nil
     
@@ -87,6 +111,8 @@ final class CalendarEvent {
     
     // Link to a reminder (by serverId)
     var reminderServerId: String?
+    var calendarId: String?
+    @Relationship var calendar: EventCalendar?
     
     // RRULE string for recurrence support (no exception dates)
     var recurrenceRRule: String?
@@ -100,10 +126,30 @@ final class CalendarEvent {
     // Legacy recurrence exceptions stored as JSON string
     var recurrenceExceptionsStorage: String = "[]"
     
+    // MARK: - Recurrence role / exception support
+    var isRecurringSeriesMaster: Bool = false
+    var isRecurrenceException: Bool = false
+    var isCancelledOccurrence: Bool = false
+    var parentSeriesLocalId: String?
+    var splitFromSeriesLocalId: String?
+    var originalOccurrenceDate: Date?
+    var splitEffectiveFrom: Date?
+    var exceptionKindRaw: String?
+    
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
     
     // MARK: - Computed
+    var syncState: CalendarEventSyncState {
+        get { CalendarEventSyncState(rawValue: syncStateRaw) ?? .newLocal }
+        set { syncStateRaw = newValue.rawValue }
+    }
+
+    var exceptionKind: RecurrenceExceptionKind? {
+        get { exceptionKindRaw.flatMap { RecurrenceExceptionKind(rawValue: $0) } }
+        set { exceptionKindRaw = newValue?.rawValue }
+    }
+    
     var isRecurring: Bool {
         recurrence != nil
     }
@@ -180,8 +226,20 @@ final class CalendarEvent {
         timeZoneId: String? = nil,
         recurrence: RecurrenceRule? = nil,
         recurrenceExceptions: [String] = [],
-        serverId: String? = nil
+        calendarId: String? = nil,
+        serverId: String? = nil,
+        localEventId: String = UUID().uuidString,
+        syncState: CalendarEventSyncState = .newLocal,
+        isRecurringSeriesMaster: Bool = false,
+        isRecurrenceException: Bool = false,
+        isCancelledOccurrence: Bool = false,
+        parentSeriesLocalId: String? = nil,
+        splitFromSeriesLocalId: String? = nil,
+        originalOccurrenceDate: Date? = nil,
+        splitEffectiveFrom: Date? = nil,
+        exceptionKind: RecurrenceExceptionKind? = nil
     ) {
+        self.localEventId = localEventId
         self.title = title
         self.startDate = startDate
         self.endDate = endDate
@@ -195,11 +253,29 @@ final class CalendarEvent {
         self.googleEventId = nil
         self.googleCalendarId = nil
         self.reminderServerId = nil
+        self.calendarId = calendarId
+        self.calendar = nil
         self.recurrenceRRule = recurrenceRRule
         self.timeZoneId = timeZoneId
         self.recurrenceStorage = nil
         self.recurrenceExceptionsStorage = "[]"
         self.serverId = serverId
+        self.lastSyncedAt = nil
+        self.externalLastModifiedAt = nil
+        self.needsSync = true
+        self.syncStateRaw = syncState.rawValue
+        self.lastSyncedHash = nil
+        self.lastExternalHash = nil
+        self.appleCalendarItemIdentifier = nil
+        self.appleCalendarIdentifier = nil
+        self.isRecurringSeriesMaster = isRecurringSeriesMaster
+        self.isRecurrenceException = isRecurrenceException
+        self.isCancelledOccurrence = isCancelledOccurrence
+        self.parentSeriesLocalId = parentSeriesLocalId
+        self.splitFromSeriesLocalId = splitFromSeriesLocalId
+        self.originalOccurrenceDate = originalOccurrenceDate
+        self.splitEffectiveFrom = splitEffectiveFrom
+        self.exceptionKindRaw = exceptionKind?.rawValue
         self.createdAt = Date()
         self.updatedAt = Date()
         self.recurrence = recurrence

@@ -5,11 +5,6 @@
 //  Created by Asteria Moon on 3/18/26.
 //
 
-//
-//  SelfCarePointsManager.swift
-//  Lystaria
-//
-
 import Foundation
 import SwiftData
 
@@ -22,14 +17,14 @@ enum SelfCarePointsError: Error {
 enum SelfCarePointsManager {
     // MARK: - Default Point Values
 
-    static let reminderPoints = 5
-    static let eventReminderPoints = 5
-    static let habitReminderPoints = 5
-    static let habitLogPoints = 5
+    static let reminderPoints = 10
+    static let eventReminderPoints = 8
+    static let habitReminderPoints = 10
+    static let habitLogPoints = 10
     static let readingCheckInPoints = 10
-    static let journalEntryPoints = 10
+    static let journalEntryPoints = 8
     static let healthLogPoints = 10
-    static let exerciseLogPoints = 10
+    static let exerciseLogPoints = 8
     static let moodLogPoints = 10
 
     // MARK: - Leveling
@@ -118,6 +113,25 @@ enum SelfCarePointsManager {
         dayKey(from: startOfWeekSunday(from: date, calendar: calendar), calendar: calendar)
     }
 
+    static func insertResetLog(
+        in modelContext: ModelContext,
+        userId: String,
+        weekStartDayKey: String,
+        resetAt: Date,
+        pointsBeforeReset: Int,
+        levelBeforeReset: Int
+    ) {
+        let resetLog = SelfCarePointsResetLog(
+            userId: userId,
+            weekStartDayKey: weekStartDayKey,
+            resetAt: resetAt,
+            pointsBeforeReset: pointsBeforeReset,
+            levelBeforeReset: levelBeforeReset,
+            createdAt: resetAt
+        )
+        modelContext.insert(resetLog)
+    }
+
     @discardableResult
     static func applyWeeklyResetIfNeeded(
         in modelContext: ModelContext,
@@ -129,6 +143,28 @@ enum SelfCarePointsManager {
         let currentWeekKey = weekStartDayKey(from: now, calendar: calendar)
 
         if profile.currentWeekStartDayKey.isEmpty {
+            let hasLegacyWeeklyState = profile.currentPoints > 0 || profile.level > 0
+
+            if hasLegacyWeeklyState {
+                insertResetLog(
+                    in: modelContext,
+                    userId: userId,
+                    weekStartDayKey: "legacy-pre-weekly-reset",
+                    resetAt: now,
+                    pointsBeforeReset: profile.currentPoints,
+                    levelBeforeReset: profile.level
+                )
+
+                profile.currentPoints = 0
+                profile.level = 0
+                profile.lastWeeklyResetAt = now
+                profile.currentWeekStartDayKey = currentWeekKey
+                profile.updatedAt = now
+
+                try modelContext.save()
+                return true
+            }
+
             profile.currentWeekStartDayKey = currentWeekKey
             profile.updatedAt = now
             try modelContext.save()
@@ -139,15 +175,14 @@ enum SelfCarePointsManager {
             return false
         }
 
-        let resetLog = SelfCarePointsResetLog(
+        insertResetLog(
+            in: modelContext,
             userId: userId,
             weekStartDayKey: profile.currentWeekStartDayKey,
             resetAt: now,
             pointsBeforeReset: profile.currentPoints,
-            levelBeforeReset: profile.level,
-            createdAt: now
+            levelBeforeReset: profile.level
         )
-        modelContext.insert(resetLog)
 
         profile.currentPoints = 0
         profile.level = 0
@@ -297,6 +332,47 @@ enum SelfCarePointsManager {
         profile.updatedAt = Date()
 
         modelContext.delete(entry)
+        try modelContext.save()
+        return true
+    }
+
+    @discardableResult
+    static func createManualHistorySnapshot(
+        in modelContext: ModelContext,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) throws -> Bool {
+        let userId = try resolveActiveUserId(in: modelContext)
+
+        let profile: SelfCarePointsProfile
+        if let existing = try fetchProfile(in: modelContext, userId: userId) {
+            profile = existing
+        } else {
+            let newProfile = SelfCarePointsProfile(
+                userId: userId,
+                currentWeekStartDayKey: weekStartDayKey(from: now, calendar: calendar)
+            )
+            modelContext.insert(newProfile)
+            try modelContext.save()
+            profile = newProfile
+        }
+
+        let snapshotWeekKey: String
+        if profile.currentWeekStartDayKey.isEmpty {
+            snapshotWeekKey = "manual-unspecified-week"
+        } else {
+            snapshotWeekKey = "manual-\(profile.currentWeekStartDayKey)"
+        }
+
+        let snapshot = SelfCarePointsResetLog(
+            userId: userId,
+            weekStartDayKey: snapshotWeekKey,
+            resetAt: now,
+            pointsBeforeReset: profile.currentPoints,
+            levelBeforeReset: level(for: profile.currentPoints),
+            createdAt: now
+        )
+        modelContext.insert(snapshot)
         try modelContext.save()
         return true
     }

@@ -7,8 +7,12 @@ import SwiftData
 struct ContentView: View {
     @EnvironmentObject private var appState: AppState
     @AppStorage("hasSeenWelcome") private var hasSeenWelcome = false
+    @Query(filter: #Predicate<JournalBook> { $0.deletedAt == nil }, sort: \JournalBook.createdAt, order: .reverse) private var journalBooks: [JournalBook]
     @State private var showMoodRoute = false
     @State private var pendingOpenMoodFromWidget = false
+    @State private var showJournalBookRoute = false
+    @State private var pendingJournalBookIDFromWidget: String? = nil
+    @State private var selectedJournalBookForWidget: JournalBook? = nil
     // WELCOME DEV MODE:
     // Set this to `true` while testing the welcome flow.
     // Resets the welcome flag on every fresh app launch so the flow always shows.
@@ -32,12 +36,25 @@ struct ContentView: View {
                             .environmentObject(appState)
                             .preferredColorScheme(.dark)
 
-                        NavigationLink(isActive: $showMoodRoute) {
-                            MoodLoggerView()
-                        } label: {
-                            EmptyView()
+                        VStack {
+                            NavigationLink(isActive: $showMoodRoute) {
+                                MoodLoggerView()
+                            } label: {
+                                EmptyView()
+                            }
+                            .hidden()
+
+                            NavigationLink(isActive: $showJournalBookRoute) {
+                                if let selectedJournalBookForWidget {
+                                    JournalBookDetailView(book: selectedJournalBookForWidget)
+                                } else {
+                                    EmptyView()
+                                }
+                            } label: {
+                                EmptyView()
+                            }
+                            .hidden()
                         }
-                        .hidden()
                     }
                 }
             } else {
@@ -50,12 +67,20 @@ struct ContentView: View {
             }
 
             if case .signedIn = appState.status, pendingOpenMoodFromWidget {
-                openPendingWidgetRoute()
+                openPendingMoodRoute()
+            }
+
+            if case .signedIn = appState.status, pendingJournalBookIDFromWidget != nil {
+                openPendingJournalBookRoute()
             }
         }
         .onReceive(appState.$status) { newStatus in
             if case .signedIn = newStatus, pendingOpenMoodFromWidget {
-                openPendingWidgetRoute()
+                openPendingMoodRoute()
+            }
+
+            if case .signedIn = newStatus, pendingJournalBookIDFromWidget != nil {
+                openPendingJournalBookRoute()
             }
         }
         .onOpenURL { url in
@@ -73,14 +98,24 @@ struct ContentView: View {
             pendingOpenMoodFromWidget = true
 
             if case .signedIn = appState.status {
-                openPendingWidgetRoute()
+                openPendingMoodRoute()
+            }
+        case "journal-book":
+            guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+                  let bookID = components.queryItems?.first(where: { $0.name == "id" })?.value,
+                  !bookID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
+            pendingJournalBookIDFromWidget = bookID
+
+            if case .signedIn = appState.status {
+                openPendingJournalBookRoute()
             }
         default:
             break
         }
     }
 
-    private func openPendingWidgetRoute() {
+    private func openPendingMoodRoute() {
         guard pendingOpenMoodFromWidget else { return }
         print("OPEN PENDING MOOD ROUTE")
 
@@ -91,6 +126,29 @@ struct ContentView: View {
                 print("SETTING showMoodRoute = true")
                 showMoodRoute = true
                 pendingOpenMoodFromWidget = false
+            }
+        }
+    }
+
+    private func openPendingJournalBookRoute() {
+        guard let pendingBookID = pendingJournalBookIDFromWidget else { return }
+        print("OPEN PENDING JOURNAL BOOK ROUTE:", pendingBookID)
+
+        guard let matchedBook = journalBooks.first(where: {
+            "\($0.persistentModelID)" == pendingBookID
+        }) else {
+            print("NO MATCHING JOURNAL BOOK FOUND FOR WIDGET ROUTE")
+            return
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            selectedJournalBookForWidget = matchedBook
+            showJournalBookRoute = false
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                print("SETTING showJournalBookRoute = true")
+                showJournalBookRoute = true
+                pendingJournalBookIDFromWidget = nil
             }
         }
     }

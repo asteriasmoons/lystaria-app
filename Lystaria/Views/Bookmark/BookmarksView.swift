@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 struct BookmarksView: View {
     @Environment(\.modelContext) private var modelContext
@@ -22,6 +23,10 @@ struct BookmarksView: View {
     @State private var showingAddBookmarkScreen = false
     @State private var showingAddFolderScreen = false
     @State private var editingFolder: BookmarkFolder? = nil
+    @State private var visibleFolderCount: Int = 5
+    @State private var isReorderMode: Bool = false
+    @State private var draggedFolderID: PersistentIdentifier? = nil
+    @State private var pendingReorderFolder: BookmarkFolder? = nil
 
     
 
@@ -75,6 +80,8 @@ struct BookmarksView: View {
             ensureInboxExists()
         }
         .onAppear {
+            visibleFolderCount = 5
+            resetReorderStateIfNeeded()
         }
     }
 }
@@ -87,6 +94,16 @@ private extension BookmarksView {
             HStack(alignment: .center) {
                 GradientTitle(text: "Bookmarks", font: .title2.bold())
                 Spacer()
+
+                if isReorderMode {
+                    LButton(title: "Done", icon: "checkmark", style: .secondary) {
+                        withAnimation {
+                            isReorderMode = false
+                            draggedFolderID = nil
+                            pendingReorderFolder = nil
+                        }
+                    }
+                }
 
                 Button {
                     showingAddBookmarkScreen = true
@@ -155,15 +172,20 @@ private extension BookmarksView {
             )
         }
         .padding(.horizontal, LSpacing.pageHorizontal)
+        .onChange(of: searchText) { _, _ in
+            visibleFolderCount = 5
+        }
     }
 
     var folderSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            ForEach(filteredFolders) { folder in
+            ForEach(visibleFolders) { folder in
                 GlassCard {
                     HStack(spacing: 14) {
                         Button {
-                            editingFolder = folder
+                            if !isReorderMode {
+                                editingFolder = folder
+                            }
                         } label: {
                             ZStack {
                                 Circle()
@@ -181,10 +203,9 @@ private extension BookmarksView {
                             }
                         }
                         .buttonStyle(.plain)
+                        .disabled(isReorderMode)
 
-                        NavigationLink {
-                            BookmarkFolderDetailView(folder: folder)
-                        } label: {
+                        if isReorderMode {
                             HStack(spacing: 14) {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(folder.name.isEmpty ? "Untitled" : folder.name)
@@ -193,7 +214,7 @@ private extension BookmarksView {
 
                                     Text(folder.systemKey == "inbox"
                                          ? "Your catch-all space for saved links."
-                                         : "Open this folder to view and manage its bookmarks.")
+                                         : "Drag to change this folder’s position.")
                                         .font(.subheadline)
                                         .foregroundStyle(LColors.textSecondary)
                                         .fixedSize(horizontal: false, vertical: true)
@@ -201,15 +222,77 @@ private extension BookmarksView {
 
                                 Spacer()
 
-                                Image(systemName: "chevron.right")
-                                    .font(.subheadline.weight(.semibold))
+                                Image(systemName: "line.3.horizontal")
+                                    .font(.system(size: 18, weight: .semibold))
                                     .foregroundStyle(LColors.textSecondary)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                            .onDrag {
+                                draggedFolderID = folder.persistentModelID
+                                return NSItemProvider(object: String(describing: folder.persistentModelID) as NSString)
+                            }
+                            .onDrop(of: [.text], delegate: FolderReorderDropDelegate(
+                                targetFolder: folder,
+                                folders: filteredFolders,
+                                draggedFolderID: $draggedFolderID,
+                                modelContext: modelContext
+                            ))
+                        } else {
+                            NavigationLink {
+                                BookmarkFolderDetailView(folder: folder)
+                            } label: {
+                                HStack(spacing: 14) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(folder.name.isEmpty ? "Untitled" : folder.name)
+                                            .font(.headline)
+                                            .foregroundStyle(.white)
+
+                                        Text(folder.systemKey == "inbox"
+                                             ? "Your catch-all space for saved links."
+                                             : "Open this folder to view and manage its bookmarks.")
+                                            .font(.subheadline)
+                                            .foregroundStyle(LColors.textSecondary)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+
+                                    Spacer()
+
+                                    Image(systemName: "chevron.right")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(LColors.textSecondary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
+                .contextMenu {
+                    Button {
+                        withAnimation {
+                            isReorderMode = true
+                            pendingReorderFolder = folder
+                        }
+                    } label: {
+                        Label("Reorder", systemImage: "line.3.horizontal")
+                    }
+                }
+            }
+
+            if filteredFolders.count > visibleFolderCount {
+                HStack {
+                    Spacer()
+
+                    LoadMoreButton {
+                        withAnimation {
+                            visibleFolderCount += 5
+                        }
+                    }
+
+                    Spacer()
+                }
+                .padding(.top, 2)
             }
         }
         .padding(.horizontal, LSpacing.pageHorizontal)
@@ -225,23 +308,30 @@ private extension BookmarksView {
     }
 
     var sortedFoldersForStrip: [BookmarkFolder] {
-        let sorted = folders.sorted {
+        folders.sorted {
             if $0.systemKey == "inbox" && $1.systemKey != "inbox" { return true }
             if $1.systemKey == "inbox" && $0.systemKey != "inbox" { return false }
+            if $0.sortOrder != $1.sortOrder {
+                return $0.sortOrder < $1.sortOrder
+            }
             return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
         }
-        return sorted
     }
 
     var filteredFolders: [BookmarkFolder] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedQuery = query.lowercased()
         guard !query.isEmpty else { return sortedFoldersForStrip }
 
         return sortedFoldersForStrip.filter { folder in
             let name = folder.name.lowercased()
             let systemKey = folder.systemKey.lowercased()
-            return name.contains(query.lowercased()) || systemKey.contains(query.lowercased())
+            return name.contains(normalizedQuery) || systemKey.contains(normalizedQuery)
         }
+    }
+
+    var visibleFolders: [BookmarkFolder] {
+        Array(filteredFolders.prefix(visibleFolderCount))
     }
 }
 
@@ -255,6 +345,7 @@ private extension BookmarksView {
             name: "Inbox",
             systemKey: "inbox",
             iconName: "tray.full.fill",
+            sortOrder: 0,
             createdAt: Date(),
             updatedAt: Date()
         )
@@ -266,6 +357,35 @@ private extension BookmarksView {
             print("Failed to create Inbox folder: \(error)")
         }
     }
+
+    func moveFolder(with draggedID: PersistentIdentifier, before targetFolder: BookmarkFolder, in sourceFolders: [BookmarkFolder]) {
+        guard let fromIndex = sourceFolders.firstIndex(where: { $0.persistentModelID == draggedID }),
+              let toIndex = sourceFolders.firstIndex(where: { $0.persistentModelID == targetFolder.persistentModelID }),
+              fromIndex != toIndex else { return }
+
+        var reordered = sourceFolders
+        let moved = reordered.remove(at: fromIndex)
+        reordered.insert(moved, at: toIndex)
+
+        for (index, folder) in reordered.enumerated() {
+            folder.sortOrder = folder.systemKey == "inbox" ? 0 : index + 1
+            folder.updatedAt = Date()
+        }
+
+        do {
+            try modelContext.save()
+            SharedFolderExportManager.exportFolders(modelContext: modelContext)
+        } catch {
+            print("Failed to reorder folders: \(error)")
+        }
+    }
+
+    func resetReorderStateIfNeeded() {
+        if !isReorderMode {
+            draggedFolderID = nil
+            pendingReorderFolder = nil
+        }
+    }
 }
 
 // MARK: - Small UI Pieces
@@ -273,3 +393,39 @@ private extension BookmarksView {
 
 // MARK: - Enums
 
+
+private struct FolderReorderDropDelegate: DropDelegate {
+    let targetFolder: BookmarkFolder
+    let folders: [BookmarkFolder]
+    @Binding var draggedFolderID: PersistentIdentifier?
+    let modelContext: ModelContext
+
+    func dropEntered(info: DropInfo) {
+        guard let draggedFolderID,
+              draggedFolderID != targetFolder.persistentModelID,
+              let fromIndex = folders.firstIndex(where: { $0.persistentModelID == draggedFolderID }),
+              let toIndex = folders.firstIndex(where: { $0.persistentModelID == targetFolder.persistentModelID }),
+              fromIndex != toIndex else { return }
+
+        var reordered = folders
+        let moved = reordered.remove(at: fromIndex)
+        reordered.insert(moved, at: toIndex)
+
+        for (index, folder) in reordered.enumerated() {
+            folder.sortOrder = folder.systemKey == "inbox" ? 0 : index + 1
+            folder.updatedAt = Date()
+        }
+
+        do {
+            try modelContext.save()
+            SharedFolderExportManager.exportFolders(modelContext: modelContext)
+        } catch {
+            print("Failed to update folder order during drag: \(error)")
+        }
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggedFolderID = nil
+        return true
+    }
+}

@@ -5,6 +5,12 @@ struct JournalCard: View {
     let entry: JournalEntry
     let onView: (JournalEntry) -> Void
     let onTagSelect: (String) -> Void
+    var onMove: ((JournalEntry, JournalBook) -> Void)? = nil
+
+    @Query(filter: #Predicate<JournalBook> { $0.deletedAt == nil }, sort: \JournalBook.createdAt, order: .reverse)
+    private var allBooks: [JournalBook]
+
+    @State private var showMoveSheet = false
 
     private var snippet: String {
         entry.preferredCardPreviewText
@@ -61,6 +67,17 @@ struct JournalCard: View {
             }
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            if onMove != nil {
+                Menu("Move to Book") {
+                    ForEach(allBooks.filter { $0.persistentModelID != entry.book?.persistentModelID }, id: \.persistentModelID) { book in
+                        Button(book.title) {
+                            onMove?(entry, book)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

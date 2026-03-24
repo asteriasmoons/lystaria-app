@@ -9,7 +9,6 @@ import Foundation
 import EventKit
 import Observation
 import SwiftData
-import UIKit
 
 @MainActor
 @Observable
@@ -127,50 +126,292 @@ final class CalendarSyncManager {
         return eventStore.calendar(withIdentifier: identifier)
     }
 
+    private func isScopedToSelectedCalendar(
+        _ appEvent: CalendarEvent,
+        targetCalendar: EKCalendar
+    ) -> Bool {
+        // STRICT: if it's already linked, it MUST match
+        if let linkedIdentifier = appEvent.appleCalendarIdentifier,
+           !linkedIdentifier.isEmpty {
+            return linkedIdentifier == targetCalendar.calendarIdentifier
+        }
+
+        // ONLY allow brand new events to export
+        return appEvent.syncState == .newLocal
+    }
+
+    private func appEventFingerprint(_ appEvent: CalendarEvent) -> String {
+        let title = appEvent.title
+        let start = appEvent.startDate.ISO8601Format()
+        let end = appEvent.endDate?.ISO8601Format() ?? "nil"
+        let allDay = appEvent.allDay ? "1" : "0"
+        let eventDescription = appEvent.eventDescription ?? ""
+        let location = appEvent.location ?? ""
+        let meetingUrl = appEvent.meetingUrl ?? ""
+        let timeZoneId = appEvent.timeZoneId ?? ""
+        let recurrenceRRule = appEvent.recurrenceRRule ?? ""
+        let calendarId = appEvent.calendarId ?? ""
+        let isRecurringSeriesMaster = appEvent.isRecurringSeriesMaster ? "1" : "0"
+        let isRecurrenceException = appEvent.isRecurrenceException ? "1" : "0"
+        let isCancelledOccurrence = appEvent.isCancelledOccurrence ? "1" : "0"
+        let parentSeriesLocalId = appEvent.parentSeriesLocalId ?? ""
+        let splitFromSeriesLocalId = appEvent.splitFromSeriesLocalId ?? ""
+        let originalOccurrenceDate = appEvent.originalOccurrenceDate?.ISO8601Format() ?? "nil"
+        let splitEffectiveFrom = appEvent.splitEffectiveFrom?.ISO8601Format() ?? "nil"
+        let exceptionKindRaw = appEvent.exceptionKindRaw ?? ""
+
+        let parts: [String] = [
+            title,
+            start,
+            end,
+            allDay,
+            eventDescription,
+            location,
+            meetingUrl,
+            timeZoneId,
+            recurrenceRRule,
+            calendarId,
+            isRecurringSeriesMaster,
+            isRecurrenceException,
+            isCancelledOccurrence,
+            parentSeriesLocalId,
+            splitFromSeriesLocalId,
+            originalOccurrenceDate,
+            splitEffectiveFrom,
+            exceptionKindRaw
+        ]
+
+        return parts.joined(separator: "|")
+    }
+
+    private func externalEventFingerprint(_ ekEvent: EKEvent, in targetCalendar: EKCalendar) -> String {
+        [
+            trimmedTitle(from: ekEvent.title),
+            ekEvent.startDate.ISO8601Format(),
+            (ekEvent.endDate ?? ekEvent.startDate).ISO8601Format(),
+            ekEvent.isAllDay ? "1" : "0",
+            ekEvent.notes ?? "",
+            ekEvent.location ?? "",
+            ekEvent.url?.absoluteString ?? "",
+            ekEvent.timeZone?.identifier ?? "",
+            rruleString(from: ekEvent) ?? "",
+            targetCalendar.calendarIdentifier
+        ].joined(separator: "|")
+    }
+
+    private func shouldTreatAsConflict(_ appEvent: CalendarEvent, externalHash: String) -> Bool {
+        let hasLocalChanges = appEvent.syncState == .modifiedLocal || appEvent.syncState == .newLocal || appEvent.needsSync
+        guard hasLocalChanges else { return false }
+
+        guard let lastExternalHash = appEvent.lastExternalHash else {
+            return false
+        }
+
+        return lastExternalHash != externalHash
+    }
+
+    private func isExceptionScopedToSelectedCalendar(
+        _ exceptionEvent: CalendarEvent,
+        appEventsByLocalId: [String: CalendarEvent],
+        targetCalendar: EKCalendar
+    ) -> Bool {
+        if let linkedIdentifier = exceptionEvent.appleCalendarIdentifier,
+           !linkedIdentifier.isEmpty {
+            return linkedIdentifier == targetCalendar.calendarIdentifier
+        }
+
+        if let parentId = exceptionEvent.parentSeriesLocalId,
+           let parent = appEventsByLocalId[parentId],
+           let linkedIdentifier = parent.appleCalendarIdentifier,
+           !linkedIdentifier.isEmpty {
+            return linkedIdentifier == targetCalendar.calendarIdentifier
+        }
+
+        return exceptionEvent.syncState == .newLocal
+        
+    }
+
+    private func applyAppEvent(_ appEvent: CalendarEvent, to ekEvent: EKEvent, in targetCalendar: EKCalendar) {
+        ekEvent.calendar = targetCalendar
+        ekEvent.title = trimmedTitle(from: appEvent.title)
+        ekEvent.startDate = appEvent.startDate
+        ekEvent.isAllDay = appEvent.allDay
+        ekEvent.endDate = resolvedEndDate(for: appEvent)
+        ekEvent.notes = appEvent.eventDescription
+        ekEvent.location = appEvent.location
+        ekEvent.url = resolvedURL(from: appEvent.meetingUrl)
+
+        if let timeZoneId = appEvent.timeZoneId,
+           let timeZone = TimeZone(identifier: timeZoneId) {
+            ekEvent.timeZone = timeZone
+        } else {
+            ekEvent.timeZone = nil
+        }
+
+        ekEvent.recurrenceRules = recurrenceRules(for: appEvent)
+    }
+
+    private func markAppEventSyncedAfterExport(
+        _ appEvent: CalendarEvent,
+        ekEvent: EKEvent,
+        in targetCalendar: EKCalendar,
+        syncedAt: Date
+    ) {
+        appEvent.appleCalendarItemIdentifier = ekEvent.calendarItemIdentifier
+        appEvent.appleCalendarIdentifier = targetCalendar.calendarIdentifier
+        appEvent.lastSyncedAt = syncedAt
+        appEvent.externalLastModifiedAt = syncedAt
+        appEvent.needsSync = false
+        appEvent.syncState = .synced
+        appEvent.lastExternalHash = externalEventFingerprint(ekEvent, in: targetCalendar)
+        appEvent.lastSyncedHash = appEventFingerprint(appEvent)
+        appEvent.updatedAt = syncedAt
+    }
+
+    private func markExceptionMarkerSyncedAfterExport(
+        _ appEvent: CalendarEvent,
+        in targetCalendar: EKCalendar,
+        syncedAt: Date
+    ) {
+        appEvent.appleCalendarIdentifier = targetCalendar.calendarIdentifier
+        appEvent.lastSyncedAt = syncedAt
+        appEvent.externalLastModifiedAt = syncedAt
+        appEvent.needsSync = false
+        appEvent.syncState = .synced
+        appEvent.lastExternalHash = nil
+        appEvent.lastSyncedHash = appEventFingerprint(appEvent)
+        appEvent.updatedAt = syncedAt
+    }
+
+    private func exportStandaloneAppEvent(
+        _ appEvent: CalendarEvent,
+        to targetCalendar: EKCalendar,
+        syncedAt: Date
+    ) throws -> Bool {
+        let ekEvent: EKEvent
+
+        if let identifier = appEvent.appleCalendarItemIdentifier,
+           let existing = eventStore.calendarItem(withIdentifier: identifier) as? EKEvent {
+            ekEvent = existing
+        } else {
+            ekEvent = EKEvent(eventStore: eventStore)
+        }
+
+        applyAppEvent(appEvent, to: ekEvent, in: targetCalendar)
+        try eventStore.save(ekEvent, span: .thisEvent, commit: false)
+        markAppEventSyncedAfterExport(appEvent, ekEvent: ekEvent, in: targetCalendar, syncedAt: syncedAt)
+        return true
+    }
+
+
+    private func occurrenceEvent(
+        for parentEKEvent: EKEvent,
+        on occurrenceDate: Date,
+        in targetCalendar: EKCalendar
+    ) -> EKEvent? {
+        let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: occurrenceDate)
+        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+
+        let predicate = eventStore.predicateForEvents(
+            withStart: dayStart,
+            end: dayEnd,
+            calendars: [targetCalendar]
+        )
+
+        let candidates = eventStore.events(matching: predicate)
+
+        if let exact = candidates.first(where: {
+            $0.calendarItemIdentifier == parentEKEvent.calendarItemIdentifier &&
+            abs($0.startDate.timeIntervalSince(occurrenceDate)) < 120
+        }) {
+            return exact
+        }
+
+        return candidates.first(where: {
+            trimmedTitle(from: $0.title) == trimmedTitle(from: parentEKEvent.title) &&
+            abs($0.startDate.timeIntervalSince(occurrenceDate)) < 120
+        })
+    }
+
+    private func exportExceptionEvent(
+        _ exceptionEvent: CalendarEvent,
+        parentAppEvent: CalendarEvent?,
+        to targetCalendar: EKCalendar,
+        syncedAt: Date
+    ) throws -> Bool {
+        if exceptionEvent.exceptionKind == .split && !exceptionEvent.isCancelledOccurrence {
+            return try exportStandaloneAppEvent(exceptionEvent, to: targetCalendar, syncedAt: syncedAt)
+        }
+
+        guard let parentAppEvent,
+              let parentIdentifier = parentAppEvent.appleCalendarItemIdentifier,
+              let parentEKEvent = eventStore.calendarItem(withIdentifier: parentIdentifier) as? EKEvent,
+              let originalOccurrenceDate = exceptionEvent.originalOccurrenceDate,
+              let occurrenceEKEvent = occurrenceEvent(for: parentEKEvent, on: originalOccurrenceDate, in: targetCalendar) else {
+            return false
+        }
+
+        if exceptionEvent.isCancelledOccurrence {
+            let span: EKSpan = (exceptionEvent.exceptionKind == .split) ? .futureEvents : .thisEvent
+            try eventStore.remove(occurrenceEKEvent, span: span, commit: false)
+            markExceptionMarkerSyncedAfterExport(exceptionEvent, in: targetCalendar, syncedAt: syncedAt)
+            return true
+        }
+
+        applyAppEvent(exceptionEvent, to: occurrenceEKEvent, in: targetCalendar)
+        try eventStore.save(occurrenceEKEvent, span: .thisEvent, commit: false)
+        markAppEventSyncedAfterExport(exceptionEvent, ekEvent: occurrenceEKEvent, in: targetCalendar, syncedAt: syncedAt)
+        return true
+    }
+
     private func exportAppEvents(_ appEvents: [CalendarEvent], to targetCalendar: EKCalendar) throws -> Int {
         var exportedCount = 0
         let now = Date()
+        let appEventsByLocalId = Dictionary(uniqueKeysWithValues: appEvents.map { ($0.localEventId, $0) })
 
-        for appEvent in appEvents {
-            let ekEvent: EKEvent
-
+        let pendingDeletes = appEvents.filter {
+            $0.syncState == .pendingDeleteLocal &&
+            $0.appleCalendarIdentifier == targetCalendar.calendarIdentifier
+        }
+        for appEvent in pendingDeletes {
             if let identifier = appEvent.appleCalendarItemIdentifier,
-               let existing = eventStore.calendarItem(withIdentifier: identifier) as? EKEvent {
-                ekEvent = existing
-            } else {
-                ekEvent = EKEvent(eventStore: eventStore)
+               let ekEvent = eventStore.calendarItem(withIdentifier: identifier) as? EKEvent {
+                try eventStore.remove(ekEvent, span: .futureEvents, commit: false)
             }
-
-            ekEvent.calendar = targetCalendar
-            ekEvent.title = trimmedTitle(from: appEvent.title)
-            ekEvent.startDate = appEvent.startDate
-            ekEvent.isAllDay = appEvent.allDay
-            ekEvent.endDate = resolvedEndDate(for: appEvent)
-            ekEvent.notes = appEvent.eventDescription
-            ekEvent.location = appEvent.location
-            ekEvent.url = resolvedURL(from: appEvent.meetingUrl)
-
-            if let timeZoneId = appEvent.timeZoneId,
-               let timeZone = TimeZone(identifier: timeZoneId) {
-                ekEvent.timeZone = timeZone
-            } else {
-                ekEvent.timeZone = nil
-            }
-
-            ekEvent.recurrenceRules = recurrenceRules(for: appEvent)
-
-            try eventStore.save(ekEvent, span: .thisEvent, commit: false)
-
-            appEvent.appleCalendarItemIdentifier = ekEvent.calendarItemIdentifier
-            appEvent.appleCalendarIdentifier = targetCalendar.calendarIdentifier
-            appEvent.lastSyncedAt = now
-            appEvent.needsSync = false
-            appEvent.updatedAt = now
-
-            exportedCount += 1
         }
 
-        if exportedCount > 0 {
+        let exportable = appEvents.filter { appEvent in
+            !appEvent.isRecurrenceException &&
+            !appEvent.isCancelledOccurrence &&
+            appEvent.syncState != .pendingDeleteLocal &&
+            isScopedToSelectedCalendar(appEvent, targetCalendar: targetCalendar)
+        }
+
+        for appEvent in exportable {
+            if try exportStandaloneAppEvent(appEvent, to: targetCalendar, syncedAt: now) {
+                exportedCount += 1
+            }
+        }
+
+        let exceptionEvents = appEvents.filter { exceptionEvent in
+            exceptionEvent.isRecurrenceException &&
+            exceptionEvent.syncState != .pendingDeleteLocal &&
+            isExceptionScopedToSelectedCalendar(
+                exceptionEvent,
+                appEventsByLocalId: appEventsByLocalId,
+                targetCalendar: targetCalendar
+            )
+        }
+
+        for exceptionEvent in exceptionEvents {
+            let parent = exceptionEvent.parentSeriesLocalId.flatMap { appEventsByLocalId[$0] }
+            if try exportExceptionEvent(exceptionEvent, parentAppEvent: parent, to: targetCalendar, syncedAt: now) {
+                exportedCount += 1
+            }
+        }
+
+        if !pendingDeletes.isEmpty || exportedCount > 0 {
             try eventStore.commit()
         }
 
@@ -237,8 +478,14 @@ final class CalendarSyncManager {
             newEvent.appleCalendarItemIdentifier = ekEvent.calendarItemIdentifier
             newEvent.appleCalendarIdentifier = targetCalendar.calendarIdentifier
             newEvent.lastSyncedAt = now
+            newEvent.externalLastModifiedAt = now
             newEvent.needsSync = false
+            newEvent.syncState = .synced
             newEvent.updatedAt = now
+            // FIX 3: Mark imported recurring series masters correctly
+            newEvent.isRecurringSeriesMaster = (ekEvent.recurrenceRules?.isEmpty == false)
+            newEvent.lastExternalHash = externalEventFingerprint(ekEvent, in: targetCalendar)
+            newEvent.lastSyncedHash = appEventFingerprint(newEvent)
 
             modelContext.insert(newEvent)
             importedCount += 1
@@ -253,6 +500,14 @@ final class CalendarSyncManager {
         in targetCalendar: EKCalendar,
         syncedAt: Date
     ) {
+        let externalHash = externalEventFingerprint(ekEvent, in: targetCalendar)
+
+        if shouldTreatAsConflict(appEvent, externalHash: externalHash) {
+            appEvent.syncState = .conflicted
+            appEvent.externalLastModifiedAt = syncedAt
+            return
+        }
+
         appEvent.title = trimmedTitle(from: ekEvent.title)
         appEvent.startDate = ekEvent.startDate
         appEvent.endDate = ekEvent.endDate
@@ -266,8 +521,13 @@ final class CalendarSyncManager {
         appEvent.appleCalendarItemIdentifier = ekEvent.calendarItemIdentifier
         appEvent.appleCalendarIdentifier = targetCalendar.calendarIdentifier
         appEvent.lastSyncedAt = syncedAt
+        appEvent.externalLastModifiedAt = syncedAt
         appEvent.needsSync = false
+        appEvent.syncState = .synced
         appEvent.updatedAt = syncedAt
+        appEvent.isRecurringSeriesMaster = (ekEvent.recurrenceRules?.isEmpty == false)
+        appEvent.lastExternalHash = externalHash
+        appEvent.lastSyncedHash = appEventFingerprint(appEvent)
     }
 
     private func resolvedEndDate(for appEvent: CalendarEvent) -> Date {
@@ -377,8 +637,13 @@ final class CalendarSyncManager {
             end = nil
         }
 
+        // FIX 4: Preserve monthly/yearly RRULE structure instead of dropping it
         let daysOfWeek: [EKRecurrenceDayOfWeek]?
-        if recurrence.freq == .weekly, let byWeekday = recurrence.byWeekday, !byWeekday.isEmpty {
+        let daysOfTheMonth: [NSNumber]?
+        let monthsOfTheYear: [NSNumber]?
+        let setPositions: [NSNumber]?
+
+        if let byWeekday = recurrence.byWeekday, !byWeekday.isEmpty {
             daysOfWeek = byWeekday.compactMap { day in
                 guard let weekday = ekWeekday(fromZeroBased: day) else { return nil }
                 return EKRecurrenceDayOfWeek(weekday)
@@ -387,15 +652,26 @@ final class CalendarSyncManager {
             daysOfWeek = nil
         }
 
+        // Pull richer structure from the RRULE string if available
+        if let rrule = appEvent.recurrenceRRule, let parsed = ParsedRRule.parse(rrule) {
+            daysOfTheMonth = parsed.byMonthDay.map { $0.map { NSNumber(value: $0) } }
+            monthsOfTheYear = parsed.byMonth.map { $0.map { NSNumber(value: $0) } }
+            setPositions = parsed.bySetPos.map { [NSNumber(value: $0)] }
+        } else {
+            daysOfTheMonth = nil
+            monthsOfTheYear = nil
+            setPositions = nil
+        }
+
         let rule = EKRecurrenceRule(
             recurrenceWith: frequency,
             interval: max(recurrence.interval, 1),
             daysOfTheWeek: daysOfWeek,
-            daysOfTheMonth: nil,
-            monthsOfTheYear: nil,
+            daysOfTheMonth: daysOfTheMonth,
+            monthsOfTheYear: monthsOfTheYear,
             weeksOfTheYear: nil,
             daysOfTheYear: nil,
-            setPositions: nil,
+            setPositions: setPositions,
             end: end
         )
 
@@ -403,12 +679,12 @@ final class CalendarSyncManager {
     }
 
     private func effectiveRecurrence(for appEvent: CalendarEvent) -> RecurrenceRule? {
-        if let recurrence = appEvent.recurrence {
-            return recurrence
+        if let rrule = appEvent.recurrenceRRule,
+           let parsed = recurrence(fromRRule: rrule) {
+            return parsed
         }
 
-        guard let rrule = appEvent.recurrenceRRule else { return nil }
-        return recurrence(fromRRule: rrule)
+        return appEvent.recurrence
     }
 
     private func recurrence(fromRRule rrule: String) -> RecurrenceRule? {
@@ -450,8 +726,9 @@ final class CalendarSyncManager {
         if let byDayString = values["BYDAY"], !byDayString.isEmpty {
             let parsedDays = byDayString
                 .split(separator: ",")
-                .compactMap { weekdayCode in
-                    zeroBasedWeekday(fromRRuleToken: String(weekdayCode))
+                .compactMap { weekdayCode -> Int? in
+                    let token = String(weekdayCode).suffix(2)
+                    return zeroBasedWeekday(fromRRuleToken: String(token))
                 }
             byWeekday = parsedDays.isEmpty ? nil : parsedDays
         } else {
@@ -498,10 +775,31 @@ final class CalendarSyncManager {
         }
 
         if let days = rule.daysOfTheWeek, !days.isEmpty {
-            let mapped = days.compactMap { rruleWeekdayToken(from: $0.dayOfTheWeek.rawValue) }
+            let mapped = days.compactMap { day -> String? in
+                guard let token = rruleWeekdayToken(from: day.dayOfTheWeek.rawValue) else { return nil }
+                if day.weekNumber != 0 {
+                    return "\(day.weekNumber)\(token)"
+                }
+                return token
+            }
             if !mapped.isEmpty {
                 components.append("BYDAY=\(mapped.joined(separator: ","))")
             }
+        }
+
+        if let daysOfTheMonth = rule.daysOfTheMonth, !daysOfTheMonth.isEmpty {
+            let mapped = daysOfTheMonth.map { String($0.intValue) }
+            components.append("BYMONTHDAY=\(mapped.joined(separator: ","))")
+        }
+
+        if let monthsOfTheYear = rule.monthsOfTheYear, !monthsOfTheYear.isEmpty {
+            let mapped = monthsOfTheYear.map { String($0.intValue) }
+            components.append("BYMONTH=\(mapped.joined(separator: ","))")
+        }
+
+        if let setPositions = rule.setPositions, !setPositions.isEmpty {
+            let mapped = setPositions.map { String($0.intValue) }
+            components.append("BYSETPOS=\(mapped.joined(separator: ","))")
         }
 
         if let recurrenceEnd = rule.recurrenceEnd {

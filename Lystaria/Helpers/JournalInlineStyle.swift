@@ -13,6 +13,7 @@ enum JournalInlineStyleType: String, Codable, CaseIterable {
     case italic
     case underline
     case link
+    case inlineCode
 }
 
 @Model

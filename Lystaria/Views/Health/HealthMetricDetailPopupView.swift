@@ -12,6 +12,8 @@ struct HealthMetricDetailPopupView: View {
     let onDelete: () -> Void
     let onClose: () -> Void
 
+    @State private var showDeleteConfirm = false
+
     var body: some View {
         LystariaOverlayPopup(
             onClose: onClose,
@@ -41,7 +43,7 @@ struct HealthMetricDetailPopupView: View {
                     Spacer()
 
                     Button {
-                        onDelete()
+                        showDeleteConfirm = true
                     } label: {
                         HStack(spacing: 8) {
                             Image("trashfill")
@@ -65,6 +67,15 @@ struct HealthMetricDetailPopupView: View {
                 }
             }
         )
+        .lystariaAlertConfirm(
+            isPresented: $showDeleteConfirm,
+            title: "Delete health entry?",
+            message: "This will permanently delete this health entry. Choose a button.",
+            confirmTitle: "Delete",
+            confirmRole: .destructive
+        ) {
+            onDelete()
+        }
     }
 
     // MARK: - Formatting

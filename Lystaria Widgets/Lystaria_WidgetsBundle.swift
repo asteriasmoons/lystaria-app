@@ -12,5 +12,8 @@ import SwiftUI
 struct Lystaria_WidgetsBundle: WidgetBundle {
     var body: some Widget {
         Lystaria_Widgets()
+        Lystaria_SmallWidget()
+        Lystaria_JournalEntriesWidget()
+        Lystaria_HealthWidget()
     }
 }

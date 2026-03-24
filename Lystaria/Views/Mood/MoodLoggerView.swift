@@ -105,6 +105,72 @@ struct MoodLoggerView: View {
             return lhs.key > rhs.key
         }?.key
     }
+
+    // MARK: - Mood Streak
+
+    private var uniqueLogDaysDescending: [Date] {
+        let calendar = Calendar.current
+        let days = Set(logs.map { calendar.startOfDay(for: $0.createdAt) })
+        return days.sorted(by: >)
+    }
+
+    private var hasLoggedToday: Bool {
+        guard let first = uniqueLogDaysDescending.first else { return false }
+        return Calendar.current.isDateInToday(first)
+    }
+
+    private var currentMoodStreak: Int {
+        let calendar = Calendar.current
+        let days = uniqueLogDaysDescending
+        guard !days.isEmpty else { return 0 }
+
+        var streak = 0
+        var expected = calendar.startOfDay(for: Date())
+
+        // If no log today, start from yesterday (so streak shows but user hasn't logged today)
+        if !hasLoggedToday {
+            expected = calendar.date(byAdding: .day, value: -1, to: expected) ?? expected
+        }
+
+        for day in days {
+            if calendar.isDate(day, inSameDayAs: expected) {
+                streak += 1
+                expected = calendar.date(byAdding: .day, value: -1, to: expected) ?? expected
+            } else {
+                break
+            }
+        }
+
+        return streak
+    }
+
+    private var bestMoodStreak: Int {
+        let calendar = Calendar.current
+        let days = uniqueLogDaysDescending
+        guard !days.isEmpty else { return 0 }
+
+        var best = 0
+        var current = 0
+        var previous: Date?
+
+        for day in days.sorted(by: <) { // iterate oldest → newest
+            if let prev = previous {
+                let expected = calendar.date(byAdding: .day, value: 1, to: prev)!
+                if calendar.isDate(day, inSameDayAs: expected) {
+                    current += 1
+                } else {
+                    current = 1
+                }
+            } else {
+                current = 1
+            }
+
+            best = max(best, current)
+            previous = day
+        }
+
+        return best
+    }
     
     var body: some View {
         ScrollView {
@@ -119,6 +185,12 @@ struct MoodLoggerView: View {
                             averageScore: averageMoodScore
                         )
                     }
+
+                    MoodStreakCard(
+                        streak: currentMoodStreak,
+                        bestStreak: bestMoodStreak,
+                        hasLoggedToday: hasLoggedToday
+                    )
                     
                     moodLogTabs
                     
@@ -872,4 +944,81 @@ private func activityLabel(_ key: String) -> String {
 enum MoodLogTab {
     case today
     case history
+}
+
+// MARK: - Mood Streak Card
+
+private struct MoodStreakCard: View {
+    let streak: Int
+    let bestStreak: Int
+    let hasLoggedToday: Bool
+
+    var body: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 14) {
+
+                HStack(spacing: 10) {
+                    Image("boltfill")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 20, height: 20)
+                        .foregroundStyle(.white)
+
+                    GradientTitle(text: "Mood Streak", font: .system(size: 20, weight: .bold))
+
+                    Spacer()
+
+                    Text(hasLoggedToday ? "Active" : "Waiting")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(hasLoggedToday ? LColors.textPrimary : LColors.textSecondary)
+                }
+
+                HStack(spacing: 12) {
+                    streakBubble(
+                        value: streak,
+                        label: "Current"
+                    )
+
+                    streakBubble(
+                        value: bestStreak,
+                        label: "Best"
+                    )
+                }
+                .frame(maxWidth: .infinity)
+
+                Text(hasLoggedToday
+                     ? "You showed up for yourself today."
+                     : "Log today to keep your streak going.")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(LColors.textSecondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func streakBubble(value: Int, label: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+
+            Text(label.uppercased())
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(LColors.textSecondary)
+                .tracking(0.5)
+
+            Text("\(value)")
+                .font(.system(size: 32, weight: .bold))
+                .foregroundStyle(.white)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.white.opacity(0.06))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(LColors.glassBorder.opacity(0.6), lineWidth: 1)
+                )
+        )
+    }
 }

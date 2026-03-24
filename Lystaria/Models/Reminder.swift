@@ -1,7 +1,7 @@
 // Reminder.swift
 // Lystaria
 //
-// SwiftData model — mirrors the MongoDB Reminder schema
+// 
 
 import Foundation
 import SwiftData

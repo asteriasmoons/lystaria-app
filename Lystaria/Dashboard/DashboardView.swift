@@ -5,9 +5,17 @@
 //  Created by Asteria Moon on 3/11/26.
 //
 
+
 import SwiftUI
 import SwiftData
 import Foundation
+
+struct DailyLenormandTip: Identifiable, Hashable, Codable {
+    let id: String
+    let title: String
+    let keywords: [String]
+    let message: String
+}
 
 struct DashboardView: View {
     @Environment(\.modelContext) private var modelContext
@@ -46,11 +54,18 @@ struct DashboardView: View {
     @Query(sort: \Habit.createdAt, order: .forward)
     private var habits: [Habit]
 
+
     @Query(sort: \ReadingStats.updatedAt, order: .reverse)
     private var readingStats: [ReadingStats]
 
+    @Query(sort: \SelfCarePointsProfile.updatedAt, order: .reverse)
+    private var selfCareProfiles: [SelfCarePointsProfile]
+
     @Query(sort: \DailyTarotRecord.updatedAt, order: .reverse)
     private var tarotRecords: [DailyTarotRecord]
+
+    @Query(sort: \DailyLenormandRecord.updatedAt, order: .reverse)
+    private var lenormandRecords: [DailyLenormandRecord]
 
     @Query(sort: \DailyHoroscopeRecord.updatedAt, order: .reverse)
     private var horoscopeRecords: [DailyHoroscopeRecord]
@@ -69,6 +84,7 @@ struct DashboardView: View {
     @State private var moonPhaseData = MoonPhaseCalculator.calculate(for: Date())
     @State private var dashboardDayRefreshID = UUID()
     @State private var consistencyRefreshID = UUID()
+    @State private var dashboardSupportRefreshID = UUID()
 
 
     @State private var selectedZodiacSign: String = ""
@@ -132,10 +148,20 @@ struct DashboardView: View {
         appState.currentAppleUserId
     }
 
+
     private var currentReadingStats: ReadingStats? {
         guard let currentUserId else { return nil }
         let matches = readingStats.filter { $0.userId == currentUserId }
         return matches.max(by: { $0.updatedAt < $1.updatedAt })
+    }
+
+    private var activeSelfCareUserId: String? {
+        try? SelfCarePointsManager.resolveActiveUserId(in: modelContext)
+    }
+
+    private var currentSelfCareProfile: SelfCarePointsProfile? {
+        guard let activeSelfCareUserId else { return nil }
+        return selfCareProfiles.first { $0.userId == activeSelfCareUserId }
     }
 
     private var currentDailyHoroscope: DailyHoroscope? {
@@ -214,11 +240,39 @@ struct DashboardView: View {
         )
     }
 
+    private var currentDailyLenormandTip: DailyLenormandTip? {
+        guard let record = lenormandRecords.first(where: { $0.dayKey == todayKey }) else {
+            return nil
+        }
+
+        return DailyLenormandTip(
+            id: record.tipId,
+            title: record.title,
+            keywords: record.keywords,
+            message: record.message
+        )
+    }
+
     private func drawDailyTarotTip() {
         guard currentDailyTarotTip == nil, !localDailyTarotTips.isEmpty else { return }
         guard let tip = localDailyTarotTips.randomElement() else { return }
 
         let record = DailyTarotRecord(
+            dayKey: todayKey,
+            tipId: tip.id,
+            title: tip.title,
+            keywords: tip.keywords,
+            message: tip.message
+        )
+        modelContext.insert(record)
+        try? modelContext.save()
+    }
+
+    private func drawDailyLenormandTip() {
+        guard currentDailyLenormandTip == nil, !localDailyLenormandTips.isEmpty else { return }
+        guard let tip = localDailyLenormandTips.randomElement() else { return }
+
+        let record = DailyLenormandRecord(
             dayKey: todayKey,
             tipId: tip.id,
             title: tip.title,
@@ -244,6 +298,10 @@ struct DashboardView: View {
         consistencyRefreshID = UUID()
     }
 
+    private func refreshDashboardSupportCards() {
+        dashboardSupportRefreshID = UUID()
+    }
+
     private func refreshMoonPhaseData() {
         moonPhaseData = MoonPhaseCalculator.calculate(for: Date())
     }
@@ -251,6 +309,7 @@ struct DashboardView: View {
     private func refreshForNewDay() {
         dashboardDayRefreshID = UUID()
         refreshConsistencyCard()
+        refreshDashboardSupportCards()
         refreshMomentumHealthData()
         refreshMomentumCard()
         refreshMoonPhaseData()
@@ -715,8 +774,50 @@ struct DashboardView: View {
         currentStreak(from: stepActiveDayStarts)
     }
 
+
     private var readingCurrentStreak: Int {
         currentReadingStats?.streakDays ?? 0
+    }
+
+    private var healthDayStarts: Set<Date> {
+        Set(healthMetricEntries.map { dashboardCalendar.startOfDay(for: $0.date) })
+    }
+
+    private var exerciseDayStarts: Set<Date> {
+        Set(exerciseLogs.map { dashboardCalendar.startOfDay(for: $0.date) })
+    }
+
+    private var healthCurrentStreak: Int {
+        currentStreak(from: healthDayStarts)
+    }
+
+    private var exerciseCurrentStreak: Int {
+        currentStreak(from: exerciseDayStarts)
+    }
+
+    private var activeStreakItems: [ActiveStreakItem] {
+        [
+            ActiveStreakItem(label: "Journal", value: journalCurrentStreak),
+            ActiveStreakItem(label: "Mood", value: moodCurrentStreak),
+            ActiveStreakItem(label: "Habits", value: habitCurrentStreak),
+            ActiveStreakItem(label: "Reading", value: readingCurrentStreak),
+            ActiveStreakItem(label: "Health", value: healthCurrentStreak),
+            ActiveStreakItem(label: "Exercise", value: exerciseCurrentStreak)
+        ]
+    }
+
+    private var selfCareCurrentPoints: Int {
+        currentSelfCareProfile?.currentPoints ?? 0
+    }
+
+    private var selfCareLevel: Int {
+        currentSelfCareProfile?.level ?? SelfCarePointsManager.level(for: selfCareCurrentPoints)
+    }
+
+    private var selfCareLevelProgress: Double {
+        let progress = SelfCarePointsManager.progressInCurrentLevel(for: selfCareCurrentPoints)
+        let threshold = max(SelfCarePointsManager.pointsPerLevel, 1)
+        return min(max(Double(progress) / Double(threshold), 0), 1)
     }
 
     private var consistencyAreaScores: [ConsistencyAreaScore] {
@@ -833,8 +934,11 @@ struct DashboardView: View {
 
             moonPhaseSection
             momentumSection
+            selfCareSection
+            activeStreaksSection
             dailyBalanceSection
             tarotSection
+            lenormandSection
             horoscopeSection
             consistencySection
             wellnessSection
@@ -845,6 +949,7 @@ struct DashboardView: View {
         DashboardMoonPhaseCard(data: moonPhaseData)
     }
 
+
     private var momentumSection: some View {
         DailyMomentumCard(
             activatedCount: activatedCount,
@@ -852,6 +957,20 @@ struct DashboardView: View {
             items: dailyMomentumItems
         )
         .id(momentumRefreshID)
+    }
+
+    private var selfCareSection: some View {
+        DashboardSelfCareCard(
+            points: selfCareCurrentPoints,
+            level: selfCareLevel,
+            progress: selfCareLevelProgress
+        )
+        .id(dashboardSupportRefreshID)
+    }
+
+    private var activeStreaksSection: some View {
+        ActiveStreaksCard(items: activeStreakItems)
+            .id(dashboardSupportRefreshID)
     }
 
     private var dailyBalanceSection: some View {
@@ -862,6 +981,13 @@ struct DashboardView: View {
         DashboardTarotCard(
             tip: currentDailyTarotTip,
             onDraw: drawDailyTarotTip
+        )
+    }
+
+    private var lenormandSection: some View {
+        DashboardLenormandCard(
+            tip: currentDailyLenormandTip,
+            onDraw: drawDailyLenormandTip
         )
     }
 
@@ -1037,6 +1163,7 @@ struct DashboardView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .onboardingTarget("healthIcon")
 
                 Button {
                     showToolbox = true
@@ -1441,6 +1568,73 @@ private struct DashboardTarotCard: View {
     }
 }
 
+private struct DashboardLenormandCard: View {
+    let tip: DailyLenormandTip?
+    let onDraw: () -> Void
+
+    var body: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .center, spacing: 10) {
+                    Image("cardfill")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 24, height: 24)
+                        .foregroundStyle(.white)
+                        .opacity(1)
+
+                    GradientTitle(text: "Daily Lenormand", font: .system(size: 20, weight: .bold))
+                    Spacer()
+                }
+
+                if let tip {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(tip.title)
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(.white)
+
+                        if !tip.keywords.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("KEYWORDS")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundStyle(LColors.textSecondary)
+                                    .tracking(0.5)
+
+                                FlexibleKeywordWrap(keywords: tip.keywords)
+                            }
+                        }
+
+                        Text(tip.message)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(LColors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Draw your daily Lenormand insight for today.")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(LColors.textSecondary)
+
+                        Button {
+                            onDraw()
+                        } label: {
+                            Text("Draw Lenormand")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 18)
+                                .padding(.vertical, 10)
+                                .background(LGradients.blue)
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+}
+
 private struct FlexibleKeywordWrap: View {
     let keywords: [String]
 
@@ -1628,11 +1822,18 @@ private struct DailyMomentumItem: Identifiable {
     let isActive: Bool
 }
 
+
 private struct DailyBalanceItem: Identifiable {
     let id = UUID()
     let title: String
     let detail: String
     let progress: Double
+}
+
+private struct ActiveStreakItem: Identifiable {
+    let id = UUID()
+    let label: String
+    let value: Int
 }
 
 
@@ -1661,7 +1862,7 @@ private struct DailyMomentumCard: View {
         GlassCard {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .center, spacing: 10) {
-                    Image("boltsparkle")
+                    Image("playwavy")
                         .renderingMode(.template)
                         .resizable()
                         .scaledToFit()
@@ -1739,6 +1940,139 @@ private struct DailyMomentumCard: View {
             radius: 8,
             y: 4
         )
+    }
+
+}
+
+private struct ActiveStreaksCard: View {
+    let items: [ActiveStreakItem]
+
+    private let columns = [
+        GridItem(.flexible(), spacing: 10),
+        GridItem(.flexible(), spacing: 10)
+    ]
+
+    var body: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .center, spacing: 10) {
+                    Image("boltfill")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 20, height: 20)
+                        .foregroundStyle(.white)
+                        .opacity(1)
+
+                    GradientTitle(text: "Active Streaks", font: .system(size: 18, weight: .bold))
+                    Spacer()
+                }
+
+                LazyVGrid(columns: columns, spacing: 10) {
+                    ForEach(items) { item in
+                        streakCapsule(item)
+                    }
+                }
+            }
+            .padding(.bottom, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private func streakCapsule(_ item: ActiveStreakItem) -> some View {
+        HStack(spacing: 10) {
+            Text(item.label)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+
+            Spacer(minLength: 0)
+
+            Text("\(item.value)")
+                .font(.system(size: 16, weight: .black))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity)
+        .frame(height: 46)
+        .background(Color.white.opacity(0.08))
+        .clipShape(Capsule())
+        .overlay(
+            Capsule()
+                .stroke(LColors.glassBorder, lineWidth: 1)
+        )
+    }
+}
+
+private struct DashboardSelfCareCard: View {
+    let points: Int
+    let level: Int
+    let progress: Double
+
+    var body: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .center, spacing: 10) {
+                    Image("balloonheart")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 20, height: 20)
+                        .foregroundStyle(.white)
+                        .opacity(1)
+
+                    GradientTitle(text: "Self Care", font: .system(size: 18, weight: .bold))
+                    Spacer()
+                }
+
+                HStack(alignment: .center, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text("\(points)")
+                                .font(.system(size: 28, weight: .black))
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+
+                            Text("pts")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(LColors.textSecondary)
+                        }
+
+                        Text("Keep showing up for yourself")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(LColors.textSecondary)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    ZStack {
+                        Circle()
+                            .stroke(Color.white.opacity(0.10), lineWidth: 8)
+                            .frame(width: 68, height: 68)
+
+                        Circle()
+                            .trim(from: 0, to: progress)
+                            .stroke(
+                                LGradients.blue,
+                                style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                            )
+                            .rotationEffect(.degrees(-90))
+                            .frame(width: 68, height: 68)
+
+                        Text("\(level)")
+                            .font(.system(size: 16, weight: .black))
+                            .foregroundStyle(LColors.textSecondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
 

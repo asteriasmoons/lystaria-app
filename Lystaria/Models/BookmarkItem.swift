@@ -16,6 +16,8 @@ final class BookmarkItem {
     var tagsRaw: String = ""
     var notes: String = ""
     var isFavorite: Bool = false
+    var iconData: Data?
+    var thumbnailData: Data?
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
 
@@ -28,6 +30,8 @@ final class BookmarkItem {
         tagsRaw: String = "",
         notes: String = "",
         isFavorite: Bool = false,
+        iconData: Data? = nil,
+        thumbnailData: Data? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         folder: BookmarkFolder? = nil
@@ -38,6 +42,8 @@ final class BookmarkItem {
         self.tagsRaw = tagsRaw
         self.notes = notes
         self.isFavorite = isFavorite
+        self.iconData = iconData
+        self.thumbnailData = thumbnailData
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.folder = folder

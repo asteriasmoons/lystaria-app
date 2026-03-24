@@ -11,29 +11,33 @@ import SwiftData
 
 struct SettingsView: View {
     @State private var calendarManager = CalendarSyncManager()
+    @State private var editingCalendar: EventCalendar? = nil
+    @State private var editedName: String = ""
+    @State private var editedColor: Color = Color(ly_hex: "#5b8def")
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \CalendarEvent.startDate, order: .forward) private var appEvents: [CalendarEvent]
-
+    @Query(sort: [SortDescriptor(\EventCalendar.sortOrder), SortDescriptor(\EventCalendar.name)]) private var calendars: [EventCalendar]
+    
     @AppStorage("settings.displayName") private var displayName: String = ""
     @AppStorage("settings.calendarSyncEnabled") private var calendarSyncEnabled: Bool = false
     @AppStorage("settings.selectedCalendarIdentifier") private var selectedCalendarIdentifier: String = ""
-
+    
     // Controls whether onboarding tours should run again on the next launch
     @AppStorage("settings.showOnboardingNextLaunch") private var showOnboardingNextLaunch: Bool = false
     // Allows Settings to relaunch the welcome screens
     @AppStorage("hasSeenWelcome") private var hasSeenWelcome: Bool = true
-
+    
     var body: some View {
         ZStack {
             LystariaBackground()
                 .ignoresSafeArea()
-
+            
             VStack(spacing: 0) {
-
+                
                 // MARK: - Page Header
                 VStack(alignment: .leading, spacing: 10) {
                     GradientTitle(text: "Settings", size: 28)
-
+                    
                     Rectangle()
                         .fill(LColors.glassBorder)
                         .frame(height: 1)
@@ -41,17 +45,56 @@ struct SettingsView: View {
                 .padding(.horizontal, LSpacing.pageHorizontal)
                 .padding(.top, 8)
                 .padding(.bottom, 16)
-
+                
                 // MARK: - Content
                 ScrollView {
                     VStack(spacing: LSpacing.sectionGap) {
                         profileSection
                         calendarSyncSection
+                        manageCalendarsSection
                         onboardingSection
                     }
                     .padding(.horizontal, LSpacing.pageHorizontal)
                     .padding(.bottom, 40)
                 }
+            }
+            
+            if let calendar = editingCalendar {
+                LystariaOverlayPopup(
+                    onClose: { editingCalendar = nil },
+                    width: 420,
+                    heightRatio: 0.40,
+                    header: {
+                        GradientTitle(text: "Edit Calendar", font: .title2.bold())
+                    },
+                    content: {
+                        VStack(alignment: .leading, spacing: 12) {
+                            CalendarLabeledGlassField(label: "NAME") {
+                                TextField("Calendar name", text: $editedName)
+                                    .textFieldStyle(.plain)
+                                    .foregroundStyle(LColors.textPrimary)
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("COLOR")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(LColors.textSecondary)
+                                
+                                ColorPicker("", selection: $editedColor, supportsOpacity: false)
+                                    .labelsHidden()
+                            }
+                        }
+                    },
+                    footer: {
+                        Button {
+                            saveCalendarEdit(calendar)
+                        } label: {
+                            Text("Save Changes")
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+                )
+                .zIndex(50)
             }
         }
         .task {
@@ -84,9 +127,9 @@ struct SettingsView: View {
             }
         }
     }
-
+    
     // MARK: - Profile Section
-
+    
     private var profileSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             GlassCard {
@@ -96,7 +139,7 @@ struct SettingsView: View {
                             Text("Display Name")
                                 .font(.caption)
                                 .foregroundStyle(LColors.textSecondary)
-
+                            
                             GlassTextField(
                                 placeholder: "Your name",
                                 text: $displayName
@@ -108,16 +151,16 @@ struct SettingsView: View {
             }
         }
     }
-
+    
     // MARK: - Calendar Sync Section
-
+    
     private var calendarSyncSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             SectionHeader(title: "Calendar Sync", icon: "calendar")
-
+            
             GlassCard {
                 VStack(spacing: 12) {
-
+                    
                     // Toggle row
                     HStack {
                         VStack(alignment: .leading, spacing: 3) {
@@ -134,10 +177,10 @@ struct SettingsView: View {
                             .labelsHidden()
                             .tint(LColors.accent)
                     }
-
+                    
                     Divider()
                         .background(LColors.glassBorder)
-
+                    
                     // Status row
                     HStack {
                         Label("Status", systemImage: "antenna.radiowaves.left.and.right")
@@ -149,17 +192,17 @@ struct SettingsView: View {
                             color: calendarManager.hasFullAccess ? LColors.success : LColors.textSecondary
                         )
                     }
-
+                    
                     // Conditional expanded content
                     if calendarSyncEnabled {
                         Divider()
                             .background(LColors.glassBorder)
-
+                        
                         expandedCalendarContent
                     }
                 }
             }
-
+            
             if calendarSyncEnabled && calendarManager.hasFullAccess {
                 HStack {
                     Spacer()
@@ -173,7 +216,7 @@ struct SettingsView: View {
                                let first = calendarManager.calendars.first {
                                 selectedCalendarIdentifier = first.calendarIdentifier
                             }
-
+                            
                             await calendarManager.syncEvents(
                                 appEvents: appEvents,
                                 modelContext: modelContext,
@@ -185,7 +228,7 @@ struct SettingsView: View {
                     Spacer()
                 }
             }
-
+            
             if let syncMessage = calendarManager.syncStatusMessage, !syncMessage.isEmpty {
                 Text(syncMessage)
                     .font(.footnote)
@@ -194,7 +237,7 @@ struct SettingsView: View {
             }
         }
     }
-
+    
     @ViewBuilder
     private var expandedCalendarContent: some View {
         // Not determined: show connect button
@@ -219,7 +262,7 @@ struct SettingsView: View {
                 Spacer()
             }
         }
-
+        
         // Denied / restricted
         if calendarManager.authorizationStatus == .denied || calendarManager.authorizationStatus == .restricted {
             HStack(spacing: 10) {
@@ -237,7 +280,7 @@ struct SettingsView: View {
                     .stroke(LColors.warning.opacity(0.2), lineWidth: 1)
             )
         }
-
+        
         // Authorised: calendar picker
         if calendarManager.hasFullAccess {
             if calendarManager.calendars.isEmpty {
@@ -253,7 +296,7 @@ struct SettingsView: View {
                     Text("Target Calendar")
                         .font(.caption)
                         .foregroundStyle(LColors.textSecondary)
-
+                    
                     Menu {
                         ForEach(calendarManager.calendars, id: \.calendarIdentifier) { cal in
                             Button {
@@ -293,7 +336,7 @@ struct SettingsView: View {
                 }
             }
         }
-
+        
         // Error message
         if let error = calendarManager.errorMessage, !error.isEmpty {
             HStack(spacing: 10) {
@@ -304,22 +347,85 @@ struct SettingsView: View {
                     .foregroundStyle(LColors.danger)
             }
         }
-
+        
         if let lastSyncDate = calendarManager.lastSyncDate {
             Text("Last synced \(lastSyncDate.formatted(date: .abbreviated, time: .shortened))")
                 .font(.caption)
                 .foregroundStyle(LColors.textSecondary)
         }
     }
+    // MARK: - Manage Calendars Section
+    
+    private var manageCalendarsSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            SectionHeader(title: "Manage Calendars", icon: "calendar")
+            
+            GlassCard {
+                VStack(spacing: 12) {
+                    if calendars.isEmpty {
+                        Text("No calendars available.")
+                            .font(.footnote)
+                            .foregroundStyle(LColors.textSecondary)
+                    } else {
+                        ForEach(calendars) { calendar in
+                            HStack(spacing: 10) {
+                                
+                                Circle()
+                                    .fill(Color(ly_hex: calendar.color))
+                                    .frame(width: 10, height: 10)
+                                
+                                Text(calendar.name)
+                                    .font(.subheadline)
+                                    .foregroundStyle(LColors.textPrimary)
+                                
+                                Spacer()
+                                
+                                if calendar.isDefault {
+                                    Text("Default")
+                                        .font(.caption2)
+                                        .foregroundStyle(LColors.textSecondary)
+                                }
+                                
+                                Button {
+                                    editingCalendar = calendar
+                                    editedName = calendar.name
+                                    editedColor = Color(ly_hex: calendar.color)
+                                } label: {
+                                    Image(systemName: "pencil")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(LColors.textSecondary)
+                                }
+                                .buttonStyle(.plain)
+                                
+                                Button {
+                                    deleteCalendar(calendar)
+                                } label: {
+                                    Image("trashfill")
+                                        .renderingMode(.template)
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: 14, height: 14)
+                                        .foregroundStyle(LColors.danger)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
     // MARK: - App Guides Section
-
+    
     private var onboardingSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             SectionHeader(title: "App Guides", icon: "sparkles")
-
+            
             GlassCard {
                 VStack(spacing: 12) {
-
+                    
                     // Feature tour toggle
                     HStack {
                         VStack(alignment: .leading, spacing: 3) {
@@ -327,22 +433,22 @@ struct SettingsView: View {
                                 .font(.subheadline)
                                 .fontWeight(.medium)
                                 .foregroundStyle(LColors.textPrimary)
-
+                            
                             Text("Show icon explanations again the next time you open each page.")
                                 .font(.caption)
                                 .foregroundStyle(LColors.textSecondary)
                         }
-
+                        
                         Spacer()
-
+                        
                         Toggle("", isOn: $showOnboardingNextLaunch)
                             .labelsHidden()
                             .tint(LColors.accent)
                     }
-
+                    
                     Divider()
                         .background(LColors.glassBorder)
-
+                    
                     // Welcome screens button
                     HStack {
                         Spacer()
@@ -358,5 +464,40 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+    
+    private func deleteCalendar(_ calendar: EventCalendar) {
+        guard !calendar.isDefault else { return }
+        
+        if let defaultCal = calendars.first(where: { $0.isDefault }) {
+            for event in appEvents where event.calendarId == calendar.serverId {
+                event.calendarId = defaultCal.serverId
+                event.calendar = defaultCal
+            }
+        }
+        
+        modelContext.delete(calendar)
+        
+        do {
+            try modelContext.save()
+        } catch {
+            print("❌ Failed to delete calendar: \(error)")
+        }
+    }
+    
+    private func saveCalendarEdit(_ calendar: EventCalendar) {
+        let trimmed = editedName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        
+        calendar.name = trimmed
+        calendar.color = editedColor.toHexString()
+        
+        do {
+            try modelContext.save()
+        } catch {
+            print("❌ Failed to update calendar: \(error)")
+        }
+        
+        editingCalendar = nil
     }
 }

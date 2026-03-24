@@ -15,8 +15,13 @@ struct SelfCarePointsView: View {
     @AppStorage("isAdminMode") private var isAdminMode: Bool = false
     @State private var selectedEntryForAdminAction: SelfCarePointEntry? = nil
     @State private var showDeleteEntryConfirmation: Bool = false
+    @State private var showManualHistoryConfirmation: Bool = false
     
     @State private var showLogHistoryPopup: Bool = false
+    @State private var selectedHistoryLog: SelfCarePointsResetLog? = nil
+    @State private var visibleHistoryCount: Int = 4
+    @State private var historyLogToDelete: SelfCarePointsResetLog? = nil
+    @State private var showDeleteHistoryConfirmation: Bool = false
     @State private var currentDayKey: String = SelfCarePointsManager.dayKey()
     @State private var visibleRecentEntryCount: Int = 4
     private let dayRefreshTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
@@ -27,26 +32,30 @@ struct SelfCarePointsView: View {
     @Query(sort: \SelfCarePointEntry.createdAt, order: .reverse)
     private var allEntries: [SelfCarePointEntry]
 
-    private var activeUserId: String? {
-        try? SelfCarePointsManager.resolveActiveUserId(in: modelContext)
-    }
+    @State private var activeUserId: String? = nil
 
     private var currentProfile: SelfCarePointsProfile? {
-        guard let userId = activeUserId else { return nil }
-        return profiles.first { $0.userId == userId }
+        if let userId = activeUserId {
+            return profiles.first { $0.userId == userId } ?? profiles.first
+        }
+        return profiles.first
     }
 
     private var recentEntries: [SelfCarePointEntry] {
         _ = currentDayKey
-        guard let userId = activeUserId else { return [] }
-        return allEntries
-            .filter { $0.userId == userId }
-            .sorted { $0.createdAt > $1.createdAt }
+        if let userId = activeUserId {
+            let filtered = allEntries.filter { $0.userId == userId }
+            return filtered.isEmpty ? allEntries.sorted { $0.createdAt > $1.createdAt }
+                                    : filtered.sorted { $0.createdAt > $1.createdAt }
+        }
+        return allEntries.sorted { $0.createdAt > $1.createdAt }
     }
     
     private var recentResetLogs: [SelfCarePointsResetLog] {
-        guard let userId = activeUserId else { return [] }
-        return resetLogs.filter { $0.userId == userId }
+        // Show all logs — there is only one user per device.
+        // Filtering by userId is the bug: if userId resolves differently
+        // than what was stored, the list is always empty.
+        return resetLogs
     }
 
     private var currentPoints: Int {
@@ -95,11 +104,13 @@ struct SelfCarePointsView: View {
                     breakdownSection
                     recentActivitySection
                     earningGuideSection
+                    manualLogHistoryButtonSection
                     logHistoryButtonSection
 
                     Spacer(minLength: 80)
                 }
                 .task {
+                    activeUserId = try? SelfCarePointsManager.resolveActiveUserId(in: modelContext)
                     if let userId = activeUserId {
                         _ = try? SelfCarePointsManager.fetchOrCreateProfile(in: modelContext, userId: userId)
                     }
@@ -121,6 +132,7 @@ struct SelfCarePointsView: View {
                 LystariaOverlayPopup(
                     onClose: {
                         showLogHistoryPopup = false
+                        visibleHistoryCount = 4
                     },
                     width: 560,
                     heightRatio: 0.70,
@@ -133,6 +145,7 @@ struct SelfCarePointsView: View {
                             Button {
                                 withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                                     showLogHistoryPopup = false
+                                    visibleHistoryCount = 4
                                 }
                             } label: {
                                 ZStack {
@@ -152,33 +165,81 @@ struct SelfCarePointsView: View {
                         }
                     },
                     content: {
-                        Text(
-                            recentResetLogs.isEmpty
-                            ? "Your weekly reset history will appear here once your first Sunday reset happens."
-                            : "Your weekly reset history page is coming next."
-                        )
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(LColors.textSecondary)
-                        .multilineTextAlignment(.leading)
+                        if recentResetLogs.isEmpty {
+                            Text("No automatic or manual history has been saved yet.")
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundStyle(LColors.textSecondary)
+                                .multilineTextAlignment(.leading)
+                        } else {
+                            VStack(spacing: 10) {
+                                ForEach(Array(recentResetLogs.prefix(visibleHistoryCount))) { log in
+                                    GlassCard {
+                                        HStack(spacing: 12) {
+                                            VStack(alignment: .leading, spacing: 6) {
+                                                Text(historyTitle(for: log))
+                                                    .font(.system(size: 14, weight: .bold))
+                                                    .foregroundStyle(LColors.textPrimary)
+                                                    .lineLimit(1)
 
-                        if let latest = recentResetLogs.first {
-                            GlassCard {
-                                VStack(alignment: .leading, spacing: 10) {
-                                    Text("Latest Reset")
-                                        .font(.system(size: 14, weight: .bold))
-                                        .foregroundStyle(LColors.textPrimary)
+                                                Text(log.resetAt.formatted(date: .abbreviated, time: .shortened))
+                                                    .font(.system(size: 12, weight: .medium))
+                                                    .foregroundStyle(LColors.textSecondary)
+                                            }
 
-                                    Text(latest.resetAt.formatted(date: .abbreviated, time: .shortened))
-                                        .font(.system(size: 13, weight: .medium))
-                                        .foregroundStyle(LColors.textSecondary)
+                                            Spacer()
 
-                                    Text("Points archived: \(latest.pointsBeforeReset)")
-                                        .font(.system(size: 13, weight: .medium))
-                                        .foregroundStyle(LColors.textSecondary)
+                                            VStack(alignment: .trailing, spacing: 4) {
+                                                Text("\(log.pointsBeforeReset) pts")
+                                                    .font(.system(size: 13, weight: .bold))
+                                                    .foregroundStyle(LColors.textPrimary)
 
-                                    Text("Level archived: \(latest.levelBeforeReset)")
-                                        .font(.system(size: 13, weight: .medium))
-                                        .foregroundStyle(LColors.textSecondary)
+                                                Text("Lv \(log.levelBeforeReset)")
+                                                    .font(.system(size: 12, weight: .medium))
+                                                    .foregroundStyle(LColors.textSecondary)
+                                            }
+
+                                            Image(systemName: "chevron.right")
+                                                .font(.system(size: 12, weight: .semibold))
+                                                .foregroundStyle(LColors.textSecondary)
+                                        }
+                                    }
+                                    .onTapGesture {
+                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                                            selectedHistoryLog = log
+                                        }
+                                    }
+                                    .onLongPressGesture {
+                                        historyLogToDelete = log
+                                        showDeleteHistoryConfirmation = true
+                                    }
+                                    .confirmationDialog(
+                                        "Delete History Entry?",
+                                        isPresented: $showDeleteHistoryConfirmation,
+                                        titleVisibility: .visible
+                                    ) {
+                                        Button("Delete", role: .destructive) {
+                                            if let toDelete = historyLogToDelete {
+                                                modelContext.delete(toDelete)
+                                                try? modelContext.save()
+                                                historyLogToDelete = nil
+                                                if visibleHistoryCount > recentResetLogs.count {
+                                                    visibleHistoryCount = max(4, recentResetLogs.count)
+                                                }
+                                            }
+                                        }
+                                        Button("Cancel", role: .cancel) {
+                                            historyLogToDelete = nil
+                                        }
+                                    } message: {
+                                        Text("This will permanently remove this history entry. This cannot be undone.")
+                                    }
+                                }
+
+                                if recentResetLogs.count > visibleHistoryCount {
+                                    LoadMoreButton {
+                                        visibleHistoryCount += 4
+                                    }
+                                    .padding(.top, 4)
                                 }
                             }
                         }
@@ -190,6 +251,7 @@ struct SelfCarePointsView: View {
                             Button {
                                 withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                                     showLogHistoryPopup = false
+                                    visibleHistoryCount = 4
                                 }
                             } label: {
                                 Text("Close")
@@ -210,6 +272,8 @@ struct SelfCarePointsView: View {
                 )
                 .zIndex(10)
             }
+
+            historyDetailPopup
 
             if showDeleteEntryConfirmation, let selectedEntry = selectedEntryForAdminAction {
                 LystariaOverlayPopup(
@@ -721,6 +785,57 @@ struct SelfCarePointsView: View {
             .frame(height: 1)
     }
 
+    private var manualLogHistoryButtonSection: some View {
+        GlassCard {
+            Button {
+                showManualHistoryConfirmation = true
+            } label: {
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(LColors.glassSurface2)
+                            .overlay(
+                                Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                            .frame(width: 34, height: 34)
+
+                        Image(systemName: "square.and.pencil")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(LColors.textPrimary)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Log History")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(LColors.textPrimary)
+
+                        Text("Save a manual snapshot of your current points and level.")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(LColors.textSecondary)
+                            .multilineTextAlignment(.leading)
+                    }
+
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .confirmationDialog(
+                "Save Manual History Snapshot?",
+                isPresented: $showManualHistoryConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Save Snapshot") {
+                    _ = try? SelfCarePointsManager.createManualHistorySnapshot(in: modelContext)
+                    activeUserId = try? SelfCarePointsManager.resolveActiveUserId(in: modelContext)
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("This will save your current points and level into history without resetting anything.")
+            }
+        }
+    }
+
     private var logHistoryButtonSection: some View {
         GlassCard {
             Button {
@@ -743,11 +858,11 @@ struct SelfCarePointsView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Log History")
+                        Text("History")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(LColors.textPrimary)
 
-                        Text("View weekly reset history and archived totals.")
+                        Text("View automatic reset history and manual saved snapshots.")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(LColors.textSecondary)
                             .multilineTextAlignment(.leading)
@@ -783,6 +898,144 @@ struct SelfCarePointsView: View {
             return "face.smiling.fill"
         }
     }
-    
-}
 
+    @ViewBuilder
+    private var historyDetailPopup: some View {
+        if let log = selectedHistoryLog {
+            LystariaOverlayPopup(
+                onClose: {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                        selectedHistoryLog = nil
+                    }
+                },
+                width: 560,
+                heightRatio: 0.52,
+                header: {
+                    HStack {
+                        GradientTitle(text: historyTitle(for: log), size: 24)
+                        Spacer()
+                        Button {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                                selectedHistoryLog = nil
+                            }
+                        } label: {
+                            ZStack {
+                                Circle()
+                                    .fill(LColors.glassSurface2)
+                                    .overlay(Circle().stroke(LColors.glassBorder, lineWidth: 1))
+                                    .frame(width: 34, height: 34)
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(LColors.textPrimary)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                },
+                content: {
+                    VStack(spacing: 12) {
+                        GlassCard {
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack {
+                                    Image(systemName: log.weekStartDayKey.hasPrefix("manual-") ? "square.and.pencil" : "arrow.clockwise.circle.fill")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(LColors.accent)
+                                    Text(historySubtitle(for: log))
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundStyle(LColors.textSecondary)
+                                }
+
+                                Rectangle()
+                                    .fill(LColors.glassBorder)
+                                    .frame(height: 1)
+
+                                HStack {
+                                    Text("Saved")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundStyle(LColors.textSecondary)
+                                    Spacer()
+                                    Text(log.resetAt.formatted(date: .abbreviated, time: .shortened))
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(LColors.textPrimary)
+                                }
+
+                                Rectangle()
+                                    .fill(LColors.glassBorder)
+                                    .frame(height: 1)
+
+                                HStack {
+                                    Text("Points at save")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundStyle(LColors.textSecondary)
+                                    Spacer()
+                                    Text("\(log.pointsBeforeReset)")
+                                        .font(.system(size: 13, weight: .bold))
+                                        .foregroundStyle(LColors.textPrimary)
+                                }
+
+                                Rectangle()
+                                    .fill(LColors.glassBorder)
+                                    .frame(height: 1)
+
+                                HStack {
+                                    Text("Level at save")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundStyle(LColors.textSecondary)
+                                    Spacer()
+                                    Text("\(log.levelBeforeReset)")
+                                        .font(.system(size: 13, weight: .bold))
+                                        .foregroundStyle(LColors.textPrimary)
+                                }
+                            }
+                        }
+                    }
+                },
+                footer: {
+                    HStack {
+                        Spacer()
+                        Button {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                                selectedHistoryLog = nil
+                            }
+                        } label: {
+                            Text("Close")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(LColors.textPrimary)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
+                                .background(Color.white.opacity(0.08))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay(RoundedRectangle(cornerRadius: 12).stroke(LColors.glassBorder, lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            )
+            .zIndex(15)
+        }
+    }
+
+    private func historyTitle(for log: SelfCarePointsResetLog) -> String {
+        if log.weekStartDayKey.hasPrefix("manual-") {
+            return "Manual History Snapshot"
+        }
+
+        if log.weekStartDayKey == "legacy-pre-weekly-reset" {
+            return "Legacy Weekly Reset"
+        }
+
+        return "Automatic Weekly Reset"
+    }
+
+    private func historySubtitle(for log: SelfCarePointsResetLog) -> String {
+        if log.weekStartDayKey.hasPrefix("manual-") {
+            return "Saved manually"
+        }
+
+        if log.weekStartDayKey == "legacy-pre-weekly-reset" {
+            return "Imported from pre-weekly-reset history"
+        }
+
+        return "Saved automatically during weekly reset"
+    }
+}

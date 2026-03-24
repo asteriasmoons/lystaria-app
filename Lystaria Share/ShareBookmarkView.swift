@@ -37,6 +37,44 @@ struct ShareBookmarkView: View {
                                 Text("Add this to your bookmark manager with the right details before it lands in your library.")
                                     .font(.subheadline)
                                     .foregroundStyle(.white.opacity(0.75))
+
+                                if !viewModel.url.isEmpty {
+                                    HStack(spacing: 12) {
+                                        ZStack {
+                                            RoundedRectangle(cornerRadius: 14)
+                                                .fill(Color.white.opacity(0.06))
+                                                .frame(width: 46, height: 46)
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 14)
+                                                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                                                )
+
+                                            if let image = previewUIImage {
+                                                Image(uiImage: image)
+                                                    .resizable()
+                                                    .scaledToFill()
+                                                    .frame(width: 46, height: 46)
+                                                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                                            } else {
+                                                Image(systemName: "link")
+                                                    .foregroundStyle(.white.opacity(0.85))
+                                            }
+                                        }
+
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(viewModel.title.isEmpty ? "Untitled Bookmark" : viewModel.title)
+                                                .font(.subheadline.weight(.semibold))
+                                                .foregroundStyle(.white)
+                                                .lineLimit(2)
+
+                                            Text(viewModel.url)
+                                                .font(.caption)
+                                                .foregroundStyle(.white.opacity(0.6))
+                                                .lineLimit(1)
+                                        }
+                                    }
+                                    .padding(.top, 4)
+                                }
                             }
                         }
 
@@ -147,4 +185,17 @@ struct ShareBookmarkView: View {
                     .stroke(Color.white.opacity(0.14), lineWidth: 1)
             )
     }
+private var previewUIImage: UIImage? {
+    if let data = viewModel.previewThumbnailData,
+       let image = UIImage(data: data) {
+        return image
+    }
+
+    if let data = viewModel.previewIconData,
+       let image = UIImage(data: data) {
+        return image
+    }
+
+    return nil
+}
 }

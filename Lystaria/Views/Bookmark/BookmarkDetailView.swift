@@ -60,17 +60,15 @@ struct BookmarkDetailView: View {
         .onChange(of: notesText) { _, newValue in
             saveNotes(newValue)
         }
-        .modifier(
-            LystariaConfirmDialog(
-                isPresented: $showDeleteDialog,
-                title: "Delete Bookmark",
-                message: "Are you sure you want to delete this bookmark? This cannot be undone.",
-                confirmTitle: "Delete",
-                confirmRole: .destructive
-            ) {
-                deleteBookmark()
-            }
-        )
+        .lystariaAlertConfirm(
+            isPresented: $showDeleteDialog,
+            title: "Delete Bookmark",
+            message: "Are you sure you want to delete this bookmark? This cannot be undone.",
+            confirmTitle: "Delete",
+            confirmRole: .destructive
+        ) {
+            deleteBookmark()
+        }
     }
 }
 

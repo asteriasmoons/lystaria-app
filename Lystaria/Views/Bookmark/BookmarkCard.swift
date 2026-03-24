@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct BookmarkCard: View {
     let bookmark: BookmarkItem
@@ -31,10 +32,6 @@ struct BookmarkCard: View {
         .onTapGesture {
             onOpen()
         }
-        .contentShape(RoundedRectangle(cornerRadius: LSpacing.cardRadius))
-        .onTapGesture {
-            onOpen()
-        }
     }
 }
 
@@ -43,6 +40,8 @@ struct BookmarkCard: View {
 private extension BookmarkCard {
     var topRow: some View {
         HStack(alignment: .top, spacing: 12) {
+            previewImage
+
             VStack(alignment: .leading, spacing: 6) {
                 Text(bookmark.title.isEmpty ? "Untitled Bookmark" : bookmark.title)
                     .font(.headline)
@@ -85,6 +84,44 @@ private extension BookmarkCard {
             .buttonStyle(.plain)
             .onTapGesture { }
         }
+    }
+
+    var previewImage: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color.white.opacity(0.06))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(LColors.glassBorder, lineWidth: 1)
+                )
+                .frame(width: 46, height: 46)
+
+            if let image = bookmarkPreviewUIImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 46, height: 46)
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+            } else {
+                Image(systemName: "globe")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.85))
+            }
+        }
+    }
+
+    var bookmarkPreviewUIImage: UIImage? {
+        if let thumbnailData = bookmark.thumbnailData,
+           let image = UIImage(data: thumbnailData) {
+            return image
+        }
+
+        if let iconData = bookmark.iconData,
+           let image = UIImage(data: iconData) {
+            return image
+        }
+
+        return nil
     }
 
     var middleContent: some View {

@@ -190,6 +190,7 @@ private extension AddEditBookmarkFolderView {
 
         do {
             try modelContext.save()
+            SharedFolderExportManager.exportFolders(modelContext: modelContext)
             onClose()
         } catch {
             print("Failed to save folder: \(error)")

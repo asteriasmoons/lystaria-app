@@ -13,7 +13,8 @@ struct JournalBlockDisplayView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 6) {
+            // Block to Block Spacing is 10
+            VStack(alignment: .leading, spacing: 10) {
                 ForEach(visibleBlocks) { block in
                     render(block)
                 }
@@ -79,7 +80,7 @@ struct JournalBlockDisplayView: View {
             .padding(.leading, CGFloat(block.indentLevel) * 20)
 
         case .callout:
-            HStack(alignment: .top, spacing: 10) {
+            HStack(alignment: .center, spacing: 10) {
                 Text(block.calloutEmoji.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "✦" : block.calloutEmoji)
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(LGradients.blue)
@@ -152,9 +153,7 @@ struct JournalBlockDisplayView: View {
             .padding(.leading, CGFloat(block.indentLevel) * 20)
 
         case .divider:
-            Capsule()
-                .fill(LGradients.blue)
-                .frame(height: 3)
+            dividerView(style: DividerStyle(rawValue: block.languageHint) ?? .line)
                 .padding(.vertical, 4)
                 .padding(.leading, CGFloat(block.indentLevel) * 20)
 
@@ -166,13 +165,11 @@ struct JournalBlockDisplayView: View {
                         .foregroundStyle(LColors.textSecondary)
                 }
 
-                ScrollView(.horizontal, showsIndicators: false) {
-                    Text(block.text)
-                        .font(.system(.body, design: .monospaced))
-                        .foregroundStyle(LColors.textPrimary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                Text(block.text)
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundStyle(LColors.textPrimary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(12)
             .background(Color.white.opacity(0.05))
@@ -182,6 +179,43 @@ struct JournalBlockDisplayView: View {
             )
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .padding(.leading, CGFloat(block.indentLevel) * 20)
+        }
+    }
+
+    @ViewBuilder
+    private func dividerView(style: DividerStyle) -> some View {
+        switch style {
+        case .line:
+            Capsule()
+                .fill(LGradients.blue)
+                .frame(maxWidth: .infinity)
+                .frame(height: 3)
+
+        case .dotted:
+            GeometryReader { geo in
+                let dotWidth: CGFloat = 6
+                let gap: CGFloat = 8
+                let count = max(1, Int(geo.size.width / (dotWidth + gap)))
+                HStack(spacing: gap) {
+                    ForEach(0..<count, id: \.self) { _ in
+                        Capsule()
+                            .fill(LGradients.blue)
+                            .frame(width: dotWidth, height: 3)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 3)
+
+        case .dots:
+            HStack(spacing: 12) {
+                ForEach(0..<3, id: \.self) { _ in
+                    Circle()
+                        .fill(LGradients.blue)
+                        .frame(width: 7, height: 7)
+                }
+            }
+            .frame(maxWidth: .infinity)
         }
     }
 
@@ -266,6 +300,10 @@ struct JournalBlockDisplayView: View {
                     value: NSUnderlineStyle.single.rawValue,
                     range: range
                 )
+            case .inlineCode:
+                let monoFont = UIFont.monospacedSystemFont(ofSize: baseFont.pointSize * 0.9, weight: .regular)
+                mutable.addAttribute(.font, value: monoFont, range: range)
+                mutable.addAttribute(.backgroundColor, value: UIColor.white.withAlphaComponent(0.1), range: range)
             }
         }
 

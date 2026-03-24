@@ -4,22 +4,23 @@
 import SwiftUI
 import SwiftData
 import Combine
+import WidgetKit
 
 struct JournalTabView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var appState: AppState
+    @State private var showBookEditor = false
 
     @Query(filter: #Predicate<JournalBook> { $0.deletedAt == nil }, sort: \JournalBook.createdAt, order: .reverse) private var books: [JournalBook]
     @Query(filter: #Predicate<JournalEntry> { $0.deletedAt == nil }, sort: \JournalEntry.createdAt, order: .reverse) private var allEntries: [JournalEntry] // for migration + counts
 
-    @State private var showBookEditor = false
     @State private var editingBook: JournalBook? = nil
     // Onboarding for hidden header icons
     @StateObject private var onboarding = OnboardingManager()
 
     var body: some View {
         NavigationStack {
-            ZStack(alignment: .bottomTrailing) {
+            ZStack {
                 LystariaBackground()
                     .ignoresSafeArea()
 
@@ -45,15 +46,19 @@ struct JournalTabView: View {
                     .padding(.bottom, 120)
                 }
                 .scrollIndicators(.hidden)
-
-                // Floating "+" now adds BOOKS
+            }
+            .overlay(alignment: .bottomTrailing) {
+                // TO MOVE FAB ADJUST .PADDING(.BOTTOM, 90)
+                // AND DECREASE FOR DOWN AND INCREASE FOR UP
                 FloatingActionButton {
                     editingBook = nil
                     showBookEditor = true
                 }
                 .padding(.trailing, 24)
-                .padding(.bottom, 96)
+                .padding(.bottom, 90)
             }
+            .ignoresSafeArea(edges: .bottom)
+            
             .overlay {
                 if showBookEditor {
                     JournalBookEditorSheet(
@@ -82,6 +87,13 @@ struct JournalTabView: View {
             .onAppear {
                 migrateEntriesIntoDefaultBookIfNeeded()
                 JournalEntryBlockMigration.migrateEntriesIfNeeded(allEntries, modelContext: modelContext)
+                syncWidgetSnapshot()
+            }
+            .onChange(of: books) { _, _ in
+                syncWidgetSnapshot()
+            }
+            .onChange(of: allEntries) { _, _ in
+                syncWidgetSnapshot()
             }
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showBookEditor)
             // Prevent the NavigationStack default backgrounds from covering the custom background
@@ -335,6 +347,48 @@ struct JournalTabView: View {
             e.book = created
             e.updatedAt = Date()
         }
+    }
+
+    // MARK: - Widget Sync
+
+    private func syncWidgetSnapshot() {
+        let defaults = UserDefaults(suiteName: "group.com.asteriasmoons.LystariaDev")
+
+        // MARK: - Books Snapshot
+        let booksSnapshot: [[String: String]] = books.map { book in
+            [
+                "id": "\(book.persistentModelID)",
+                "title": book.title,
+                "coverHex": book.coverHex
+            ]
+        }
+
+        if let booksData = try? JSONEncoder().encode(booksSnapshot) {
+            defaults?.set(booksData, forKey: "journalWidget.books")
+        }
+
+        // MARK: - Entries Snapshot (grouped by book)
+        var entriesByBook: [String: [[String: String]]] = [:]
+
+        for entry in allEntries {
+            guard let book = entry.book else { continue }
+
+            let bookID = "\(book.persistentModelID)"
+
+            let entryData: [String: String] = [
+                "id": "\(entry.persistentModelID)",
+                "title": entry.title
+            ]
+
+            entriesByBook[bookID, default: []].append(entryData)
+        }
+
+        if let entriesData = try? JSONEncoder().encode(entriesByBook) {
+            defaults?.set(entriesData, forKey: "journalWidget.entries")
+        }
+
+        // Refresh widgets
+        WidgetCenter.shared.reloadAllTimelines()
     }
 
 }
@@ -848,7 +902,12 @@ struct JournalBookDetailView: View {
                             previewEntryTarget = $0
                             navigateToPreviewPage = true
                         },
-                        onTagSelect: { tagFilter = $0 }
+                        onTagSelect: { tagFilter = $0 },
+                        onMove: { entry, destination in
+                            entry.book = destination
+                            entry.updatedAt = Date()
+                            try? modelContext.save()
+                        }
                     )
                     .padding(.horizontal, LSpacing.pageHorizontal)
                 }

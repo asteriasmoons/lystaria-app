@@ -438,6 +438,11 @@ struct StepCountView: View {
             selectedDate = Date()
             selectedDaySteps = health.todaySteps
             await recalculateReachedGoalDates()
+
+            HealthWidgetSync.syncSteps(
+                stepsToday: health.todaySteps,
+                stepGoal: stepGoal
+            )
         }
         .onChange(of: displayedMonth) { _, _ in
             if let selectedDate {
@@ -452,10 +457,15 @@ struct StepCountView: View {
                 await recalculateReachedGoalDates()
             }
         }
-        .onChange(of: stepGoal) { _, _ in
+        .onChange(of: stepGoal) { _, newValue in
             Task {
                 await recalculateReachedGoalDates()
             }
+
+            HealthWidgetSync.syncSteps(
+                stepsToday: health.todaySteps,
+                stepGoal: newValue
+            )
         }
         .onChange(of: health.todaySteps) { _, newValue in
             if let selectedDate, calendar.isDateInToday(selectedDate) {
@@ -464,6 +474,11 @@ struct StepCountView: View {
             Task {
                 await recalculateReachedGoalDates()
             }
+
+            HealthWidgetSync.syncSteps(
+                stepsToday: newValue,
+                stepGoal: stepGoal
+            )
         }
         .onChange(of: showGoalPopup) { _, isShowing in
             if !isShowing {

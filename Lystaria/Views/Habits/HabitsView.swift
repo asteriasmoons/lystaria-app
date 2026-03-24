@@ -205,23 +205,41 @@ private struct HabitSummaryRow: View {
         Calendar.current.startOfDay(for: Date())
     }
 
-    private var resetStart: Date? {
-        habit.statsResetAt.map { Calendar.current.startOfDay(for: $0) }
+    private var resetMoment: Date? {
+        habit.statsResetAt
     }
 
     private var target: Int {
         max(1, habit.timesPerDay)
     }
 
+    private func includeLogInCurrentStats(_ log: HabitLog) -> Bool {
+        guard let resetMoment else { return true }
+        let cal = Calendar.current
+        let resetDay = cal.startOfDay(for: resetMoment)
+        let logDay = cal.startOfDay(for: log.dayStart)
+
+        if logDay > resetDay { return true }
+        if logDay < resetDay { return false }
+        return log.createdAt >= resetMoment
+    }
+
+    private func includeSkipInCurrentStats(_ skip: HabitSkip) -> Bool {
+        guard let resetMoment else { return true }
+        let cal = Calendar.current
+        let resetDay = cal.startOfDay(for: resetMoment)
+        let skipDay = cal.startOfDay(for: skip.dayStart)
+
+        if skipDay > resetDay { return true }
+        if skipDay < resetDay { return false }
+        return skip.createdAt >= resetMoment
+    }
 
     private var completedDayStarts: Set<Date> {
         Set((habit.logs ?? [])
             .filter { log in
                 guard log.count >= target else { return false }
-                if let resetStart {
-                    return Calendar.current.startOfDay(for: log.dayStart) >= resetStart
-                }
-                return true
+                return includeLogInCurrentStats(log)
             }
             .map { Calendar.current.startOfDay(for: $0.dayStart) })
     }
@@ -229,10 +247,7 @@ private struct HabitSummaryRow: View {
     private var skippedDayStarts: Set<Date> {
         Set((habit.skips ?? [])
             .filter { skip in
-                if let resetStart {
-                    return Calendar.current.startOfDay(for: skip.dayStart) >= resetStart
-                }
-                return true
+                includeSkipInCurrentStats(skip)
             }
             .map { Calendar.current.startOfDay(for: $0.dayStart) })
     }
@@ -281,7 +296,7 @@ private struct HabitSummaryRow: View {
         var completedDays = Set<Date>()
         for log in (habit.logs ?? []) {
             let d = Calendar.current.startOfDay(for: log.dayStart)
-            if let resetStart, d < resetStart { continue }
+            guard includeLogInCurrentStats(log) else { continue }
             if interval.contains(d), log.count >= target {
                 completedDays.insert(d)
             }
@@ -290,7 +305,7 @@ private struct HabitSummaryRow: View {
         var skippedDays = Set<Date>()
         for skip in (habit.skips ?? []) {
             let d = Calendar.current.startOfDay(for: skip.dayStart)
-            if let resetStart, d < resetStart { continue }
+            guard includeSkipInCurrentStats(skip) else { continue }
             if interval.contains(d) {
                 skippedDays.insert(d)
             }
@@ -370,8 +385,8 @@ struct HabitCard: View {
         Calendar.current.startOfDay(for: Date())
     }
 
-    private var resetStart: Date? {
-        habit.statsResetAt.map { Calendar.current.startOfDay(for: $0) }
+    private var resetMoment: Date? {
+        habit.statsResetAt
     }
 
     private var todaysLog: HabitLog? {
@@ -399,18 +414,35 @@ struct HabitCard: View {
         return min(Double(todaysCount) / Double(target), 1.0)
     }
 
+    private func includeLogInCurrentStats(_ log: HabitLog) -> Bool {
+        guard let resetMoment else { return true }
+        let cal = Calendar.current
+        let resetDay = cal.startOfDay(for: resetMoment)
+        let logDay = cal.startOfDay(for: log.dayStart)
+
+        if logDay > resetDay { return true }
+        if logDay < resetDay { return false }
+        return log.createdAt >= resetMoment
+    }
+
+    private func includeSkipInCurrentStats(_ skip: HabitSkip) -> Bool {
+        guard let resetMoment else { return true }
+        let cal = Calendar.current
+        let resetDay = cal.startOfDay(for: resetMoment)
+        let skipDay = cal.startOfDay(for: skip.dayStart)
+
+        if skipDay > resetDay { return true }
+        if skipDay < resetDay { return false }
+        return skip.createdAt >= resetMoment
+    }
+
     // MARK: - Streaks
 
     private var completedDayStarts: Set<Date> {
-        // A day counts as completed only if it reaches the daily target,
-        // and only if it is on or after the current stats reset point.
         Set((habit.logs ?? [])
             .filter { log in
                 guard log.count >= target else { return false }
-                if let resetStart {
-                    return Calendar.current.startOfDay(for: log.dayStart) >= resetStart
-                }
-                return true
+                return includeLogInCurrentStats(log)
             }
             .map { Calendar.current.startOfDay(for: $0.dayStart) })
     }
@@ -418,10 +450,7 @@ struct HabitCard: View {
     private var skippedDayStarts: Set<Date> {
         Set((habit.skips ?? [])
             .filter { skip in
-                if let resetStart {
-                    return Calendar.current.startOfDay(for: skip.dayStart) >= resetStart
-                }
-                return true
+                includeSkipInCurrentStats(skip)
             }
             .map { Calendar.current.startOfDay(for: $0.dayStart) })
     }
@@ -435,7 +464,6 @@ struct HabitCard: View {
     }
 
     private var daysCompletedStreak: Int {
-        // If today is neither completed nor skipped, streak counts up to yesterday.
         let cal = Calendar.current
         var cursor = todayStart
         if !isCompletedDay(cursor) && !isSkippedDay(cursor) {
@@ -466,11 +494,10 @@ struct HabitCard: View {
     private func weekMet(weekStarting start: Date) -> Bool {
         guard let interval = Calendar.current.dateInterval(of: .weekOfYear, for: start) else { return false }
 
-        // Count distinct completed days and skipped days within that week on or after reset.
         var completedDays = Set<Date>()
         for log in (habit.logs ?? []) {
             let d = Calendar.current.startOfDay(for: log.dayStart)
-            if let resetStart, d < resetStart { continue }
+            guard includeLogInCurrentStats(log) else { continue }
             if interval.contains(d), log.count >= target {
                 completedDays.insert(d)
             }
@@ -479,7 +506,7 @@ struct HabitCard: View {
         var skippedDays = Set<Date>()
         for skip in (habit.skips ?? []) {
             let d = Calendar.current.startOfDay(for: skip.dayStart)
-            if let resetStart, d < resetStart { continue }
+            guard includeSkipInCurrentStats(skip) else { continue }
             if interval.contains(d) {
                 skippedDays.insert(d)
             }
@@ -489,7 +516,6 @@ struct HabitCard: View {
     }
 
     private var weeksCompletedStreak: Int {
-        // If the current week isn't met yet, count up to last week.
         let cal = Calendar.current
         var cursor = weekStart(for: Date())
 
@@ -784,12 +810,15 @@ struct HabitCard: View {
 
     private func toggleSkipToday() {
         if let existingSkip = todaysSkip {
+            // Un-skip: remove the skip record; do NOT re-advance the reminder
+            // since it was already advanced when the skip was first applied.
             modelContext.delete(existingSkip)
             habit.skips = (habit.skips ?? []).filter { $0.persistentModelID != existingSkip.persistentModelID }
             habit.updatedAt = Date()
             return
         }
 
+        // Cannot skip a day that already has progress logged.
         if let existingLog = todaysLog, existingLog.count > 0 {
             return
         }
@@ -802,6 +831,10 @@ struct HabitCard: View {
             habit.skips?.append(skip)
         }
         habit.updatedAt = Date()
+
+        // Advance any due linked reminder to its next occurrence,
+        // exactly the same way a completed log does.
+        acknowledgeOneDueHabitReminder()
     }
 
     private func acknowledgeOneDueHabitReminder() {
@@ -902,6 +935,13 @@ struct HabitCard: View {
                 existing.count += 1
                 habit.updatedAt = Date()
 
+                _ = try? SelfCarePointsManager.awardHabitLog(
+                    in: modelContext,
+                    habitLogId: existing.id.uuidString,
+                    title: habit.title,
+                    loggedAt: Date()
+                )
+
                 // If this log corresponds to a linked reminder time, acknowledge/advance it.
                 acknowledgeDueHabitRemindersIfAny()
             }
@@ -911,6 +951,13 @@ struct HabitCard: View {
         let newLog = HabitLog(habit: habit, dayStart: todayStart, count: 1)
         modelContext.insert(newLog)
         habit.updatedAt = Date()
+
+        _ = try? SelfCarePointsManager.awardHabitLog(
+            in: modelContext,
+            habitLogId: newLog.id.uuidString,
+            title: habit.title,
+            loggedAt: Date()
+        )
 
         // If this first log corresponds to a linked reminder time, acknowledge/advance it.
         acknowledgeDueHabitRemindersIfAny()
@@ -937,11 +984,73 @@ private struct HabitHistoryPopup: View {
     let habit: Habit
     let onClose: () -> Void
 
+    @Environment(\.modelContext) private var modelContext
+    @State private var pendingDeleteLog: HabitLog? = nil
+    @State private var pendingDeleteSkip: HabitSkip? = nil
+    @State private var showDeleteDialog = false
+
     @State private var visibleHistoryCount: Int = 4
+
+    private enum HistoryEntry: Identifiable {
+        case log(HabitLog)
+        case skip(HabitSkip)
+
+        var id: PersistentIdentifier {
+            switch self {
+            case .log(let log):
+                return log.persistentModelID
+            case .skip(let skip):
+                return skip.persistentModelID
+            }
+        }
+
+        var date: Date {
+            switch self {
+            case .log(let log):
+                return log.dayStart
+            case .skip(let skip):
+                return skip.dayStart
+            }
+        }
+
+        var count: Int? {
+            switch self {
+            case .log(let log):
+                return log.count
+            case .skip:
+                return nil
+            }
+        }
+
+        var skipped: Bool {
+            switch self {
+            case .log:
+                return false
+            case .skip:
+                return true
+            }
+        }
+    }
 
     private var historyLogs: [HabitLog] {
         (habit.logs ?? []).sorted { a, b in
             Calendar.current.startOfDay(for: a.dayStart) > Calendar.current.startOfDay(for: b.dayStart)
+        }
+    }
+
+    private var historySkips: [HabitSkip] {
+        (habit.skips ?? []).sorted { a, b in
+            Calendar.current.startOfDay(for: a.dayStart) > Calendar.current.startOfDay(for: b.dayStart)
+        }
+    }
+
+    private var historyEntries: [HistoryEntry] {
+        let entries: [HistoryEntry] =
+            historyLogs.map { .log($0) }
+            + historySkips.map { .skip($0) }
+
+        return entries.sorted {
+            Calendar.current.startOfDay(for: $0.date) > Calendar.current.startOfDay(for: $1.date)
         }
     }
 
@@ -953,18 +1062,37 @@ private struct HabitHistoryPopup: View {
         Calendar.current.startOfDay(for: Date())
     }
 
-    private var resetStart: Date? {
-        habit.statsResetAt.map { Calendar.current.startOfDay(for: $0) }
+    private var resetMoment: Date? {
+        habit.statsResetAt
+    }
+
+    private func includeLogInCurrentStats(_ log: HabitLog) -> Bool {
+        guard let resetMoment else { return true }
+        let cal = Calendar.current
+        let resetDay = cal.startOfDay(for: resetMoment)
+        let logDay = cal.startOfDay(for: log.dayStart)
+
+        if logDay > resetDay { return true }
+        if logDay < resetDay { return false }
+        return log.createdAt >= resetMoment
+    }
+
+    private func includeSkipInCurrentStats(_ skip: HabitSkip) -> Bool {
+        guard let resetMoment else { return true }
+        let cal = Calendar.current
+        let resetDay = cal.startOfDay(for: resetMoment)
+        let skipDay = cal.startOfDay(for: skip.dayStart)
+
+        if skipDay > resetDay { return true }
+        if skipDay < resetDay { return false }
+        return skip.createdAt >= resetMoment
     }
 
     private var completedDayStarts: Set<Date> {
         Set((habit.logs ?? [])
             .filter { log in
                 guard log.count >= target else { return false }
-                if let resetStart {
-                    return Calendar.current.startOfDay(for: log.dayStart) >= resetStart
-                }
-                return true
+                return includeLogInCurrentStats(log)
             }
             .map { Calendar.current.startOfDay(for: $0.dayStart) })
     }
@@ -972,10 +1100,7 @@ private struct HabitHistoryPopup: View {
     private var skippedDayStarts: Set<Date> {
         Set((habit.skips ?? [])
             .filter { skip in
-                if let resetStart {
-                    return Calendar.current.startOfDay(for: skip.dayStart) >= resetStart
-                }
-                return true
+                includeSkipInCurrentStats(skip)
             }
             .map { Calendar.current.startOfDay(for: $0.dayStart) })
     }
@@ -1023,7 +1148,7 @@ private struct HabitHistoryPopup: View {
         var completedDays = Set<Date>()
         for log in (habit.logs ?? []) {
             let d = Calendar.current.startOfDay(for: log.dayStart)
-            if let resetStart, d < resetStart { continue }
+            guard includeLogInCurrentStats(log) else { continue }
             if interval.contains(d), log.count >= target {
                 completedDays.insert(d)
             }
@@ -1032,7 +1157,7 @@ private struct HabitHistoryPopup: View {
         var skippedDays = Set<Date>()
         for skip in (habit.skips ?? []) {
             let d = Calendar.current.startOfDay(for: skip.dayStart)
-            if let resetStart, d < resetStart { continue }
+            guard includeSkipInCurrentStats(skip) else { continue }
             if interval.contains(d) {
                 skippedDays.insert(d)
             }
@@ -1148,11 +1273,7 @@ private struct HabitHistoryPopup: View {
                         }
                     }
 
-                    let historySkips = (habit.skips ?? []).sorted {
-                        Calendar.current.startOfDay(for: $0.dayStart) > Calendar.current.startOfDay(for: $1.dayStart)
-                    }
-
-                    if historyLogs.isEmpty && historySkips.isEmpty {
+                    if historyEntries.isEmpty {
                         GlassCard {
                             Text("No habit history yet.")
                                 .foregroundStyle(LColors.textSecondary)
@@ -1160,26 +1281,17 @@ private struct HabitHistoryPopup: View {
                                 .padding(.vertical, 18)
                         }
                     } else {
-                    let historyEntries: [(date: Date, count: Int?, skipped: Bool)] =
-                        historyLogs.map { (date: $0.dayStart, count: $0.count, skipped: false) }
-                        + historySkips.map { (date: $0.dayStart, count: nil, skipped: true) }
+                        let visibleEntries = Array(historyEntries.prefix(visibleHistoryCount))
 
-                    let sortedEntries = historyEntries.sorted {
-                        Calendar.current.startOfDay(for: $0.date) > Calendar.current.startOfDay(for: $1.date)
-                    }
-                    let visibleEntries = Array(sortedEntries.prefix(visibleHistoryCount))
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(Array(visibleEntries.enumerated()), id: \.offset) { index, entry in
-                                
+                        VStack(alignment: .leading, spacing: 10) {
+                            ForEach(Array(visibleEntries.enumerated()), id: \.element.id) { _, entry in
                                 GlassCard(padding: 12) {
                                     HStack(alignment: .center, spacing: 12) {
-                                        
                                         VStack(alignment: .leading, spacing: 6) {
                                             Text(historyDateLabel(for: entry.date))
                                                 .font(.system(size: 14, weight: .bold))
                                                 .foregroundStyle(LColors.textPrimary)
-                                            
+
                                             if entry.skipped {
                                                 Text("Skipped this day")
                                                     .font(.system(size: 13, weight: .semibold))
@@ -1191,9 +1303,9 @@ private struct HabitHistoryPopup: View {
                                                     .foregroundStyle(LColors.textSecondary)
                                             }
                                         }
-                                        
+
                                         Spacer()
-                                        
+
                                         Text(
                                             entry.skipped
                                             ? "SKIPPED"
@@ -1216,9 +1328,20 @@ private struct HabitHistoryPopup: View {
                                         )
                                     }
                                 }
+                                .onLongPressGesture {
+                                    switch entry {
+                                    case .log(let log):
+                                        pendingDeleteSkip = nil
+                                        pendingDeleteLog = log
+                                    case .skip(let skip):
+                                        pendingDeleteLog = nil
+                                        pendingDeleteSkip = skip
+                                    }
+                                    showDeleteDialog = true
+                                }
                             }
 
-                            if sortedEntries.count > visibleEntries.count {
+                            if historyEntries.count > visibleEntries.count {
                                 HStack {
                                     Spacer()
                                     LoadMoreButton {
@@ -1250,6 +1373,27 @@ private struct HabitHistoryPopup: View {
         )
         .onAppear {
             visibleHistoryCount = 4
+            pendingDeleteLog = nil
+            pendingDeleteSkip = nil
+        }
+        .lystariaAlertConfirm(
+            isPresented: $showDeleteDialog,
+            title: "Delete history record?",
+            message: "This will permanently delete this habit history record.",
+            confirmTitle: "Delete",
+            confirmRole: .destructive
+        ) {
+            if let log = pendingDeleteLog {
+                modelContext.delete(log)
+                habit.logs = (habit.logs ?? []).filter { $0.persistentModelID != log.persistentModelID }
+                pendingDeleteLog = nil
+            }
+
+            if let skip = pendingDeleteSkip {
+                modelContext.delete(skip)
+                habit.skips = (habit.skips ?? []).filter { $0.persistentModelID != skip.persistentModelID }
+                pendingDeleteSkip = nil
+            }
         }
     }
 }

@@ -617,6 +617,11 @@ struct WaterTrackingView: View {
             selectedDate = Date()
             selectedDayWater = water.todayWaterFlOz
             await recalculateReachedGoalDates()
+
+            HealthWidgetSync.syncWater(
+                waterToday: water.todayWaterFlOz,
+                waterGoal: amountGoal
+            )
         }
         .onChange(of: displayedMonth) { _, _ in
             if let selectedDate {
@@ -631,10 +636,15 @@ struct WaterTrackingView: View {
                 await recalculateReachedGoalDates()
             }
         }
-        .onChange(of: amountGoal) { _, _ in
+        .onChange(of: amountGoal) { _, newValue in
             Task {
                 await recalculateReachedGoalDates()
             }
+
+            HealthWidgetSync.syncWater(
+                waterToday: water.todayWaterFlOz,
+                waterGoal: newValue
+            )
         }
         .onChange(of: water.todayWaterFlOz) { _, newValue in
             if let selectedDate, calendar.isDateInToday(selectedDate) {
@@ -643,6 +653,11 @@ struct WaterTrackingView: View {
             Task {
                 await recalculateReachedGoalDates()
             }
+
+            HealthWidgetSync.syncWater(
+                waterToday: newValue,
+                waterGoal: amountGoal
+            )
         }
         .onChange(of: showCustomAmountPopup) { _, isShowing in
             if isShowing {

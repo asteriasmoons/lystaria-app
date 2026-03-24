@@ -15,7 +15,8 @@ struct JournalBlockEditorView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            // Block to Block Spacing is 12 
+            VStack(alignment: .leading, spacing: 12) {
                 ForEach(visibleBlocks) { block in
                     JournalBlockRow(
                         block: block,
@@ -32,7 +33,6 @@ struct JournalBlockEditorView: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             bottomAddBlockBar
-                .padding(.bottom, 78)
         }
     }
 
@@ -63,21 +63,13 @@ struct JournalBlockEditorView: View {
     }
 
     private var bottomAddBlockBar: some View {
-        VStack(spacing: 0) {
-            Rectangle()
-                .fill(LColors.glassBorder)
-                .frame(height: 1)
-
-            HStack {
-                Spacer(minLength: 0)
-                addBlockMenu
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 14)
-            .padding(.bottom, 14)
-            .background(LColors.glassSurface)
+        HStack {
+            Spacer(minLength: 0)
+            addBlockMenu
+            Spacer(minLength: 0)
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 
     private var addBlockMenu: some View {
@@ -121,7 +113,7 @@ struct JournalBlockEditorView: View {
             isExpanded: type == .toggle,
             indentLevel: 0,
             calloutEmoji: type == .callout ? "✦" : "",
-            languageHint: ""
+            languageHint: type == .divider ? DividerStyle.line.rawValue : ""
         )
         newBlock.entry = entry
         newBlock.touch()
@@ -181,7 +173,7 @@ struct JournalBlockEditorView: View {
             isExpanded: type == .toggle,
             indentLevel: inheritedIndentLevel,
             calloutEmoji: type == .callout ? "✦" : "",
-            languageHint: ""
+            languageHint: type == .divider ? DividerStyle.line.rawValue : ""
         )
         newBlock.entry = entry
         newBlock.touch()
@@ -198,14 +190,15 @@ struct JournalBlockEditorView: View {
 
         entry.ensureStarterBlock()
         entry.normalizeBlockSortOrders()
-
-        print("🧩 NEW BLOCK: type=\(newBlock.type.rawValue) parentBlockID=\(String(describing: newBlock.parentBlockID)) sortOrder=\(newBlock.sortOrder) indentLevel=\(newBlock.indentLevel)")
-        print("🧩 ALL BLOCKS AFTER INSERT:")
-        for b in entry.sortedBlocks {
-            print("   sortOrder=\(b.sortOrder) type=\(b.type.rawValue) parentBlockID=\(String(describing: b.parentBlockID)) text='\(b.text.prefix(20))'")
-        }
-
         save()
+
+        let newBlockID = newBlock.id
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            NotificationCenter.default.post(
+                name: .journalBlockRequestFocus,
+                object: newBlockID
+            )
+        }
     }
 
     private func deleteBlock(_ block: JournalBlock) {
@@ -214,6 +207,7 @@ struct JournalBlockEditorView: View {
         defer { isMutatingBlocks = false }
 
         let blockID = block.id
+        let blockSortOrder = block.sortOrder
 
         for inlineStyle in (block.inlineStyles ?? []) {
             modelContext.delete(inlineStyle)
@@ -225,6 +219,7 @@ struct JournalBlockEditorView: View {
 
         modelContext.delete(block)
 
+        // If the entry is now empty, insert a starter paragraph.
         if entry.blocks?.isEmpty != false {
             if entry.blocks == nil {
                 entry.blocks = []
@@ -237,6 +232,20 @@ struct JournalBlockEditorView: View {
 
         entry.normalizeBlockSortOrders()
         save()
+
+        // Focus the block that now occupies the deleted block's position,
+        // or the one just before it — this is the "exit list" landing spot.
+        let sorted = entry.sortedBlocks
+        let focusTarget = sorted.first(where: { $0.sortOrder >= blockSortOrder }) ?? sorted.last
+        if let target = focusTarget {
+            let targetID = target.id
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                NotificationCenter.default.post(
+                    name: .journalBlockRequestFocus,
+                    object: targetID
+                )
+            }
+        }
     }
 
     private func moveBlockUp(_ block: JournalBlock) {
@@ -309,7 +318,7 @@ struct JournalBlockEditorView: View {
             block.parentBlockID = nil
             block.indentLevel = 0
             block.text = ""
-            block.languageHint = ""
+            block.languageHint = DividerStyle.line.rawValue
             for inlineStyle in (block.inlineStyles ?? []) {
                 modelContext.delete(inlineStyle)
             }

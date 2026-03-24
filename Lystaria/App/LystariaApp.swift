@@ -20,6 +20,7 @@ struct LystariaApp: App {
             HabitSkip.self,
             HabitLog.self,
             MoodLog.self,
+            MoodStreak.self,
             BodyStateRecord.self,
             HealthMetricEntry.self,
             ExerciseLogEntry.self,
@@ -37,6 +38,7 @@ struct LystariaApp: App {
             LystariaReminder.self,
             UserSettings.self,
             SelfCarePointEntry.self,
+            SelfCarePointsResetLog.self,
             SelfCarePointsProfile.self,
             Checklist.self,
             ChecklistItem.self,
@@ -44,6 +46,7 @@ struct LystariaApp: App {
             KanbanColumn.self,
             DailyIntention.self,
             DailyTarotRecord.self,
+            DailyLenormandRecord.self,
             DailyHoroscopeRecord.self,
         ])
 
@@ -91,13 +94,9 @@ struct LystariaApp: App {
                     SharedFolderExportManager.exportFolders(modelContext: sharedModelContainer.mainContext)
 
                     Task {
-                        do {
-                            try await AuthService.shared.validateStoredAppleSession()
-                        } catch {
-                            await MainActor.run {
-                                appState.signOut()
-                            }
-                        }
+                        // Silently validate on foreground — do NOT sign out on failure.
+                        // A network blip or token timing issue should never log the user out.
+                        try? await AuthService.shared.validateStoredAppleSession()
                     }
                 }
                 #endif
