@@ -82,4 +82,14 @@ struct OnboardingPages {
                 )
             ]
         )
+    static let health = OnboardingPage(
+        pageID: "onboarding_health",
+        steps: [
+            OnboardingStep(
+                targetID: "medsIcon",
+                title: "Medications",
+                message: "Manage all of your medications in this tab. Includes adding dosing and other metrics for each medication and see your inventory at a glance with progress wheels."
+            )
+        ]
+    )
 }

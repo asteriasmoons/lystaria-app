@@ -194,13 +194,16 @@
 		CF8D836E2F53B1170092FC98 /* ReadingStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D836D2F53B1170092FC98 /* ReadingStats.swift */; };
 		CF8D83702F53C36A0092FC98 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = CF8D836F2F53C36A0092FC98 /* GoogleService-Info.plist */; };
 		CF8D83732F53C5120092FC98 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = CF8D83722F53C5120092FC98 /* FirebaseAuth */; };
-		CF8D83762F53C57E0092FC98 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = CF8D83752F53C57E0092FC98 /* GoogleSignIn */; };
-		CF8D83782F53C57E0092FC98 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = CF8D83772F53C57E0092FC98 /* GoogleSignInSwift */; };
 		CF8D837A2F53E0C40092FC98 /* GoogleAuthTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83792F53E0BD0092FC98 /* GoogleAuthTest.swift */; };
 		CF8D837C2F53E1E60092FC98 /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D837B2F53E1D70092FC98 /* SignInView.swift */; };
 		CF8D83822F548EAC0092FC98 /* ProfileTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83812F548EAC0092FC98 /* ProfileTabView.swift */; };
 		CF8D83862F54C4A10092FC98 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83852F54C4A10092FC98 /* NotificationManager.swift */; };
 		CF8D838A2F560F700092FC98 /* RemindersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83892F560F700092FC98 /* RemindersView.swift */; };
+		CFF7C5AF2F72EA0D00A67EC3 /* Medication.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFF7C5AE2F72EA0800A67EC3 /* Medication.swift */; };
+		CFF7C5B12F72F19300A67EC3 /* MedicationPageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFF7C5B02F72F18900A67EC3 /* MedicationPageView.swift */; };
+		CFF7C5B32F734D8000A67EC3 /* DailyReadingProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFF7C5B22F734D7900A67EC3 /* DailyReadingProgress.swift */; };
+		CFF7C5B52F734DA000A67EC3 /* WeeklyReadingSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFF7C5B42F734D9900A67EC3 /* WeeklyReadingSnapshot.swift */; };
+		CFF7C5B72F737D4800A67EC3 /* BookNote.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFF7C5B62F737D4500A67EC3 /* BookNote.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -424,6 +427,11 @@
 		CF8D83812F548EAC0092FC98 /* ProfileTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileTabView.swift; sourceTree = "<group>"; };
 		CF8D83852F54C4A10092FC98 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		CF8D83892F560F700092FC98 /* RemindersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemindersView.swift; sourceTree = "<group>"; };
+		CFF7C5AE2F72EA0800A67EC3 /* Medication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Medication.swift; sourceTree = "<group>"; };
+		CFF7C5B02F72F18900A67EC3 /* MedicationPageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MedicationPageView.swift; sourceTree = "<group>"; };
+		CFF7C5B22F734D7900A67EC3 /* DailyReadingProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyReadingProgress.swift; sourceTree = "<group>"; };
+		CFF7C5B42F734D9900A67EC3 /* WeeklyReadingSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeeklyReadingSnapshot.swift; sourceTree = "<group>"; };
+		CFF7C5B62F737D4500A67EC3 /* BookNote.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookNote.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -498,9 +506,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				CF8D83782F53C57E0092FC98 /* GoogleSignInSwift in Frameworks */,
 				CF8D83732F53C5120092FC98 /* FirebaseAuth in Frameworks */,
-				CF8D83762F53C57E0092FC98 /* GoogleSignIn in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -555,6 +561,7 @@
 		CF13B6692F69B2C1008D3CE9 /* Health */ = {
 			isa = PBXGroup;
 			children = (
+				CFF7C5B02F72F18900A67EC3 /* MedicationPageView.swift */,
 				CF13B67C2F69B7C5008D3CE9 /* HealthFormatting.swift */,
 				CF13B67A2F69B773008D3CE9 /* ExerciseLogCard.swift */,
 				CF13B6782F69B758008D3CE9 /* HealthMetricsCard.swift */,
@@ -840,6 +847,10 @@
 		CF8D832C2F50A4940092FC98 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				CFF7C5B62F737D4500A67EC3 /* BookNote.swift */,
+				CFF7C5B42F734D9900A67EC3 /* WeeklyReadingSnapshot.swift */,
+				CFF7C5B22F734D7900A67EC3 /* DailyReadingProgress.swift */,
+				CFF7C5AE2F72EA0800A67EC3 /* Medication.swift */,
 				CF29FC9C2F70AC6800EC47F8 /* DailyLenormandRecord.swift */,
 				CF29FC872F6F602C00EC47F8 /* EventCalendar.swift */,
 				CF29FC852F6F4B4A00EC47F8 /* MoodStreak.swift */,
@@ -1016,8 +1027,6 @@
 			name = Lystaria;
 			packageProductDependencies = (
 				CF8D83722F53C5120092FC98 /* FirebaseAuth */,
-				CF8D83752F53C57E0092FC98 /* GoogleSignIn */,
-				CF8D83772F53C57E0092FC98 /* GoogleSignInSwift */,
 			);
 			productName = Lystaria;
 			productReference = CF41A5932F4DF57000C96018 /* Lystaria.app */;
@@ -1080,7 +1089,6 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				CF8D83712F53C5110092FC98 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
-				CF8D83742F53C57E0092FC98 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = CF41A5942F4DF57000C96018 /* Products */;
@@ -1226,7 +1234,9 @@
 				CF8D832D2F50A4940092FC98 /* Habit.swift in Sources */,
 				CF8421AF2F61CD660069F12F /* WelcomeView.swift in Sources */,
 				CF8D832E2F50A4940092FC98 /* MoodLog.swift in Sources */,
+				CFF7C5B32F734D8000A67EC3 /* DailyReadingProgress.swift in Sources */,
 				CF8421B42F61E7830069F12F /* SettingsView.swift in Sources */,
+				CFF7C5B52F734DA000A67EC3 /* WeeklyReadingSnapshot.swift in Sources */,
 				CF8B7FB32F6C7371006A7D3B /* SharedBookmarkPayload.swift in Sources */,
 				CF8D83432F50E7930092FC98 /* AuthDTOs.swift in Sources */,
 				CF29FCA12F718C8100EC47F8 /* DividerStyle.swift in Sources */,
@@ -1269,6 +1279,7 @@
 				CF13B6272F6442C6008D3CE9 /* JournalBookEntity.swift in Sources */,
 				CF8B7FC22F6C797E006A7D3B /* SharedFolderExportManager.swift in Sources */,
 				CF8D83322F50A4940092FC98 /* ChecklistItem.swift in Sources */,
+				CFF7C5B12F72F19300A67EC3 /* MedicationPageView.swift in Sources */,
 				CF8B7F652F6B346B006A7D3B /* JournalBlockEditorView.swift in Sources */,
 				CF13B62D2F644AD3008D3CE9 /* AddWaterIntent.swift in Sources */,
 				CF8D833F2F50D5EE0092FC98 /* AppState.swift in Sources */,
@@ -1289,6 +1300,7 @@
 				CF8B7F9C2F6C6A35006A7D3B /* BookmarkIconLibrary.swift in Sources */,
 				CF13B6402F65CECB008D3CE9 /* CalendarEventDetailOverlay.swift in Sources */,
 				CF8B7F982F6C507B006A7D3B /* BookmarkWebView.swift in Sources */,
+				CFF7C5AF2F72EA0D00A67EC3 /* Medication.swift in Sources */,
 				CF13B6422F671AA6008D3CE9 /* MoonPhaseCalculator.swift in Sources */,
 				CF8D83342F50A4940092FC98 /* Reminder.swift in Sources */,
 				CF8421BC2F631C090069F12F /* StoredTarot.swift in Sources */,
@@ -1302,6 +1314,7 @@
 				CF13B6482F675DC4008D3CE9 /* DashboardConsistencyAnalyzer.swift in Sources */,
 				CF8D83362F50A4940092FC98 /* CalendarEvent.swift in Sources */,
 				CF8421B12F61E7570069F12F /* CalendarSyncManager.swift in Sources */,
+				CFF7C5B72F737D4800A67EC3 /* BookNote.swift in Sources */,
 				CF0B8E612F6CB13A00D5D2C8 /* HealthMetricsWriter.swift in Sources */,
 				CF13B67D2F69B7CB008D3CE9 /* HealthFormatting.swift in Sources */,
 				CF84219A2F607B2D0069F12F /* OnboardingTarget.swift in Sources */,
@@ -1906,14 +1919,6 @@
 				minimumVersion = 12.10.0;
 			};
 		};
-		CF8D83742F53C57E0092FC98 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 9.1.0;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1921,16 +1926,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = CF8D83712F53C5110092FC98 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseAuth;
-		};
-		CF8D83752F53C57E0092FC98 /* GoogleSignIn */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = CF8D83742F53C57E0092FC98 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
-			productName = GoogleSignIn;
-		};
-		CF8D83772F53C57E0092FC98 /* GoogleSignInSwift */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = CF8D83742F53C57E0092FC98 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
-			productName = GoogleSignInSwift;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

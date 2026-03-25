@@ -116,9 +116,12 @@ final class LystariaReminder {
     // MARK: - Optional Link (used for Habits, etc.)
     var linkedKindRaw: String?     // e.g. "habit"
     var linkedHabitId: UUID?       // Habit.id
+    var linkedMedicationId: UUID?  // Medication.id
+    var linkedMedicationQuantity: Int = 1
 
     enum LinkedKind: String, Codable {
         case habit = "habit"
+        case medication = "medication"
     }
 
     var linkedKind: LinkedKind? {
@@ -187,7 +190,9 @@ final class LystariaReminder {
         schedule: ReminderSchedule? = nil,
         timezone: String = TimeZone.current.identifier,
         linkedKind: LinkedKind? = nil,
-        linkedHabitId: UUID? = nil
+        linkedHabitId: UUID? = nil,
+        linkedMedicationId: UUID? = nil,
+        linkedMedicationQuantity: Int = 1
     ) {
         self.title = title
         self.details = details
@@ -204,6 +209,8 @@ final class LystariaReminder {
         self.updatedAt = Date()
         self.linkedKind = linkedKind
         self.linkedHabitId = linkedHabitId
+        self.linkedMedicationId = linkedMedicationId
+        self.linkedMedicationQuantity = max(1, linkedMedicationQuantity)
         self.sentTimesOfDay = []
         self.schedule = schedule
     }

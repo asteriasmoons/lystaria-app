@@ -14,7 +14,6 @@ struct LystariaApp: App {
     static let sharedModelContainer: ModelContainer = {
         let schema = Schema([
             AuthUser.self,
-            Book.self,
             CalendarEvent.self,
             Habit.self,
             HabitSkip.self,
@@ -23,10 +22,15 @@ struct LystariaApp: App {
             MoodStreak.self,
             BodyStateRecord.self,
             HealthMetricEntry.self,
+            Medication.self,
             ExerciseLogEntry.self,
+            Book.self,
+            BookNote.self,
             ReadingStats.self,
             ReadingSession.self,
             ReadingGoal.self,
+            DailyReadingProgress.self,
+            WeeklyReadingSnapshot.self,
             BookmarkFolder.self,
             BookmarkItem.self,
             JournalEntry.self,

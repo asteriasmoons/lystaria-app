@@ -9,6 +9,7 @@ struct RemindersView: View {
     @Query private var authUsers: [AuthUser]
     @Query private var habits: [Habit]
     @Query private var events: [CalendarEvent]
+    @Query private var medications: [Medication]
     @Query(sort: \LystariaReminder.nextRunAt) private var allReminders: [LystariaReminder]
 
     @State private var showNewReminder = false
@@ -356,6 +357,31 @@ struct RemindersView: View {
         habit.updatedAt = Date()
     }
 
+    private func logMedicationIfLinked(_ reminder: LystariaReminder) {
+        guard reminder.linkedKind == .medication,
+              let mid = reminder.linkedMedicationId,
+              let medication = medications.first(where: { $0.id == mid }) else { return }
+
+        let quantity = max(1, reminder.linkedMedicationQuantity)
+        let previousAmount = medication.currentAmount
+
+        if medication.currentAmount > 0 {
+            medication.currentAmount = max(0, medication.currentAmount - quantity)
+        }
+
+        medication.lastTakenAt = Date()
+        medication.updatedAt = Date()
+
+        let historyEntry = MedicationHistoryEntry(
+            type: .taken,
+            amountText: "\(previousAmount) → \(medication.currentAmount)",
+            details: "\(reminder.title) • Qty \(quantity)",
+            createdAt: Date(),
+            medication: medication
+        )
+        modelContext.insert(historyEntry)
+    }
+
 
     private func awardPointsForReminderCompletion(_ reminder: LystariaReminder, occurrenceDate: Date) {
         let reminderId = "\(reminder.persistentModelID)"
@@ -423,6 +449,7 @@ struct RemindersView: View {
 
         // If this reminder is linked to a habit, count it as a habit log.
         logHabitIfLinked(reminder)
+        logMedicationIfLinked(reminder)
         let completedOccurrenceDate = reminder.nextRunAt
 
         if reminder.isRecurring {
@@ -875,6 +902,7 @@ struct ReminderCard: View {
 
 struct NewReminderSheet: View {
     @Environment(\.modelContext) private var modelContext
+    @Query private var medications: [Medication]
     let onClose: () -> Void
 
     @State private var title = ""
@@ -896,6 +924,8 @@ struct NewReminderSheet: View {
     @State private var anchorDay: Int = Calendar.current.component(.day, from: Date())
     @State private var monthlyMode: ReminderScheduleForm.MonthlyMode = .sameDay
     @State private var yearlyMode: ReminderScheduleForm.YearlyMode = .sameDay
+    @State private var selectedMedicationId: UUID? = nil
+    @State private var linkedMedicationQuantity: Int = 1
 
     private var canSave: Bool {
         if titleTrimmed.isEmpty { return false }
@@ -992,6 +1022,89 @@ struct NewReminderSheet: View {
                 }
             }
 
+            LabeledGlassField(label: "LINK MEDICATION") {
+                VStack(alignment: .leading, spacing: 10) {
+                    if medications.isEmpty {
+                        Text("No medications available yet. Add medications from the Health page first.")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(LColors.textSecondary)
+                    } else {
+                        Picker(
+                            "Medication",
+                            selection: $selectedMedicationId
+                        ) {
+                            Text("None")
+                                .tag(nil as UUID?)
+
+                            ForEach(medications) { medication in
+                                Text(medication.name)
+                                    .tag(Optional(medication.id))
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .tint(LColors.accent)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                        if selectedMedicationId != nil {
+                            LystariaControlRow(label: nil) {
+                                HStack(spacing: 12) {
+                                    Text("Subtract")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(LColors.textPrimary)
+
+                                    Button {
+                                        if linkedMedicationQuantity > 1 {
+                                            linkedMedicationQuantity -= 1
+                                        }
+                                    } label: {
+                                        Image(systemName: "minus")
+                                            .font(.system(size: 12, weight: .bold))
+                                            .foregroundStyle(linkedMedicationQuantity <= 1 ? LColors.textSecondary.opacity(0.5) : .white)
+                                            .frame(width: 32, height: 32)
+                                            .background(linkedMedicationQuantity <= 1 ? Color.white.opacity(0.05) : LColors.accent.opacity(0.85))
+                                            .clipShape(Circle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(linkedMedicationQuantity <= 1)
+
+                                    Text("\(linkedMedicationQuantity)")
+                                        .font(.system(size: 14, weight: .bold))
+                                        .foregroundStyle(LColors.textPrimary)
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 8)
+                                        .background(Color.white.opacity(0.08))
+                                        .clipShape(Capsule())
+                                        .overlay(
+                                            Capsule()
+                                                .stroke(LColors.glassBorder, lineWidth: 1)
+                                        )
+
+                                    Button {
+                                        if linkedMedicationQuantity < 100 {
+                                            linkedMedicationQuantity += 1
+                                        }
+                                    } label: {
+                                        Image(systemName: "plus")
+                                            .font(.system(size: 12, weight: .bold))
+                                            .foregroundStyle(.white)
+                                            .frame(width: 32, height: 32)
+                                            .background(LColors.accent.opacity(0.85))
+                                            .clipShape(Circle())
+                                    }
+                                    .buttonStyle(.plain)
+
+                                    Text("per completion")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(LColors.textPrimary)
+
+                                    Spacer()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             ReminderScheduleForm(
                 scheduleKind: $scheduleKind,
                 startDay: $startDay,
@@ -1081,6 +1194,16 @@ struct NewReminderSheet: View {
                 nextRunAt: runAt,
                 schedule: schedule
             )
+            if let selectedMedicationId = self.selectedMedicationId {
+                newReminder.linkedKind = .medication
+                newReminder.linkedMedicationId = selectedMedicationId
+                newReminder.linkedMedicationQuantity = max(1, self.linkedMedicationQuantity)
+                newReminder.linkedHabitId = nil
+            } else {
+                newReminder.linkedKindRaw = nil
+                newReminder.linkedMedicationId = nil
+                newReminder.linkedMedicationQuantity = 1
+            }
             let detailsTrimmed = self.details.trimmingCharacters(in: .whitespacesAndNewlines)
             newReminder.details = detailsTrimmed.isEmpty ? nil : detailsTrimmed
             self.modelContext.insert(newReminder)
@@ -1104,6 +1227,7 @@ struct NewReminderSheet: View {
 
 struct EditReminderSheet: View {
     let onClose: () -> Void
+    @Query private var medications: [Medication]
     @Bindable var reminder: LystariaReminder
 
     @State private var title = ""
@@ -1125,6 +1249,8 @@ struct EditReminderSheet: View {
     @State private var anchorDay: Int = Calendar.current.component(.day, from: Date())
     @State private var monthlyMode: ReminderScheduleForm.MonthlyMode = .sameDay
     @State private var yearlyMode: ReminderScheduleForm.YearlyMode = .sameDay
+    @State private var selectedMedicationId: UUID? = nil
+    @State private var linkedMedicationQuantity: Int = 1
 
     private var canSave: Bool {
         if titleTrimmed.isEmpty { return false }
@@ -1228,6 +1354,89 @@ struct EditReminderSheet: View {
                 }
             }
 
+            LabeledGlassField(label: "LINK MEDICATION") {
+                VStack(alignment: .leading, spacing: 10) {
+                    if medications.isEmpty {
+                        Text("No medications available yet. Add medications from the Health page first.")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(LColors.textSecondary)
+                    } else {
+                        Picker(
+                            "Medication",
+                            selection: $selectedMedicationId
+                        ) {
+                            Text("None")
+                                .tag(nil as UUID?)
+
+                            ForEach(medications) { medication in
+                                Text(medication.name)
+                                    .tag(Optional(medication.id))
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .tint(LColors.accent)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                        if selectedMedicationId != nil {
+                            LystariaControlRow(label: nil) {
+                                HStack(spacing: 12) {
+                                    Text("Subtract")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(LColors.textPrimary)
+
+                                    Button {
+                                        if linkedMedicationQuantity > 1 {
+                                            linkedMedicationQuantity -= 1
+                                        }
+                                    } label: {
+                                        Image(systemName: "minus")
+                                            .font(.system(size: 12, weight: .bold))
+                                            .foregroundStyle(linkedMedicationQuantity <= 1 ? LColors.textSecondary.opacity(0.5) : .white)
+                                            .frame(width: 32, height: 32)
+                                            .background(linkedMedicationQuantity <= 1 ? Color.white.opacity(0.05) : LColors.accent.opacity(0.85))
+                                            .clipShape(Circle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(linkedMedicationQuantity <= 1)
+
+                                    Text("\(linkedMedicationQuantity)")
+                                        .font(.system(size: 14, weight: .bold))
+                                        .foregroundStyle(LColors.textPrimary)
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 8)
+                                        .background(Color.white.opacity(0.08))
+                                        .clipShape(Capsule())
+                                        .overlay(
+                                            Capsule()
+                                                .stroke(LColors.glassBorder, lineWidth: 1)
+                                        )
+
+                                    Button {
+                                        if linkedMedicationQuantity < 100 {
+                                            linkedMedicationQuantity += 1
+                                        }
+                                    } label: {
+                                        Image(systemName: "plus")
+                                            .font(.system(size: 12, weight: .bold))
+                                            .foregroundStyle(.white)
+                                            .frame(width: 32, height: 32)
+                                            .background(LColors.accent.opacity(0.85))
+                                            .clipShape(Circle())
+                                    }
+                                    .buttonStyle(.plain)
+
+                                    Text("per completion")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(LColors.textPrimary)
+
+                                    Spacer()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             ReminderScheduleForm(
                 scheduleKind: $scheduleKind,
                 startDay: $startDay,
@@ -1252,6 +1461,8 @@ struct EditReminderSheet: View {
         details = reminder.details ?? ""
         let storedChecklist = reminder.checklistItems
         checklistEntries = storedChecklist.isEmpty ? [""] : storedChecklist
+        selectedMedicationId = reminder.linkedMedicationId
+        linkedMedicationQuantity = max(1, reminder.linkedMedicationQuantity)
 
         let kind = reminder.schedule?.kind ?? .once
         scheduleKind = kind
@@ -1335,6 +1546,17 @@ struct EditReminderSheet: View {
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
             self.reminder.checklistItems = checklistItems
+
+            if let selectedMedicationId = self.selectedMedicationId {
+                self.reminder.linkedKind = .medication
+                self.reminder.linkedMedicationId = selectedMedicationId
+                self.reminder.linkedMedicationQuantity = max(1, self.linkedMedicationQuantity)
+                self.reminder.linkedHabitId = nil
+            } else {
+                self.reminder.linkedKindRaw = nil
+                self.reminder.linkedMedicationId = nil
+                self.reminder.linkedMedicationQuantity = 1
+            }
 
             let schedule: ReminderSchedule?
             let runAt: Date

@@ -28,6 +28,7 @@ struct HealthPageView: View {
     @State private var selectedHealthEntry: HealthMetricEntry?
     @State private var selectedExerciseEntry: ExerciseLogEntry?
     @State private var hasRequestedHealthAuthorization = false
+    @StateObject private var onboarding = OnboardingManager()
 
 
     var body: some View {
@@ -164,6 +165,17 @@ struct HealthPageView: View {
                 }
             }
         }
+        .overlayPreferenceValue(OnboardingTargetKey.self) { anchors in
+            ZStack {
+                OnboardingOverlay(anchors: anchors)
+                    .environmentObject(onboarding)
+            }
+            .task(id: anchors.count) {
+                if anchors.count > 0 {
+                    onboarding.start(page: OnboardingPages.health)
+                }
+            }
+        }
         .task {
             guard !hasRequestedHealthAuthorization else { return }
             hasRequestedHealthAuthorization = true
@@ -197,6 +209,28 @@ struct HealthPageView: View {
                             showAddExercisePopup = true
                         }
                     }
+
+                    NavigationLink {
+                        MedicationPageView()
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.08))
+                                .overlay(
+                                    Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                                )
+                                .frame(width: 34, height: 34)
+
+                            Image("pillcircle")
+                                .renderingMode(.template)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 16, height: 16)
+                                .foregroundStyle(.white)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .onboardingTarget("medsIcon")
                 }
             }
             .padding(.top, 20)
