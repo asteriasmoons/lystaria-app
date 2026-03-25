@@ -60,7 +60,6 @@
 		CF13B67B2F69B779008D3CE9 /* ExerciseLogCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B67A2F69B773008D3CE9 /* ExerciseLogCard.swift */; };
 		CF13B67D2F69B7CB008D3CE9 /* HealthFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B67C2F69B7C5008D3CE9 /* HealthFormatting.swift */; };
 		CF13B67F2F69DCF7008D3CE9 /* ChecklistEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B67E2F69DCF1008D3CE9 /* ChecklistEntity.swift */; };
-		CF13B6812F6A28C1008D3CE9 /* Secrets.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = CF13B6802F6A28B6008D3CE9 /* Secrets.xcconfig */; };
 		CF13B6832F6A2DFF008D3CE9 /* JournalPromptUsage.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B6822F6A2DF9008D3CE9 /* JournalPromptUsage.swift */; };
 		CF20513E2F5787DD006B71AA /* JournalBook.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF20513D2F5787D9006B71AA /* JournalBook.swift */; };
 		CF2051402F5788CE006B71AA /* JournalBookEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF20513F2F5788C6006B71AA /* JournalBookEditorSheet.swift */; };
@@ -194,7 +193,6 @@
 		CF8D836E2F53B1170092FC98 /* ReadingStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D836D2F53B1170092FC98 /* ReadingStats.swift */; };
 		CF8D83702F53C36A0092FC98 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = CF8D836F2F53C36A0092FC98 /* GoogleService-Info.plist */; };
 		CF8D83732F53C5120092FC98 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = CF8D83722F53C5120092FC98 /* FirebaseAuth */; };
-		CF8D837A2F53E0C40092FC98 /* GoogleAuthTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83792F53E0BD0092FC98 /* GoogleAuthTest.swift */; };
 		CF8D837C2F53E1E60092FC98 /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D837B2F53E1D70092FC98 /* SignInView.swift */; };
 		CF8D83822F548EAC0092FC98 /* ProfileTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83812F548EAC0092FC98 /* ProfileTabView.swift */; };
 		CF8D83862F54C4A10092FC98 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83852F54C4A10092FC98 /* NotificationManager.swift */; };
@@ -419,7 +417,6 @@
 		CF8D836B2F53AA600092FC98 /* DailyIntention.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyIntention.swift; sourceTree = "<group>"; };
 		CF8D836D2F53B1170092FC98 /* ReadingStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingStats.swift; sourceTree = "<group>"; };
 		CF8D836F2F53C36A0092FC98 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
-		CF8D83792F53E0BD0092FC98 /* GoogleAuthTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleAuthTest.swift; sourceTree = "<group>"; };
 		CF8D837B2F53E1D70092FC98 /* SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
 		CF8D837D2F54855C0092FC98 /* GoogleSignInShim.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GoogleSignInShim.h; sourceTree = "<group>"; };
 		CF8D837E2F548B660092FC98 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -918,7 +915,6 @@
 				CF4790AD2F5B676E0026696B /* Managers */,
 				CF8D83802F548CB30092FC98 /* Lystaria.entitlements */,
 				CF8D837E2F548B660092FC98 /* Info.plist */,
-				CF8D83792F53E0BD0092FC98 /* GoogleAuthTest.swift */,
 				CF8D836F2F53C36A0092FC98 /* GoogleService-Info.plist */,
 				CF8D83482F5123B30092FC98 /* Components */,
 				CF8D83472F5123A10092FC98 /* Theme */,
@@ -1062,7 +1058,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2630;
-				LastUpgradeCheck = 2630;
+				LastUpgradeCheck = 2640;
 				TargetAttributes = {
 					CF0A09DF2F5F14B200401658 = {
 						CreatedOnToolsVersion = 26.3;
@@ -1123,7 +1119,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				CF13B6812F6A28C1008D3CE9 /* Secrets.xcconfig in Resources */,
 				CF2051E12F59EFCD006B71AA /* LilyScriptOne-Regular.ttf in Resources */,
 				CF8D836A2F535F810092FC98 /* Assets.xcassets in Resources */,
 				CF8D83702F53C36A0092FC98 /* GoogleService-Info.plist in Resources */,
@@ -1337,7 +1332,6 @@
 				CF13B6352F65B582008D3CE9 /* SetDailyIntentionIntent.swift in Sources */,
 				CF29FC7E2F6DE7A100EC47F8 /* ReadingSession.swift in Sources */,
 				CF13B6772F69B6FA008D3CE9 /* ExerciseDetailPopupView.swift in Sources */,
-				CF8D837A2F53E0C40092FC98 /* GoogleAuthTest.swift in Sources */,
 				CF8421C02F6329610069F12F /* DailyHoroscope.swift in Sources */,
 				CF8B7F8E2F6C4BE2006A7D3B /* BookmarksView.swift in Sources */,
 			);

@@ -6,7 +6,6 @@
 
 import SwiftUI
 import SwiftData
-import GoogleSignIn
 import PhotosUI
 #if os(macOS)
 import AppKit
@@ -511,7 +510,6 @@ struct ProfileTabView: View {
 
     private func signOut() {
         print("[signOut] called, appState.status = \(appState.status)")
-        GIDSignIn.sharedInstance.signOut()
         appState.signOut()
         print("[signOut] done, appState.status = \(appState.status)")
     }

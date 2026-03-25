@@ -231,7 +231,7 @@ struct MedicationPageView: View {
                                 .foregroundStyle(.white)
 
                             Text(med.name)
-                                .font(.system(size: 18, weight: .semibold))
+                                .font(.system(size: 16, weight: .semibold))
                                 .foregroundStyle(.white)
                                 .multilineTextAlignment(.leading)
 

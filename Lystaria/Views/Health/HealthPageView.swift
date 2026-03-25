@@ -197,37 +197,56 @@ struct HealthPageView: View {
                 GradientTitle(text: "Health", font: .title2.bold())
                 Spacer()
 
-                HStack(spacing: 10) {
-                    LButton(title: "+ Metrics", style: .gradient) {
+                HStack(spacing: 8) {
+                    Button {
                         withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                             showAddMetricsPopup = true
                         }
+                    } label: {
+                        Text("+ Metrics")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 104, height: 42)
+                            .background(LGradients.blue)
+                            .clipShape(Capsule())
+                            .overlay(
+                                Capsule()
+                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                            )
                     }
+                    .buttonStyle(.plain)
 
-                    LButton(title: "+ Exercise", style: .gradient) {
+                    Button {
                         withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                             showAddExercisePopup = true
                         }
+                    } label: {
+                        Text("+ Exercise")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 104, height: 42)
+                            .background(LGradients.blue)
+                            .clipShape(Capsule())
+                            .overlay(
+                                Capsule()
+                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                            )
                     }
+                    .buttonStyle(.plain)
 
                     NavigationLink {
                         MedicationPageView()
                     } label: {
-                        ZStack {
-                            Circle()
-                                .fill(Color.white.opacity(0.08))
-                                .overlay(
-                                    Circle().stroke(LColors.glassBorder, lineWidth: 1)
-                                )
-                                .frame(width: 34, height: 34)
-
-                            Image("pillcircle")
-                                .renderingMode(.template)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 16, height: 16)
-                                .foregroundStyle(.white)
-                        }
+                        Text("+ Manager")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 104, height: 42)
+                            .background(LGradients.blue)
+                            .clipShape(Capsule())
+                            .overlay(
+                                Capsule()
+                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                            )
                     }
                     .buttonStyle(.plain)
                     .onboardingTarget("medsIcon")
