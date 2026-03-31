@@ -6,6 +6,7 @@ import SwiftData
 
 struct HabitsView: View {
     @Environment(\.modelContext) private var modelContext
+    @StateObject private var limits = LimitManager.shared
 
     @Query(sort: \Habit.createdAt)
     private var habits: [Habit]
@@ -48,9 +49,16 @@ struct HabitsView: View {
                         }
                         .padding(.horizontal, LSpacing.pageHorizontal)
                     } else {
+                        let allowedIds = Set(
+                            habits
+                                .sorted { $0.createdAt < $1.createdAt }
+                                .prefix(3)
+                                .map { $0.persistentModelID }
+                        )
+
                         Section {
                             let visibleHabits = Array(activeHabits.prefix(visibleHabitCount))
-
+                            
                             ForEach(visibleHabits, id: \.persistentModelID) { habit in
                                 HabitCard(
                                     habit: habit,
@@ -58,6 +66,7 @@ struct HabitsView: View {
                                     onShowHistory: { historyHabit = habit }
                                 )
                                 .padding(.horizontal, LSpacing.pageHorizontal)
+                                .premiumLocked(!limits.hasPremiumAccess && !allowedIds.contains(habit.persistentModelID))
                             }
 
                             if activeHabits.count > visibleHabits.count {
@@ -99,6 +108,7 @@ struct HabitsView: View {
                                 )
                                 .padding(.horizontal, LSpacing.pageHorizontal)
                                 .opacity(0.6)
+                                .premiumLocked(!limits.hasPremiumAccess && !allowedIds.contains(habit.persistentModelID))
                             }
 
                             if archivedHabits.count > visibleArchived.count {
@@ -119,7 +129,11 @@ struct HabitsView: View {
             .scrollIndicators(.hidden)
 
             // FAB
-            FloatingActionButton { showNewHabit = true }
+            FloatingActionButton {
+                let decision = limits.canCreate(.habitsTotal, currentCount: habits.count)
+                guard decision.allowed else { return }
+                showNewHabit = true
+            }
                 .padding(.trailing, 24)
                 .padding(.bottom, 90)
         }
@@ -571,10 +585,19 @@ struct HabitCard: View {
         return times.filter { seen.insert($0).inserted }
     }
 
+    private func resolvedNextRunAt(for reminder: LystariaReminder, now: Date) -> Date? {
+        if reminder.nextRunAt >= now {
+            return reminder.nextRunAt
+        }
+
+        guard reminder.status != .deleted else { return nil }
+        return ReminderCompute.nextRun(after: now.addingTimeInterval(1), reminder: reminder)
+    }
+
     private var nextReminderRunAt: Date? {
         let now = Date()
         return linkedHabitReminders
-            .map { $0.nextRunAt }
+            .compactMap { resolvedNextRunAt(for: $0, now: now) }
             .filter { $0 >= now }
             .sorted()
             .first
@@ -1402,6 +1425,7 @@ private struct HabitHistoryPopup: View {
 
 struct NewHabitSheet: View {
     @Environment(\.modelContext) private var modelContext
+    @StateObject private var limits = LimitManager.shared
     var onClose: (() -> Void)? = nil
     
     @State private var title = ""
@@ -1635,6 +1659,11 @@ struct NewHabitSheet: View {
             },
             footer: {
                 Button {
+                    // Enforce habit limit (3 total for free users)
+                    let descriptor = FetchDescriptor<Habit>()
+                    let existing = (try? modelContext.fetch(descriptor)) ?? []
+                    let decision = limits.canCreate(.habitsTotal, currentCount: existing.count)
+                    guard decision.allowed else { return }
                     if reminderEnabled && reminderKind == .daily {
                         daysPerWeek = 7
                         weeklyDays = []

@@ -1,0 +1,115 @@
+{
+  "appPolicies" : {
+    "eula" : "",
+    "policies" : [
+      {
+        "locale" : "en_US",
+        "policyText" : "",
+        "policyURL" : ""
+      }
+    ]
+  },
+  "identifier" : "C7A759C2",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+
+  ],
+  "settings" : {
+    "_applicationInternalID" : "6761183698",
+    "_askToBuyEnabled" : false,
+    "_billingGracePeriodEnabled" : false,
+    "_billingIssuesEnabled" : false,
+    "_developerTeamID" : "PLRRW8XCVU",
+    "_disableDialogs" : false,
+    "_failTransactionsEnabled" : false,
+    "_lastSynchronizedDate" : 796224836.97941506,
+    "_locale" : "en_US",
+    "_renewalBillingIssuesEnabled" : false,
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+
+    ],
+    "_timeRate" : 0
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "21998145",
+      "localizations" : [
+        {
+          "description" : "",
+          "displayName" : "Lystaria Premium",
+          "locale" : "en_US"
+        }
+      ],
+      "name" : "Lystaria Premium",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "9.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "6761184168",
+          "introductoryOffers" : [
+
+          ],
+          "localizations" : [
+            {
+              "description" : "All features unlocked on a monthly basis",
+              "displayName" : "Monthly Premium",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "lystaria.premium.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Monthly Premium",
+          "subscriptionGroupID" : "21998145",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "4.99",
+          "familyShareable" : false,
+          "groupNumber" : 2,
+          "internalID" : "6761184543",
+          "introductoryOffers" : [
+
+          ],
+          "localizations" : [
+            {
+              "description" : "All app features unlocked on a weekly basis",
+              "displayName" : "Weekly Premium",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "lystaria.premium.weekly",
+          "recurringSubscriptionPeriod" : "P1W",
+          "referenceName" : "Weekly Premium",
+          "subscriptionGroupID" : "21998145",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 5,
+    "minor" : 0
+  }
+}

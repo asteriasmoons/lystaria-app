@@ -6,6 +6,7 @@ import SwiftData
 
 struct RemindersView: View {
     @Environment(\.modelContext) private var modelContext
+    @StateObject private var limits = LimitManager.shared
     @Query private var authUsers: [AuthUser]
     @Query private var habits: [Habit]
     @Query private var events: [CalendarEvent]
@@ -143,6 +144,8 @@ struct RemindersView: View {
 
                 HStack(spacing: 8) {
                     Button {
+                        let decision = limits.canCreate(.remindersTotal, currentCount: allReminders.count)
+                        guard decision.allowed else { return }
                         showNewReminder = true
                     } label: {
                         ZStack {
@@ -226,6 +229,7 @@ struct RemindersView: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .onboardingTarget("boardIcon")
                 }
             }
             .padding(.top, 24)
@@ -268,7 +272,7 @@ struct RemindersView: View {
                         .padding(.vertical, 20)
                 }
             } else {
-                ForEach(visibleReminders) { reminder in
+                ForEach(Array(visibleReminders.enumerated()), id: \.element.persistentModelID) { index, reminder in
                     let id = reminder.persistentModelID
                     ReminderCard(
                         reminder: reminder,
@@ -289,6 +293,7 @@ struct RemindersView: View {
                             }
                         }
                     )
+                    .premiumLocked(!limits.hasPremiumAccess && index >= 5)
                 }
 
                 if filtered.count > 5 {
@@ -358,6 +363,35 @@ struct RemindersView: View {
     }
 
     private func logMedicationIfLinked(_ reminder: LystariaReminder) {
+        if reminder.reminderType == .routine {
+            for link in reminder.sortedMedicationLinks {
+                guard let medicationId = link.medicationId,
+                      let medication = medications.first(where: { $0.id == medicationId }) else {
+                    continue
+                }
+
+                let quantity = max(1, link.quantity)
+                let previousAmount = medication.currentAmount
+
+                if medication.currentAmount > 0 {
+                    medication.currentAmount = max(0, medication.currentAmount - quantity)
+                }
+
+                medication.lastTakenAt = Date()
+                medication.updatedAt = Date()
+
+                let historyEntry = MedicationHistoryEntry(
+                    type: .taken,
+                    amountText: "\(previousAmount) → \(medication.currentAmount)",
+                    details: "\(reminder.title) • Qty \(quantity)",
+                    createdAt: Date(),
+                    medication: medication
+                )
+                modelContext.insert(historyEntry)
+            }
+            return
+        }
+
         guard reminder.linkedKind == .medication,
               let mid = reminder.linkedMedicationId,
               let medication = medications.first(where: { $0.id == mid }) else { return }
@@ -447,6 +481,13 @@ struct RemindersView: View {
     private func markDone(_ reminder: LystariaReminder) {
         print("[RemindersView] markDone id=\(reminder.id) title=\(reminder.title)")
 
+        if reminder.reminderType == .routine,
+           reminder.totalRoutineItemCount > 0,
+           !reminder.isRoutineChecklistComplete {
+            showToast("Complete all routine items first")
+            return
+        }
+
         // If this reminder is linked to a habit, count it as a habit log.
         logHabitIfLinked(reminder)
         logMedicationIfLinked(reminder)
@@ -459,6 +500,10 @@ struct RemindersView: View {
 
             // Clear acknowledged state so the circle unchecks immediately on re-render.
             reminder.acknowledgedAt = nil
+
+            if reminder.reminderType == .routine {
+                reminder.resetRoutineChecklist(for: "\(reminder.nextRunAt.timeIntervalSince1970)")
+            }
 
             reminder.updatedAt = Date()
 
@@ -570,6 +615,40 @@ struct ReminderCard: View {
         }
     }
     
+    private var showsRoutineTypeBadge: Bool {
+        reminder.reminderType == .routine
+    }
+
+    private var routineTypeBadgeColor: Color {
+        Color(red: 0.36, green: 0.48, blue: 0.95).opacity(0.88)
+    }
+
+    private var reminderKindLabel: String {
+        switch reminder.linkedKindRaw?.lowercased() {
+        case "habit":
+            return "Habit"
+        case "event":
+            return "Event"
+        case "medication":
+            return "Medication"
+        default:
+            return "General"
+        }
+    }
+
+    private var reminderKindBadgeColor: Color {
+        switch reminder.linkedKindRaw?.lowercased() {
+        case "habit":
+            return Color(red: 0.14, green: 0.63, blue: 0.56).opacity(0.82)
+        case "event":
+            return Color(red: 0.95, green: 0.56, blue: 0.20).opacity(0.82)
+        case "medication":
+            return Color(red: 0.86, green: 0.28, blue: 0.58).opacity(0.82)
+        default:
+            return Color.white.opacity(0.9)
+        }
+    }
+    
     private var isDone: Bool {
         guard let ack = reminder.acknowledgedAt else { return false }
         // Consider "done" if acknowledged today.
@@ -626,6 +705,7 @@ struct ReminderCard: View {
     private var checklistItems: [String] {
         reminder.checklistItems
     }
+
     
     private func openReschedulePopup() {
         rescheduleDateTime = reminder.nextRunAt
@@ -653,55 +733,122 @@ struct ReminderCard: View {
     
     @ViewBuilder
     private func checklistPreviewView() -> some View {
-        if !checklistItems.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                Button {
-                    withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
-                        isChecklistExpanded.toggle()
-                    }
-                } label: {
-                    HStack(spacing: 8) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "chevron.down.circle")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(LColors.textSecondary)
-                            
-                            Text("\(checklistItems.count) Checklist Item\(checklistItems.count == 1 ? "" : "s")")
+        let currentReminder = _reminder.wrappedValue
+
+        if currentReminder.reminderType == .routine {
+            if !currentReminder.sortedRoutineChecklistItems.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Button {
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                            isChecklistExpanded.toggle()
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "chevron.down.circle")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(LColors.textSecondary)
+
+                                Text(
+                                    currentReminder.totalRoutineItemCount > 0
+                                    ? "\(currentReminder.completedRoutineItemCount) of \(currentReminder.totalRoutineItemCount) Complete"
+                                    : "Routine Items"
+                                )
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(LColors.textSecondary)
+                            }
+
+                            Image(systemName: isChecklistExpanded ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(LColors.textSecondary.opacity(0.8))
+
+                            Spacer()
                         }
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(LColors.textSecondary)
-                        
-                        Image(systemName: isChecklistExpanded ? "chevron.up" : "chevron.down")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(LColors.textSecondary.opacity(0.8))
-                        
-                        Spacer()
                     }
-                }
-                .buttonStyle(.plain)
-                
-                if isChecklistExpanded {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(checklistItems, id: \.self) { item in
-                            HStack(spacing: 6) {
-                                Circle()
-                                    .stroke(Color.white.opacity(0.7), lineWidth: 1.5)
-                                    .frame(width: 10, height: 10)
-                                
-                                Text(item)
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundStyle(LColors.textSecondary)
-                                    .lineLimit(1)
+                    .buttonStyle(.plain)
+
+                    if isChecklistExpanded {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(currentReminder.sortedRoutineChecklistItems) { item in
+                                Button {
+                                    let currentlyChecked = currentReminder.isRoutineItemChecked(item)
+                                    currentReminder.setRoutineItemChecked(!currentlyChecked, for: item)
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: currentReminder.isRoutineItemChecked(item) ? "checkmark.circle.fill" : "circle")
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundStyle(
+                                                currentReminder.isRoutineItemChecked(item)
+                                                ? LColors.success
+                                                : LColors.textSecondary
+                                            )
+
+                                        Text(item.title)
+                                            .font(.system(size: 11, weight: .medium))
+                                            .foregroundStyle(LColors.textSecondary)
+                                            .lineLimit(1)
+
+                                        Spacer(minLength: 0)
+                                    }
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
+                        .padding(.top, 2)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                     }
-                    .padding(.top, 2)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
+                .padding(.top, 2)
             }
-            .padding(.top, 2)
+        } else {
+            if !checklistItems.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Button {
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                            isChecklistExpanded.toggle()
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "chevron.down.circle")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(LColors.textSecondary)
+
+                                Text("\(checklistItems.count) Checklist Item\(checklistItems.count == 1 ? "" : "s")")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(LColors.textSecondary)
+                            }
+
+                            Image(systemName: isChecklistExpanded ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(LColors.textSecondary.opacity(0.8))
+
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    if isChecklistExpanded {
+                        VStack(alignment: .leading, spacing: 4) {
+                            ForEach(checklistItems, id: \.self) { item in
+                                HStack(spacing: 6) {
+                                    Circle()
+                                        .stroke(Color.white.opacity(0.7), lineWidth: 1.5)
+                                        .frame(width: 10, height: 10)
+
+                                    Text(item)
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundStyle(LColors.textSecondary)
+                                        .lineLimit(1)
+                                }
+                            }
+                        }
+                        .padding(.top, 2)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+                }
+                .padding(.top, 2)
+            }
         }
     }
     
@@ -820,17 +967,33 @@ struct ReminderCard: View {
             
             GlassCard {
                 VStack(alignment: .leading, spacing: 12) {
-                    HStack(spacing: 8) {
-                        LBadge(text: scheduleLabel, color: badgeColor)
-                        
-                        if dueNow {
-                            LBadge(text: "DUE NOW", color: dueNowBadgeColor)
-                        } else if upcoming {
-                            LBadge(text: "UPCOMING", color: upcomingBadgeColor)
+                    HStack(alignment: .top, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(spacing: 6) {
+                                LBadge(text: scheduleLabel, color: badgeColor)
+                                LBadge(text: reminderKindLabel, color: reminderKindBadgeColor)
+
+                                if showsRoutineTypeBadge {
+                                    LBadge(text: "Routine", color: routineTypeBadgeColor)
+                                }
+
+                                Spacer(minLength: 0)
+                            }
+
+                            if dueNow || upcoming {
+                                HStack(spacing: 6) {
+                                    if dueNow {
+                                        LBadge(text: "DUE NOW", color: dueNowBadgeColor)
+                                    } else if upcoming {
+                                        LBadge(text: "UPCOMING", color: upcomingBadgeColor)
+                                    }
+
+                                    Spacer(minLength: 0)
+                                }
+                            }
                         }
-                        
-                        Spacer()
-                        
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
                         Button { onDone() } label: {
                             Image(systemName: isDone ? "circle.fill" : "circle")
                                 .font(.title2)
@@ -841,9 +1004,21 @@ struct ReminderCard: View {
                     
                     timePillsView()
                     
-                    Text(reminder.title)
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(LColors.textPrimary)
+                    HStack(alignment: .center, spacing: 8) { // 6 FOR LEFT AND ADJUST UP FOR RIGHT
+                        Text(reminder.title)
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(LColors.textPrimary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        Image("fillalarm")
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 18, height: 18) // ADJUST ICON UP/DOWN
+                            .foregroundStyle(.white)
+                            .padding(.leading, -2)
+                            .opacity(1)
+                    }
                     
                     if let details = reminder.details, !details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Text(details)
@@ -902,12 +1077,15 @@ struct ReminderCard: View {
 
 struct NewReminderSheet: View {
     @Environment(\.modelContext) private var modelContext
+    @StateObject private var limits = LimitManager.shared
     @Query private var medications: [Medication]
     let onClose: () -> Void
 
     @State private var title = ""
     @State private var details = ""
+    @State private var reminderType: ReminderType = .regular
     @State private var checklistEntries: [String] = [""]
+    @State private var routineItemEntries: [String] = [""]
     @FocusState private var focusedChecklistIndex: Int?
 
     @State private var onceDateTime = Date()
@@ -926,6 +1104,7 @@ struct NewReminderSheet: View {
     @State private var yearlyMode: ReminderScheduleForm.YearlyMode = .sameDay
     @State private var selectedMedicationId: UUID? = nil
     @State private var linkedMedicationQuantity: Int = 1
+    @State private var routineMedicationRows: [(id: UUID, medicationId: UUID?, quantity: Int)] = []
 
     private var canSave: Bool {
         if titleTrimmed.isEmpty { return false }
@@ -947,6 +1126,31 @@ struct NewReminderSheet: View {
 
     private var formContent: some View {
         VStack(spacing: 20) {
+            LabeledGlassField(label: "REMINDER TYPE") {
+                HStack(spacing: 8) {
+                    ForEach([ReminderType.regular, .routine], id: \.self) { type in
+                        let isSelected = reminderType == type
+                        Button {
+                            reminderType = type
+                        } label: {
+                            Text(type == .regular ? "Regular" : "Routine")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(isSelected ? .white : LColors.textPrimary)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .background(isSelected ? LColors.accent : Color.white.opacity(0.08))
+                                .clipShape(Capsule())
+                                .overlay(
+                                    Capsule().stroke(isSelected ? LColors.accent : LColors.glassBorder, lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+            }
+
             LabeledGlassField(label: "TEXT") {
                 TextField("Reminder title", text: $title)
                     .textFieldStyle(.plain)
@@ -969,137 +1173,306 @@ struct NewReminderSheet: View {
 #endif
             }
 
-            LabeledGlassField(label: "CHECKLIST ITEMS") {
-                VStack(alignment: .leading, spacing: 8) {
-                    VStack(spacing: 8) {
-                        ForEach(Array(checklistEntries.indices), id: \.self) { idx in
-                            TextField(
-                                idx == 0 ? "Checklist item" : "Another item",
-                                text: Binding(
-                                    get: { checklistEntries[idx] },
-                                    set: { checklistEntries[idx] = $0 }
+            if reminderType == .regular {
+                LabeledGlassField(label: "CHECKLIST ITEMS") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        VStack(spacing: 8) {
+                            ForEach(Array(checklistEntries.indices), id: \.self) { idx in
+                                TextField(
+                                    idx == 0 ? "Checklist item" : "Another item",
+                                    text: Binding(
+                                        get: { checklistEntries[idx] },
+                                        set: { checklistEntries[idx] = $0 }
+                                    )
                                 )
-                            )
-                            .textFieldStyle(.plain)
-                            .foregroundStyle(LColors.textPrimary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 10)
-                            .background(Color.white.opacity(0.06))
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(LColors.glassBorder, lineWidth: 1)
-                            )
-                            .focused($focusedChecklistIndex, equals: idx)
-#if os(iOS) || os(visionOS)
-                            .textInputAutocapitalization(.sentences)
-                            .disableAutocorrection(false)
-#endif
-                            .onSubmit {
-                                let trimmed = checklistEntries[idx].trimmingCharacters(in: .whitespacesAndNewlines)
-                                let isLast = idx == checklistEntries.count - 1
+                                .textFieldStyle(.plain)
+                                .foregroundStyle(LColors.textPrimary)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
+                                .background(Color.white.opacity(0.06))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                )
+                                .focused($focusedChecklistIndex, equals: idx)
+            #if os(iOS) || os(visionOS)
+                                .textInputAutocapitalization(.sentences)
+                                .disableAutocorrection(false)
+            #endif
+                                .onSubmit {
+                                    let trimmed = checklistEntries[idx].trimmingCharacters(in: .whitespacesAndNewlines)
+                                    let isLast = idx == checklistEntries.count - 1
 
-                                if trimmed.isEmpty {
-                                    if isLast && checklistEntries.count > 1 {
-                                        checklistEntries.removeLast()
+                                    if trimmed.isEmpty {
+                                        if isLast && checklistEntries.count > 1 {
+                                            checklistEntries.removeLast()
+                                        }
+                                        focusedChecklistIndex = nil
+                                    } else if isLast {
+                                        checklistEntries[idx] = trimmed
+                                        checklistEntries.append("")
+                                        focusedChecklistIndex = idx + 1
+                                    } else {
+                                        checklistEntries[idx] = trimmed
+                                        focusedChecklistIndex = min(idx + 1, checklistEntries.count - 1)
                                     }
-                                    focusedChecklistIndex = nil
-                                } else if isLast {
-                                    checklistEntries[idx] = trimmed
-                                    checklistEntries.append("")
-                                    focusedChecklistIndex = idx + 1
-                                } else {
-                                    checklistEntries[idx] = trimmed
-                                    focusedChecklistIndex = min(idx + 1, checklistEntries.count - 1)
+                                }
+                            }
+                        }
+
+                        Text("Type an item and press Return")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(LColors.textSecondary)
+                    }
+                }
+            } else {
+                LabeledGlassField(label: "ROUTINE ITEMS") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        VStack(spacing: 8) {
+                            ForEach(Array(routineItemEntries.indices), id: \.self) { idx in
+                                TextField(
+                                    idx == 0 ? "Routine item" : "Another routine item",
+                                    text: Binding(
+                                        get: { routineItemEntries[idx] },
+                                        set: { routineItemEntries[idx] = $0 }
+                                    )
+                                )
+                                .textFieldStyle(.plain)
+                                .foregroundStyle(LColors.textPrimary)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
+                                .background(Color.white.opacity(0.06))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                )
+                                .focused($focusedChecklistIndex, equals: idx)
+            #if os(iOS) || os(visionOS)
+                                .textInputAutocapitalization(.sentences)
+                                .disableAutocorrection(false)
+            #endif
+                                .onSubmit {
+                                    let trimmed = routineItemEntries[idx].trimmingCharacters(in: .whitespacesAndNewlines)
+                                    let isLast = idx == routineItemEntries.count - 1
+
+                                    if trimmed.isEmpty {
+                                        if isLast && routineItemEntries.count > 1 {
+                                            routineItemEntries.removeLast()
+                                        }
+                                        focusedChecklistIndex = nil
+                                    } else if isLast {
+                                        routineItemEntries[idx] = trimmed
+                                        routineItemEntries.append("")
+                                        focusedChecklistIndex = idx + 1
+                                    } else {
+                                        routineItemEntries[idx] = trimmed
+                                        focusedChecklistIndex = min(idx + 1, routineItemEntries.count - 1)
+                                    }
+                                }
+                            }
+                        }
+
+                        Text("Type a routine item and press Return")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(LColors.textSecondary)
+                    }
+                }
+            }
+
+            if reminderType == .regular {
+                LabeledGlassField(label: "LINK MEDICATION") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        if medications.isEmpty {
+                            Text("No medications available yet. Add medications from the Health page first.")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(LColors.textSecondary)
+                        } else {
+                            Picker(
+                                "Medication",
+                                selection: $selectedMedicationId
+                            ) {
+                                Text("None")
+                                    .tag(nil as UUID?)
+
+                                ForEach(medications) { medication in
+                                    Text(medication.name)
+                                        .tag(Optional(medication.id))
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .tint(LColors.accent)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                            if selectedMedicationId != nil {
+                                LystariaControlRow(label: nil) {
+                                    HStack(spacing: 12) {
+                                        Text("Subtract")
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundStyle(LColors.textPrimary)
+
+                                        Button {
+                                            if linkedMedicationQuantity > 1 {
+                                                linkedMedicationQuantity -= 1
+                                            }
+                                        } label: {
+                                            Image(systemName: "minus")
+                                                .font(.system(size: 12, weight: .bold))
+                                                .foregroundStyle(linkedMedicationQuantity <= 1 ? LColors.textSecondary.opacity(0.5) : .white)
+                                                .frame(width: 32, height: 32)
+                                                .background(linkedMedicationQuantity <= 1 ? Color.white.opacity(0.05) : LColors.accent.opacity(0.85))
+                                                .clipShape(Circle())
+                                        }
+                                        .buttonStyle(.plain)
+                                        .disabled(linkedMedicationQuantity <= 1)
+
+                                        Text("\(linkedMedicationQuantity)")
+                                            .font(.system(size: 14, weight: .bold))
+                                            .foregroundStyle(LColors.textPrimary)
+                                            .padding(.horizontal, 16)
+                                            .padding(.vertical, 8)
+                                            .background(Color.white.opacity(0.08))
+                                            .clipShape(Capsule())
+                                            .overlay(
+                                                Capsule()
+                                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                            )
+
+                                        Button {
+                                            if linkedMedicationQuantity < 100 {
+                                                linkedMedicationQuantity += 1
+                                            }
+                                        } label: {
+                                            Image(systemName: "plus")
+                                                .font(.system(size: 12, weight: .bold))
+                                                .foregroundStyle(.white)
+                                                .frame(width: 32, height: 32)
+                                                .background(LColors.accent.opacity(0.85))
+                                                .clipShape(Circle())
+                                        }
+                                        .buttonStyle(.plain)
+
+
+                                        Spacer()
+                                    }
                                 }
                             }
                         }
                     }
-
-                    Text("Type an item and press Return")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(LColors.textSecondary)
                 }
-            }
-
-            LabeledGlassField(label: "LINK MEDICATION") {
-                VStack(alignment: .leading, spacing: 10) {
-                    if medications.isEmpty {
-                        Text("No medications available yet. Add medications from the Health page first.")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(LColors.textSecondary)
-                    } else {
-                        Picker(
-                            "Medication",
-                            selection: $selectedMedicationId
-                        ) {
-                            Text("None")
-                                .tag(nil as UUID?)
-
-                            ForEach(medications) { medication in
-                                Text(medication.name)
-                                    .tag(Optional(medication.id))
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .tint(LColors.accent)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                        if selectedMedicationId != nil {
-                            LystariaControlRow(label: nil) {
-                                HStack(spacing: 12) {
-                                    Text("Subtract")
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(LColors.textPrimary)
-
-                                    Button {
-                                        if linkedMedicationQuantity > 1 {
-                                            linkedMedicationQuantity -= 1
-                                        }
-                                    } label: {
-                                        Image(systemName: "minus")
-                                            .font(.system(size: 12, weight: .bold))
-                                            .foregroundStyle(linkedMedicationQuantity <= 1 ? LColors.textSecondary.opacity(0.5) : .white)
-                                            .frame(width: 32, height: 32)
-                                            .background(linkedMedicationQuantity <= 1 ? Color.white.opacity(0.05) : LColors.accent.opacity(0.85))
-                                            .clipShape(Circle())
-                                    }
-                                    .buttonStyle(.plain)
-                                    .disabled(linkedMedicationQuantity <= 1)
-
-                                    Text("\(linkedMedicationQuantity)")
-                                        .font(.system(size: 14, weight: .bold))
-                                        .foregroundStyle(LColors.textPrimary)
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 8)
-                                        .background(Color.white.opacity(0.08))
-                                        .clipShape(Capsule())
-                                        .overlay(
-                                            Capsule()
-                                                .stroke(LColors.glassBorder, lineWidth: 1)
+            } else {
+                LabeledGlassField(label: "LINK MEDICATIONS") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        if medications.isEmpty {
+                            Text("No medications available yet. Add medications from the Health page first.")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(LColors.textSecondary)
+                        } else {
+                            ForEach(Array(routineMedicationRows.indices), id: \.self) { idx in
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Picker(
+                                        "Medication",
+                                        selection: Binding(
+                                            get: { routineMedicationRows[idx].medicationId },
+                                            set: { routineMedicationRows[idx].medicationId = $0 }
                                         )
+                                    ) {
+                                        Text("None")
+                                            .tag(nil as UUID?)
 
-                                    Button {
-                                        if linkedMedicationQuantity < 100 {
-                                            linkedMedicationQuantity += 1
+                                        ForEach(medications) { medication in
+                                            Text(medication.name)
+                                                .tag(Optional(medication.id))
                                         }
-                                    } label: {
-                                        Image(systemName: "plus")
-                                            .font(.system(size: 12, weight: .bold))
-                                            .foregroundStyle(.white)
-                                            .frame(width: 32, height: 32)
-                                            .background(LColors.accent.opacity(0.85))
-                                            .clipShape(Circle())
                                     }
-                                    .buttonStyle(.plain)
+                                    .pickerStyle(.menu)
+                                    .tint(LColors.accent)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
 
-                                    Text("per completion")
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(LColors.textPrimary)
+                                    HStack(spacing: 12) {
+                                        Text("Subtract")
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundStyle(LColors.textPrimary)
 
-                                    Spacer()
+                                        Button {
+                                            if routineMedicationRows[idx].quantity > 1 {
+                                                routineMedicationRows[idx].quantity -= 1
+                                            }
+                                        } label: {
+                                            Image(systemName: "minus")
+                                                .font(.system(size: 12, weight: .bold))
+                                                .foregroundStyle(routineMedicationRows[idx].quantity <= 1 ? LColors.textSecondary.opacity(0.5) : .white)
+                                                .frame(width: 32, height: 32)
+                                                .background(routineMedicationRows[idx].quantity <= 1 ? Color.white.opacity(0.05) : LColors.accent.opacity(0.85))
+                                                .clipShape(Circle())
+                                        }
+                                        .buttonStyle(.plain)
+                                        .disabled(routineMedicationRows[idx].quantity <= 1)
+
+                                        Text("\(routineMedicationRows[idx].quantity)")
+                                            .font(.system(size: 14, weight: .bold))
+                                            .foregroundStyle(LColors.textPrimary)
+                                            .padding(.horizontal, 16)
+                                            .padding(.vertical, 8)
+                                            .background(Color.white.opacity(0.08))
+                                            .clipShape(Capsule())
+                                            .overlay(
+                                                Capsule()
+                                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                            )
+
+                                        Button {
+                                            if routineMedicationRows[idx].quantity < 100 {
+                                                routineMedicationRows[idx].quantity += 1
+                                            }
+                                        } label: {
+                                            Image(systemName: "plus")
+                                                .font(.system(size: 12, weight: .bold))
+                                                .foregroundStyle(.white)
+                                                .frame(width: 32, height: 32)
+                                                .background(LColors.accent.opacity(0.85))
+                                                .clipShape(Circle())
+                                        }
+                                        .buttonStyle(.plain)
+
+
+                                        Spacer()
+
+                                        Button {
+                                            routineMedicationRows.remove(at: idx)
+                                        } label: {
+                                            Image(systemName: "trash")
+                                                .font(.system(size: 12, weight: .bold))
+                                                .foregroundStyle(.white)
+                                                .frame(width: 32, height: 32)
+                                                .background(Color.red.opacity(0.75))
+                                                .clipShape(Circle())
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
                                 }
+                                .padding(12)
+                                .background(Color.white.opacity(0.04))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                )
                             }
+
+                            Button {
+                                routineMedicationRows.append((id: UUID(), medicationId: nil, quantity: 1))
+                            } label: {
+                                Label("Add Medication", systemImage: "plus.circle.fill")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(LColors.accent)
+                                    .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
@@ -1128,6 +1501,11 @@ struct NewReminderSheet: View {
         NSApp.keyWindow?.endEditing(for: nil)
         #endif
         DispatchQueue.main.async {
+            // Enforce reminder limit (5 total for free users)
+            let descriptor = FetchDescriptor<LystariaReminder>()
+            let existingReminders = (try? self.modelContext.fetch(descriptor)) ?? []
+            let decision = limits.canCreate(.remindersTotal, currentCount: existingReminders.filter { $0.status != .deleted }.count)
+            guard decision.allowed else { return }
             guard self.canSave else { return }
 
             print("[NewReminderSheet] Save tapped. title=\(self.titleTrimmed), kind=\(self.scheduleKind.rawValue))")
@@ -1192,15 +1570,21 @@ struct NewReminderSheet: View {
             let newReminder = LystariaReminder(
                 title: self.titleTrimmed,
                 nextRunAt: runAt,
-                schedule: schedule
+                schedule: schedule,
+                reminderType: self.reminderType
             )
-            if let selectedMedicationId = self.selectedMedicationId {
-                newReminder.linkedKind = .medication
-                newReminder.linkedMedicationId = selectedMedicationId
-                newReminder.linkedMedicationQuantity = max(1, self.linkedMedicationQuantity)
-                newReminder.linkedHabitId = nil
+            if self.reminderType == .regular {
+                if let selectedMedicationId = self.selectedMedicationId {
+                    newReminder.linkedKind = .medication
+                    newReminder.linkedMedicationId = selectedMedicationId
+                    newReminder.linkedMedicationQuantity = max(1, self.linkedMedicationQuantity)
+                    newReminder.linkedHabitId = nil
+                } else {
+                    newReminder.linkedKindRaw = nil
+                    newReminder.linkedMedicationId = nil
+                    newReminder.linkedMedicationQuantity = 1
+                }
             } else {
-                newReminder.linkedKindRaw = nil
                 newReminder.linkedMedicationId = nil
                 newReminder.linkedMedicationQuantity = 1
             }
@@ -1211,7 +1595,34 @@ struct NewReminderSheet: View {
             let checklistItems = self.checklistEntries
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
-            newReminder.checklistItems = checklistItems
+            newReminder.checklistItems = self.reminderType == .regular ? checklistItems : []
+
+            let routineItems = self.routineItemEntries
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+
+            if self.reminderType == .routine {
+                newReminder.routineChecklistItems = routineItems.enumerated().map { idx, title in
+                    RoutineChecklistItem(
+                        title: title,
+                        sortOrder: idx,
+                        reminder: newReminder
+                    )
+                }
+
+                let validRows = self.routineMedicationRows.filter { $0.medicationId != nil }
+                newReminder.medicationLinks = validRows.enumerated().map { idx, row in
+                    ReminderMedicationLink(
+                        reminder: newReminder,
+                        medicationId: row.medicationId,
+                        quantity: max(1, row.quantity),
+                        sortOrder: idx
+                    )
+                }
+            } else {
+                newReminder.routineChecklistItems = nil
+                newReminder.medicationLinks = nil
+            }
 
             NotificationManager.shared.scheduleReminder(newReminder)
         #if DEBUG
@@ -1223,6 +1634,7 @@ struct NewReminderSheet: View {
     }
 }
 
+
 // MARK: - Edit Reminder Sheet
 
 struct EditReminderSheet: View {
@@ -1232,7 +1644,9 @@ struct EditReminderSheet: View {
 
     @State private var title = ""
     @State private var details = ""
+    @State private var reminderType: ReminderType = .regular
     @State private var checklistEntries: [String] = [""]
+    @State private var routineItemEntries: [String] = [""]
     @FocusState private var focusedChecklistIndex: Int?
 
     @State private var scheduleKind: ReminderScheduleKind = .once
@@ -1251,6 +1665,7 @@ struct EditReminderSheet: View {
     @State private var yearlyMode: ReminderScheduleForm.YearlyMode = .sameDay
     @State private var selectedMedicationId: UUID? = nil
     @State private var linkedMedicationQuantity: Int = 1
+    @State private var routineMedicationRows: [(id: UUID, medicationId: UUID?, quantity: Int)] = []
 
     private var canSave: Bool {
         if titleTrimmed.isEmpty { return false }
@@ -1273,6 +1688,31 @@ struct EditReminderSheet: View {
 
     private var formContent: some View {
         VStack(spacing: 20) {
+            LabeledGlassField(label: "REMINDER TYPE") {
+                HStack(spacing: 8) {
+                    ForEach([ReminderType.regular, .routine], id: \.self) { type in
+                        let isSelected = reminderType == type
+                        Button {
+                            reminderType = type
+                        } label: {
+                            Text(type == .regular ? "Regular" : "Routine")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(isSelected ? .white : LColors.textPrimary)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .background(isSelected ? LColors.accent : Color.white.opacity(0.08))
+                                .clipShape(Capsule())
+                                .overlay(
+                                    Capsule().stroke(isSelected ? LColors.accent : LColors.glassBorder, lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+            }
+
             LabeledGlassField(label: "TEXT") {
                 TextField("Reminder title", text: $title)
                     .textFieldStyle(.plain)
@@ -1299,139 +1739,310 @@ struct EditReminderSheet: View {
 #endif
             }
 
-            LabeledGlassField(label: "CHECKLIST ITEMS") {
-                VStack(alignment: .leading, spacing: 8) {
-                    VStack(spacing: 8) {
-                        ForEach(Array(checklistEntries.indices), id: \.self) { idx in
-                            TextField(
-                                idx == 0 ? "Checklist item" : "Another item",
-                                text: Binding(
-                                    get: { checklistEntries[idx] },
-                                    set: { checklistEntries[idx] = $0 }
+            if reminderType == .regular {
+                LabeledGlassField(label: "CHECKLIST ITEMS") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        VStack(spacing: 8) {
+                            ForEach(Array(checklistEntries.indices), id: \.self) { idx in
+                                TextField(
+                                    idx == 0 ? "Checklist item" : "Another item",
+                                    text: Binding(
+                                        get: { checklistEntries[idx] },
+                                        set: { checklistEntries[idx] = $0 }
+                                    )
                                 )
-                            )
-                            .textFieldStyle(.plain)
-                            .foregroundStyle(LColors.textPrimary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 10)
-                            .background(Color.white.opacity(0.06))
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(LColors.glassBorder, lineWidth: 1)
-                            )
-                            .focused($focusedChecklistIndex, equals: idx)
-#if os(iOS) || os(visionOS)
-                            .textInputAutocapitalization(.sentences)
-                            .disableAutocorrection(false)
-#else
-                            // macOS: unavailable
-#endif
-                            .onSubmit {
-                                let trimmed = checklistEntries[idx].trimmingCharacters(in: .whitespacesAndNewlines)
-                                let isLast = idx == checklistEntries.count - 1
+                                .textFieldStyle(.plain)
+                                .foregroundStyle(LColors.textPrimary)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
+                                .background(Color.white.opacity(0.06))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                )
+                                .focused($focusedChecklistIndex, equals: idx)
+            #if os(iOS) || os(visionOS)
+                                .textInputAutocapitalization(.sentences)
+                                .disableAutocorrection(false)
+            #else
+                                // macOS: unavailable
+            #endif
+                                .onSubmit {
+                                    let trimmed = checklistEntries[idx].trimmingCharacters(in: .whitespacesAndNewlines)
+                                    let isLast = idx == checklistEntries.count - 1
 
-                                if trimmed.isEmpty {
-                                    if isLast && checklistEntries.count > 1 {
-                                        checklistEntries.removeLast()
+                                    if trimmed.isEmpty {
+                                        if isLast && checklistEntries.count > 1 {
+                                            checklistEntries.removeLast()
+                                        }
+                                        focusedChecklistIndex = nil
+                                    } else if isLast {
+                                        checklistEntries[idx] = trimmed
+                                        checklistEntries.append("")
+                                        focusedChecklistIndex = idx + 1
+                                    } else {
+                                        checklistEntries[idx] = trimmed
+                                        focusedChecklistIndex = min(idx + 1, checklistEntries.count - 1)
                                     }
-                                    focusedChecklistIndex = nil
-                                } else if isLast {
-                                    checklistEntries[idx] = trimmed
-                                    checklistEntries.append("")
-                                    focusedChecklistIndex = idx + 1
-                                } else {
-                                    checklistEntries[idx] = trimmed
-                                    focusedChecklistIndex = min(idx + 1, checklistEntries.count - 1)
+                                }
+                            }
+                        }
+
+                        Text("Type an item and press Return")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(LColors.textSecondary)
+                    }
+                }
+            } else {
+                LabeledGlassField(label: "ROUTINE ITEMS") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        VStack(spacing: 8) {
+                            ForEach(Array(routineItemEntries.indices), id: \.self) { idx in
+                                TextField(
+                                    idx == 0 ? "Routine item" : "Another routine item",
+                                    text: Binding(
+                                        get: { routineItemEntries[idx] },
+                                        set: { routineItemEntries[idx] = $0 }
+                                    )
+                                )
+                                .textFieldStyle(.plain)
+                                .foregroundStyle(LColors.textPrimary)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
+                                .background(Color.white.opacity(0.06))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                )
+                                .focused($focusedChecklistIndex, equals: idx)
+            #if os(iOS) || os(visionOS)
+                                .textInputAutocapitalization(.sentences)
+                                .disableAutocorrection(false)
+            #else
+                                // macOS: unavailable
+            #endif
+                                .onSubmit {
+                                    let trimmed = routineItemEntries[idx].trimmingCharacters(in: .whitespacesAndNewlines)
+                                    let isLast = idx == routineItemEntries.count - 1
+
+                                    if trimmed.isEmpty {
+                                        if isLast && routineItemEntries.count > 1 {
+                                            routineItemEntries.removeLast()
+                                        }
+                                        focusedChecklistIndex = nil
+                                    } else if isLast {
+                                        routineItemEntries[idx] = trimmed
+                                        routineItemEntries.append("")
+                                        focusedChecklistIndex = idx + 1
+                                    } else {
+                                        routineItemEntries[idx] = trimmed
+                                        focusedChecklistIndex = min(idx + 1, routineItemEntries.count - 1)
+                                    }
+                                }
+                            }
+                        }
+
+                        Text("Type a routine item and press Return")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(LColors.textSecondary)
+                    }
+                }
+            }
+
+            if reminderType == .regular {
+                LabeledGlassField(label: "LINK MEDICATION") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        if medications.isEmpty {
+                            Text("No medications available yet. Add medications from the Health page first.")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(LColors.textSecondary)
+                        } else {
+                            Picker(
+                                "Medication",
+                                selection: $selectedMedicationId
+                            ) {
+                                Text("None")
+                                    .tag(nil as UUID?)
+
+                                ForEach(medications) { medication in
+                                    Text(medication.name)
+                                        .tag(Optional(medication.id))
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .tint(LColors.accent)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                            if selectedMedicationId != nil {
+                                LystariaControlRow(label: nil) {
+                                    HStack(spacing: 12) {
+                                        Text("Subtract")
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundStyle(LColors.textPrimary)
+
+                                        Button {
+                                            if linkedMedicationQuantity > 1 {
+                                                linkedMedicationQuantity -= 1
+                                            }
+                                        } label: {
+                                            Image(systemName: "minus")
+                                                .font(.system(size: 12, weight: .bold))
+                                                .foregroundStyle(linkedMedicationQuantity <= 1 ? LColors.textSecondary.opacity(0.5) : .white)
+                                                .frame(width: 32, height: 32)
+                                                .background(linkedMedicationQuantity <= 1 ? Color.white.opacity(0.05) : LColors.accent.opacity(0.85))
+                                                .clipShape(Circle())
+                                        }
+                                        .buttonStyle(.plain)
+                                        .disabled(linkedMedicationQuantity <= 1)
+
+                                        Text("\(linkedMedicationQuantity)")
+                                            .font(.system(size: 14, weight: .bold))
+                                            .foregroundStyle(LColors.textPrimary)
+                                            .padding(.horizontal, 16)
+                                            .padding(.vertical, 8)
+                                            .background(Color.white.opacity(0.08))
+                                            .clipShape(Capsule())
+                                            .overlay(
+                                                Capsule()
+                                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                            )
+
+                                        Button {
+                                            if linkedMedicationQuantity < 100 {
+                                                linkedMedicationQuantity += 1
+                                            }
+                                        } label: {
+                                            Image(systemName: "plus")
+                                                .font(.system(size: 12, weight: .bold))
+                                                .foregroundStyle(.white)
+                                                .frame(width: 32, height: 32)
+                                                .background(LColors.accent.opacity(0.85))
+                                                .clipShape(Circle())
+                                        }
+                                        .buttonStyle(.plain)
+
+
+                                        Spacer()
+                                    }
                                 }
                             }
                         }
                     }
-
-                    Text("Type an item and press Return")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(LColors.textSecondary)
                 }
-            }
-
-            LabeledGlassField(label: "LINK MEDICATION") {
-                VStack(alignment: .leading, spacing: 10) {
-                    if medications.isEmpty {
-                        Text("No medications available yet. Add medications from the Health page first.")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(LColors.textSecondary)
-                    } else {
-                        Picker(
-                            "Medication",
-                            selection: $selectedMedicationId
-                        ) {
-                            Text("None")
-                                .tag(nil as UUID?)
-
-                            ForEach(medications) { medication in
-                                Text(medication.name)
-                                    .tag(Optional(medication.id))
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .tint(LColors.accent)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                        if selectedMedicationId != nil {
-                            LystariaControlRow(label: nil) {
-                                HStack(spacing: 12) {
-                                    Text("Subtract")
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(LColors.textPrimary)
-
-                                    Button {
-                                        if linkedMedicationQuantity > 1 {
-                                            linkedMedicationQuantity -= 1
-                                        }
-                                    } label: {
-                                        Image(systemName: "minus")
-                                            .font(.system(size: 12, weight: .bold))
-                                            .foregroundStyle(linkedMedicationQuantity <= 1 ? LColors.textSecondary.opacity(0.5) : .white)
-                                            .frame(width: 32, height: 32)
-                                            .background(linkedMedicationQuantity <= 1 ? Color.white.opacity(0.05) : LColors.accent.opacity(0.85))
-                                            .clipShape(Circle())
-                                    }
-                                    .buttonStyle(.plain)
-                                    .disabled(linkedMedicationQuantity <= 1)
-
-                                    Text("\(linkedMedicationQuantity)")
-                                        .font(.system(size: 14, weight: .bold))
-                                        .foregroundStyle(LColors.textPrimary)
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 8)
-                                        .background(Color.white.opacity(0.08))
-                                        .clipShape(Capsule())
-                                        .overlay(
-                                            Capsule()
-                                                .stroke(LColors.glassBorder, lineWidth: 1)
+            } else {
+                LabeledGlassField(label: "LINK MEDICATIONS") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        if medications.isEmpty {
+                            Text("No medications available yet. Add medications from the Health page first.")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(LColors.textSecondary)
+                        } else {
+                            ForEach(Array(routineMedicationRows.indices), id: \.self) { idx in
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Picker(
+                                        "Medication",
+                                        selection: Binding(
+                                            get: { routineMedicationRows[idx].medicationId },
+                                            set: { routineMedicationRows[idx].medicationId = $0 }
                                         )
+                                    ) {
+                                        Text("None")
+                                            .tag(nil as UUID?)
 
-                                    Button {
-                                        if linkedMedicationQuantity < 100 {
-                                            linkedMedicationQuantity += 1
+                                        ForEach(medications) { medication in
+                                            Text(medication.name)
+                                                .tag(Optional(medication.id))
                                         }
-                                    } label: {
-                                        Image(systemName: "plus")
-                                            .font(.system(size: 12, weight: .bold))
-                                            .foregroundStyle(.white)
-                                            .frame(width: 32, height: 32)
-                                            .background(LColors.accent.opacity(0.85))
-                                            .clipShape(Circle())
                                     }
-                                    .buttonStyle(.plain)
+                                    .pickerStyle(.menu)
+                                    .tint(LColors.accent)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
 
-                                    Text("per completion")
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(LColors.textPrimary)
+                                    HStack(spacing: 12) {
+                                        Text("Subtract")
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundStyle(LColors.textPrimary)
 
-                                    Spacer()
+                                        Button {
+                                            if routineMedicationRows[idx].quantity > 1 {
+                                                routineMedicationRows[idx].quantity -= 1
+                                            }
+                                        } label: {
+                                            Image(systemName: "minus")
+                                                .font(.system(size: 12, weight: .bold))
+                                                .foregroundStyle(routineMedicationRows[idx].quantity <= 1 ? LColors.textSecondary.opacity(0.5) : .white)
+                                                .frame(width: 32, height: 32)
+                                                .background(routineMedicationRows[idx].quantity <= 1 ? Color.white.opacity(0.05) : LColors.accent.opacity(0.85))
+                                                .clipShape(Circle())
+                                        }
+                                        .buttonStyle(.plain)
+                                        .disabled(routineMedicationRows[idx].quantity <= 1)
+
+                                        Text("\(routineMedicationRows[idx].quantity)")
+                                            .font(.system(size: 14, weight: .bold))
+                                            .foregroundStyle(LColors.textPrimary)
+                                            .padding(.horizontal, 16)
+                                            .padding(.vertical, 8)
+                                            .background(Color.white.opacity(0.08))
+                                            .clipShape(Capsule())
+                                            .overlay(
+                                                Capsule()
+                                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                            )
+
+                                        Button {
+                                            if routineMedicationRows[idx].quantity < 100 {
+                                                routineMedicationRows[idx].quantity += 1
+                                            }
+                                        } label: {
+                                            Image(systemName: "plus")
+                                                .font(.system(size: 12, weight: .bold))
+                                                .foregroundStyle(.white)
+                                                .frame(width: 32, height: 32)
+                                                .background(LColors.accent.opacity(0.85))
+                                                .clipShape(Circle())
+                                        }
+                                        .buttonStyle(.plain)
+
+
+                                        Spacer()
+
+                                        Button {
+                                            routineMedicationRows.remove(at: idx)
+                                        } label: {
+                                            Image(systemName: "trash")
+                                                .font(.system(size: 12, weight: .bold))
+                                                .foregroundStyle(.white)
+                                                .frame(width: 32, height: 32)
+                                                .background(Color.red.opacity(0.75))
+                                                .clipShape(Circle())
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
                                 }
+                                .padding(12)
+                                .background(Color.white.opacity(0.04))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                )
                             }
+
+                            Button {
+                                routineMedicationRows.append((id: UUID(), medicationId: nil, quantity: 1))
+                            } label: {
+                                Label("Add Medication", systemImage: "plus.circle.fill")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(LColors.accent)
+                                    .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
@@ -1459,10 +2070,21 @@ struct EditReminderSheet: View {
         print("[EditReminderSheet] loadFromModel for id=\(reminder.id) title=\(reminder.title)")
         title = reminder.title
         details = reminder.details ?? ""
+        reminderType = reminder.reminderType
         let storedChecklist = reminder.checklistItems
         checklistEntries = storedChecklist.isEmpty ? [""] : storedChecklist
+        let storedRoutineItems = _reminder.wrappedValue.sortedRoutineChecklistItems.map { $0.title }
+        routineItemEntries = storedRoutineItems.isEmpty ? [""] : storedRoutineItems
         selectedMedicationId = reminder.linkedMedicationId
         linkedMedicationQuantity = max(1, reminder.linkedMedicationQuantity)
+        let storedMedicationLinks = _reminder.wrappedValue.sortedMedicationLinks
+        routineMedicationRows = storedMedicationLinks.map { link in
+            return (
+                id: link.id,
+                medicationId: link.medicationId,
+                quantity: max(1, link.quantity)
+            )
+        }
 
         let kind = reminder.schedule?.kind ?? .once
         scheduleKind = kind
@@ -1530,32 +2152,66 @@ struct EditReminderSheet: View {
     }
 
     private func apply() {
-    #if os(macOS)
+#if os(macOS)
         NSApp.keyWindow?.endEditing(for: nil)
-    #endif
+#endif
         DispatchQueue.main.async {
             guard self.canSave else { return }
+            let currentReminder = _reminder.wrappedValue
 
             print("[EditReminderSheet] Apply tapped. title=\(self.titleTrimmed), kind=\(self.scheduleKind.rawValue))")
-            self.reminder.title = self.titleTrimmed
+            currentReminder.title = self.titleTrimmed
+            currentReminder.reminderType = self.reminderType
 
             let detailsTrimmed = self.details.trimmingCharacters(in: .whitespacesAndNewlines)
-            self.reminder.details = detailsTrimmed.isEmpty ? nil : detailsTrimmed
+            currentReminder.details = detailsTrimmed.isEmpty ? nil : detailsTrimmed
 
             let checklistItems = self.checklistEntries
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
-            self.reminder.checklistItems = checklistItems
+            currentReminder.checklistItems = self.reminderType == .regular ? checklistItems : []
 
-            if let selectedMedicationId = self.selectedMedicationId {
-                self.reminder.linkedKind = .medication
-                self.reminder.linkedMedicationId = selectedMedicationId
-                self.reminder.linkedMedicationQuantity = max(1, self.linkedMedicationQuantity)
-                self.reminder.linkedHabitId = nil
+            let routineItems = self.routineItemEntries
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+
+            if self.reminderType == .routine {
+                currentReminder.routineChecklistItems = routineItems.enumerated().map { idx, title in
+                    RoutineChecklistItem(
+                        title: title,
+                        sortOrder: idx,
+                        reminder: currentReminder
+                    )
+                }
+
+                let validRows = self.routineMedicationRows.filter { $0.medicationId != nil }
+                currentReminder.medicationLinks = validRows.enumerated().map { idx, row in
+                    ReminderMedicationLink(
+                        reminder: currentReminder,
+                        medicationId: row.medicationId,
+                        quantity: max(1, row.quantity),
+                        sortOrder: idx
+                    )
+                }
             } else {
-                self.reminder.linkedKindRaw = nil
-                self.reminder.linkedMedicationId = nil
-                self.reminder.linkedMedicationQuantity = 1
+                currentReminder.routineChecklistItems = nil
+                currentReminder.medicationLinks = nil
+            }
+
+            if self.reminderType == .regular {
+                if let selectedMedicationId = self.selectedMedicationId {
+                    currentReminder.linkedKind = .medication
+                    currentReminder.linkedMedicationId = selectedMedicationId
+                    currentReminder.linkedMedicationQuantity = max(1, self.linkedMedicationQuantity)
+                    currentReminder.linkedHabitId = nil
+                } else {
+                    currentReminder.linkedKindRaw = nil
+                    currentReminder.linkedMedicationId = nil
+                    currentReminder.linkedMedicationQuantity = 1
+                }
+            } else {
+                currentReminder.linkedMedicationId = nil
+                currentReminder.linkedMedicationQuantity = 1
             }
 
             let schedule: ReminderSchedule?
@@ -1617,16 +2273,16 @@ struct EditReminderSheet: View {
 
             print("[EditReminderSheet] Computed runAt=\(runAt), schedule=\(String(describing: schedule))")
 
-            self.reminder.schedule = schedule
-            self.reminder.nextRunAt = runAt
-            self.reminder.updatedAt = Date()
+            reminder.schedule = schedule
+            reminder.nextRunAt = runAt
+            reminder.updatedAt = Date()
 
-            print("[EditReminderSheet] Updated reminder id=\(self.reminder.id) nextRunAt=\(self.reminder.nextRunAt) updatedAt=\(String(describing: self.reminder.updatedAt))")
+            print("[EditReminderSheet] Updated reminder id=\(reminder.id) nextRunAt=\(reminder.nextRunAt) updatedAt=\(String(describing: reminder.updatedAt))")
 
-            NotificationManager.shared.scheduleReminder(self.reminder)
-        #if DEBUG
+            NotificationManager.shared.scheduleReminder(reminder)
+#if DEBUG
             NotificationManager.shared.printPendingNotifications()
-        #endif
+#endif
 
             self.onClose()
         }

@@ -8,6 +8,7 @@ import WidgetKit
 
 struct JournalTabView: View {
     @Environment(\.modelContext) private var modelContext
+    @StateObject private var limits = LimitManager.shared
     @EnvironmentObject private var appState: AppState
     @State private var showBookEditor = false
 
@@ -51,6 +52,9 @@ struct JournalTabView: View {
                 // TO MOVE FAB ADJUST .PADDING(.BOTTOM, 90)
                 // AND DECREASE FOR DOWN AND INCREASE FOR UP
                 FloatingActionButton {
+                    let decision = limits.canCreate(.journalBooksTotal, currentCount: books.count)
+                    guard decision.allowed else { return }
+
                     editingBook = nil
                     showBookEditor = true
                 }
@@ -197,6 +201,13 @@ struct JournalTabView: View {
                     .padding(.horizontal, LSpacing.pageHorizontal)
             } else {
                 LazyVGrid(columns: gridColumns, spacing: 14) {
+                    let allowedBookIds = Set(
+                        books
+                            .sorted { $0.createdAt < $1.createdAt }
+                            .prefix(1)
+                            .map { $0.persistentModelID }
+                    )
+
                     ForEach(books, id: \.persistentModelID) { book in
                         NavigationLink {
                             JournalBookDetailView(book: book)
@@ -209,6 +220,7 @@ struct JournalTabView: View {
                             )
                         }
                         .buttonStyle(.plain)
+                        .premiumLocked(!limits.hasPremiumAccess && !allowedBookIds.contains(book.persistentModelID))
                         .contextMenu {
                             Button("Edit Book") {
                                 editingBook = book
@@ -661,10 +673,12 @@ struct JournalBookCard: View {
 
 struct JournalBookDetailView: View {
     @Environment(\.modelContext) private var modelContext
+    @StateObject private var limits = LimitManager.shared
     @EnvironmentObject private var appState: AppState
     let book: JournalBook
     
     @Query private var entries: [JournalEntry]
+    @Query(filter: #Predicate<JournalEntry> { $0.deletedAt == nil }, sort: \JournalEntry.createdAt, order: .reverse) private var allEntries: [JournalEntry]
     @Query private var prompts: [JournalPrompt]
     
     @State private var showPromptSheet = false
@@ -685,6 +699,8 @@ struct JournalBookDetailView: View {
     
     // Stored prompt feedback state
     @State private var promptShowCopied = false
+    @State private var visibleEntryCount: Int = 4
+    @State private var visiblePromptCount: Int = 4
     
     init(book: JournalBook) {
         self.book = book
@@ -711,6 +727,14 @@ struct JournalBookDetailView: View {
     private var filteredEntries: [JournalEntry] {
         guard let tag = tagFilter, !tag.isEmpty else { return entries }
         return entries.filter { $0.tags.contains(tag) }
+    }
+
+    private var visibleEntries: [JournalEntry] {
+        Array(filteredEntries.prefix(visibleEntryCount))
+    }
+
+    private var visiblePrompts: [JournalPrompt] {
+        Array(prompts.prefix(visiblePromptCount))
     }
     
     var body: some View {
@@ -791,6 +815,12 @@ struct JournalBookDetailView: View {
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showPromptEditorPopup)
         .onAppear {
             JournalEntryBlockMigration.migrateEntriesIfNeeded(entries, modelContext: modelContext)
+        }
+        .onChange(of: tagFilter) { _, _ in
+            visibleEntryCount = 4
+        }
+        .onChange(of: prompts) { _, _ in
+            visiblePromptCount = 4
         }
     }
     
@@ -895,7 +925,12 @@ struct JournalBookDetailView: View {
                 EmptyState(icon: "doc.text", message: "No entries in this book yet.\nTap + to create one.")
                     .padding(.top, 20)
             } else {
-                ForEach(filteredEntries, id: \.persistentModelID) { entry in
+                let allowedEntrySource = allEntries
+                    .sorted { $0.createdAt < $1.createdAt }
+                    .prefix(50)
+                let allowedEntryIds = Set(allowedEntrySource.map { $0.persistentModelID })
+
+                ForEach(visibleEntries, id: \.persistentModelID) { entry in
                     JournalCard(
                         entry: entry,
                         onView: {
@@ -910,6 +945,15 @@ struct JournalBookDetailView: View {
                         }
                     )
                     .padding(.horizontal, LSpacing.pageHorizontal)
+                    .premiumLocked(!limits.hasPremiumAccess && !allowedEntryIds.contains(entry.persistentModelID))
+                }
+
+                if filteredEntries.count > visibleEntryCount {
+                    LoadMoreButton {
+                        visibleEntryCount += 4
+                    }
+                    .padding(.horizontal, LSpacing.pageHorizontal)
+                    .padding(.top, 4)
                 }
             }
         }
@@ -922,6 +966,7 @@ struct JournalBookDetailView: View {
         ZStack(alignment: .top) {
             LystariaOverlayPopup(
                 onClose: {
+                    visiblePromptCount = 4
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                         showStoredPromptsPopup = false
                     }
@@ -983,25 +1028,49 @@ struct JournalBookDetailView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 30)
                     } else {
-                        ForEach(prompts, id: \.persistentModelID) { prompt in
-                            Button {
-                                copyStoredPrompt(prompt.text)
-                            } label: {
+                        ForEach(visiblePrompts, id: \.persistentModelID) { prompt in
+                            HStack(alignment: .top, spacing: 10) {
+                                Button {
+                                    prompt.isCompleted.toggle()
+                                    prompt.updatedAt = Date()
+                                    try? modelContext.save()
+                                } label: {
+                                    Image(systemName: prompt.isCompleted ? "checkmark.circle.fill" : "circle")
+                                        .font(.system(size: 18, weight: .semibold))
+                                        .foregroundStyle(prompt.isCompleted ? AnyShapeStyle(LGradients.blue) : AnyShapeStyle(LColors.textSecondary))
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.top, 1)
+
                                 Text(prompt.text)
                                     .font(.system(size: 14, weight: .semibold))
                                     .foregroundStyle(LColors.textPrimary)
                                     .multilineTextAlignment(.leading)
+                                    .strikethrough(prompt.isCompleted, color: .white.opacity(0.7))
+                                    .opacity(prompt.isCompleted ? 0.72 : 1)
                                     .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 12)
-                                    .background(Color.white.opacity(0.08))
-                                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 16)
-                                            .stroke(LColors.glassBorder, lineWidth: 1)
-                                    )
+
+                                Button {
+                                    copyStoredPrompt(prompt.text)
+                                } label: {
+                                    Image("copyfill")
+                                        .renderingMode(.template)
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: 16, height: 16)
+                                        .foregroundStyle(.white)
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.top, 1)
                             }
-                            .buttonStyle(.plain)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                            )
                             .contextMenu {
                                 Button {
                                     editingStoredPrompt = prompt
@@ -1018,6 +1087,17 @@ struct JournalBookDetailView: View {
                                     Text("Delete")
                                 }
                             }
+                        }
+
+                        if prompts.count > visiblePromptCount {
+                            HStack {
+                                Spacer()
+                                LoadMoreButton {
+                                    visiblePromptCount += 4
+                                }
+                                Spacer()
+                            }
+                            .padding(.top, 4)
                         }
                     }
                 },

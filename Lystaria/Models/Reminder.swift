@@ -35,6 +35,11 @@ enum ReminderScheduleKind: String, CaseIterable {
     }
 }
 
+enum ReminderType: String, CaseIterable {
+    case regular = "regular"
+    case routine = "routine"
+}
+
 // MARK: - Schedule (Codable struct stored as JSON)
 
 struct ReminderSchedule: Equatable, Sendable {
@@ -63,9 +68,53 @@ struct ReminderSchedule: Equatable, Sendable {
 
 extension ReminderStatus: nonisolated Codable {}
 extension ReminderScheduleKind: nonisolated Codable {}
+extension ReminderType: nonisolated Codable {}
 extension ReminderSchedule: nonisolated Codable {}
 
 // MARK: - Reminder Model
+
+@Model
+final class RoutineChecklistItem {
+    var id: UUID = UUID()
+    var title: String = ""
+    var sortOrder: Int = 0
+    var reminder: LystariaReminder?
+
+    init(
+        id: UUID = UUID(),
+        title: String = "",
+        sortOrder: Int = 0,
+        reminder: LystariaReminder? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.sortOrder = sortOrder
+        self.reminder = reminder
+    }
+}
+
+@Model
+final class ReminderMedicationLink {
+    var id: UUID = UUID()
+    var reminder: LystariaReminder?
+    var medicationId: UUID?
+    var quantity: Int = 1
+    var sortOrder: Int = 0
+
+    init(
+        id: UUID = UUID(),
+        reminder: LystariaReminder? = nil,
+        medicationId: UUID? = nil,
+        quantity: Int = 1,
+        sortOrder: Int = 0
+    ) {
+        self.id = id
+        self.reminder = reminder
+        self.medicationId = medicationId
+        self.quantity = max(1, quantity)
+        self.sortOrder = sortOrder
+    }
+}
 
 @Model
 final class LystariaReminder {
@@ -84,6 +133,15 @@ final class LystariaReminder {
     var scheduleStorage: String?
     
     var timezone: String = TimeZone.current.identifier
+    var reminderTypeRaw: String = ReminderType.regular.rawValue
+    var routineOccurrenceKey: String = ""
+    var checkedRoutineItemIDsStorage: String = "[]"
+
+    @Relationship(deleteRule: .cascade, inverse: \RoutineChecklistItem.reminder)
+    var routineChecklistItems: [RoutineChecklistItem]?
+    @Relationship(deleteRule: .cascade, inverse: \ReminderMedicationLink.reminder)
+    var medicationLinks: [ReminderMedicationLink]?
+    
     var lastRunAt: Date?
     
     var checklistStorage: String = "[]"
@@ -105,6 +163,83 @@ final class LystariaReminder {
         }
     }
 
+    var reminderType: ReminderType {
+        get { ReminderType(rawValue: reminderTypeRaw) ?? .regular }
+        set { reminderTypeRaw = newValue.rawValue }
+    }
+
+    var checkedRoutineItemIDs: [UUID] {
+        get {
+            guard let data = checkedRoutineItemIDsStorage.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([UUID].self, from: data)
+            else { return [] }
+            return decoded
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue),
+               let encoded = String(data: data, encoding: .utf8) {
+                checkedRoutineItemIDsStorage = encoded
+            } else {
+                checkedRoutineItemIDsStorage = "[]"
+            }
+        }
+    }
+
+    var sortedRoutineChecklistItems: [RoutineChecklistItem] {
+        (routineChecklistItems ?? []).sorted { lhs, rhs in
+            if lhs.sortOrder == rhs.sortOrder {
+                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+            }
+            return lhs.sortOrder < rhs.sortOrder
+        }
+    }
+    var sortedMedicationLinks: [ReminderMedicationLink] {
+        (medicationLinks ?? []).sorted { lhs, rhs in
+            if lhs.sortOrder == rhs.sortOrder {
+                let lhsID = lhs.medicationId?.uuidString ?? ""
+                let rhsID = rhs.medicationId?.uuidString ?? ""
+                return lhsID.localizedCaseInsensitiveCompare(rhsID) == .orderedAscending
+            }
+            return lhs.sortOrder < rhs.sortOrder
+        }
+    }
+
+    var completedRoutineItemCount: Int {
+        let validIDs = Set((routineChecklistItems ?? []).map(\.id))
+        return checkedRoutineItemIDs.filter { validIDs.contains($0) }.count
+    }
+
+    var totalRoutineItemCount: Int {
+        (routineChecklistItems ?? []).count
+    }
+
+    var isRoutineChecklistComplete: Bool {
+        reminderType == .routine && totalRoutineItemCount > 0 && completedRoutineItemCount >= totalRoutineItemCount
+    }
+
+    func isRoutineItemChecked(_ item: RoutineChecklistItem) -> Bool {
+        checkedRoutineItemIDs.contains(item.id)
+    }
+
+    func setRoutineItemChecked(_ checked: Bool, for item: RoutineChecklistItem) {
+        var ids = checkedRoutineItemIDs
+        if checked {
+            if !ids.contains(item.id) {
+                ids.append(item.id)
+            }
+        } else {
+            ids.removeAll { $0 == item.id }
+        }
+        checkedRoutineItemIDs = ids
+        updatedAt = Date()
+    }
+
+    func resetRoutineChecklist(for occurrenceKey: String) {
+        routineOccurrenceKey = occurrenceKey
+        checkedRoutineItemIDs = []
+        updatedAt = Date()
+    }
+    
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
 
@@ -189,6 +324,7 @@ final class LystariaReminder {
         nextRunAt: Date,
         schedule: ReminderSchedule? = nil,
         timezone: String = TimeZone.current.identifier,
+        reminderType: ReminderType = .regular,
         linkedKind: LinkedKind? = nil,
         linkedHabitId: UUID? = nil,
         linkedMedicationId: UUID? = nil,
@@ -204,6 +340,11 @@ final class LystariaReminder {
         self.sentTimesOfDayStorage = "[]"
         self.scheduleStorage = nil
         self.timezone = timezone
+        self.reminderType = reminderType
+        self.routineOccurrenceKey = ""
+        self.checkedRoutineItemIDsStorage = "[]"
+        self.routineChecklistItems = nil
+        self.medicationLinks = nil
         self.lastRunAt = nil
         self.createdAt = Date()
         self.updatedAt = Date()
@@ -212,6 +353,7 @@ final class LystariaReminder {
         self.linkedMedicationId = linkedMedicationId
         self.linkedMedicationQuantity = max(1, linkedMedicationQuantity)
         self.sentTimesOfDay = []
+        self.checkedRoutineItemIDs = []
         self.schedule = schedule
     }
 }

@@ -81,6 +81,7 @@ struct ToolboxView: View {
                         .fill(LColors.glassBorder)
                         .frame(height: 1)
 
+                    distractionLauncherCard
                     breathingCard
                     thoughtBurnCard
 
@@ -109,6 +110,108 @@ struct ToolboxView: View {
         HStack {
             GradientTitle(text: "Toolbox", font: .title.bold())
             Spacer()
+        }
+    }
+
+    private var distractionLauncherCard: some View {
+        GlassCard {
+            HStack(alignment: .center, spacing: 16) {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(alignment: .center, spacing: 10) {
+                        Image("bubblefill")
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 22, height: 22)
+                            .foregroundStyle(.white)
+
+                        GradientTitle(text: "Bubble Distraction", font: .system(size: 20, weight: .bold))
+                    }
+
+                    Text("A soothing sensory space with floating bubbles you can tap for soft release, motion, and gentle stimulation when your mind needs a break.")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    NavigationLink {
+                        BubbleDistractionView()
+                    } label: {
+                        HStack {
+                            Spacer()
+
+                            Text("Open Bubble Space")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(.white)
+
+                            Spacer()
+                        }
+                        .padding(.vertical, 12)
+                        .background(LGradients.blue)
+                        .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .simultaneousGesture(
+                        TapGesture().onEnded {
+                            dismissKeyboard()
+                            triggerLightHaptic()
+                        }
+                    )
+                }
+
+                Spacer(minLength: 0)
+
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0.24),
+                                    Color(red: 0.22, green: 0.60, blue: 1.0).opacity(0.07),
+                                    Color(red: 0.48, green: 0.26, blue: 1.0).opacity(0.06),
+                                    Color.clear
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .overlay(
+                            Ellipse()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            Color.white.opacity(0.56),
+                                            Color.white.opacity(0.20),
+                                            Color.clear
+                                        ],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .frame(width: 28, height: 16)
+                                .blur(radius: 0.25)
+                                .offset(x: -16, y: -19)
+                        )
+                        .background(
+                            Circle()
+                                .fill(
+                                    RadialGradient(
+                                        colors: [
+                                            LColors.accent.opacity(0.12),
+                                            Color.blue.opacity(0.10),
+                                            Color.clear
+                                        ],
+                                        center: .center,
+                                        startRadius: 10,
+                                        endRadius: 42
+                                    )
+                                )
+                                .blur(radius: 11)
+                        )
+                        .shadow(color: LColors.accent.opacity(0.08), radius: 8, y: 3)
+                        .frame(width: 88, height: 88)
+                }
+                .frame(width: 104, height: 104)
+            }
         }
     }
 

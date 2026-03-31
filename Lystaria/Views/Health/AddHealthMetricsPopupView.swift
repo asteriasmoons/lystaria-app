@@ -10,6 +10,7 @@ import SwiftData
 
 struct AddHealthMetricsPopupView: View {
     @Environment(\.modelContext) private var modelContext
+    @StateObject private var limits = LimitManager.shared
 
     var onClose: () -> Void
 
@@ -103,6 +104,17 @@ struct AddHealthMetricsPopupView: View {
             return
         }
         isSaving = true
+
+        // Enforce daily health metrics limit (3 per day)
+        let descriptor = FetchDescriptor<HealthMetricEntry>()
+        let entries = (try? modelContext.fetch(descriptor)) ?? []
+        let todayCount = entries.filter { limits.isSameDay($0.createdAt, Date()) }.count
+
+        let decision = limits.canCreate(.healthMetricsPerDay, currentCount: todayCount)
+        guard decision.allowed else {
+            isSaving = false
+            return
+        }
 
         let entry: HealthMetricEntry
 

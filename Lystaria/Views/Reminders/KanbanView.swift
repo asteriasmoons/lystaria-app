@@ -8,6 +8,7 @@ import SwiftData
 
 struct KanbanView: View {
     @Environment(\.modelContext) private var modelContext
+    @StateObject private var limits = LimitManager.shared
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \KanbanBoard.sortOrder) private var boards: [KanbanBoard]
     @Query(sort: \LystariaReminder.nextRunAt) private var allReminders: [LystariaReminder]
@@ -48,7 +49,11 @@ struct KanbanView: View {
                         
                         Spacer()
                         
-                        Button { showNewBoard = true } label: {
+                        Button {
+                            let decision = limits.canCreate(.kanbanBoardsTotal, currentCount: boards.count)
+                            guard decision.allowed else { return }
+                            showNewBoard = true
+                        } label: {
                             ZStack {
                                 Circle()
                                     .fill(Color.white.opacity(0.08))
@@ -92,6 +97,9 @@ struct KanbanView: View {
                 BoardEditorSheet(
                     board: nil,
                     onSave: { name, hex in
+                        // Enforce board limit (2 total for free users)
+                        let decision = limits.canCreate(.kanbanBoardsTotal, currentCount: boards.count)
+                        guard decision.allowed else { return }
                         let b = KanbanBoard(name: name, colorHex: hex, sortOrder: boards.count)
                         modelContext.insert(b)
                         try? modelContext.save()
@@ -130,6 +138,10 @@ struct KanbanView: View {
                 ColumnEditorSheet(
                     column: nil,
                     onSave: { name, hex in
+                        // Enforce column limit (3 per board for free users)
+                        let currentCount = (board.columns ?? []).count
+                        let decision = limits.canCreate(.kanbanColumnsPerBoard, currentCount: currentCount)
+                        guard decision.allowed else { return }
                         let col = KanbanColumn(name: name, colorHex: hex, sortOrder: (board.columns ?? []).count)
                         col.board = board
                         modelContext.insert(col)
@@ -202,6 +214,12 @@ struct KanbanView: View {
 
     private var boardSelectorBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
+            let allowedBoardIds = Set(
+                boards
+                    .sorted { $0.createdAt < $1.createdAt }
+                    .prefix(2)
+                    .map { $0.persistentModelID }
+            )
             HStack(spacing: 10) {
                 ForEach(boards) { board in
                     let selected = selectedBoard?.id == board.id
@@ -223,9 +241,15 @@ struct KanbanView: View {
                         .overlay(Capsule().stroke(selected ? board.color : LColors.glassBorder, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
+                    .premiumLocked(!limits.hasPremiumAccess && !allowedBoardIds.contains(board.persistentModelID))
                     .contextMenu {
                         Button("Edit Board") { showEditBoard = board }
-                        Button("Add Column") { showNewColumn = true }
+                        Button("Add Column") {
+                            let currentCount = selectedBoard?.columns?.count ?? 0
+                            let decision = limits.canCreate(.kanbanColumnsPerBoard, currentCount: currentCount)
+                            guard decision.allowed else { return }
+                            showNewColumn = true
+                        }
                         Button("Delete Board", role: .destructive) { deleteBoard(board) }
                     }
                 }
@@ -253,15 +277,29 @@ struct KanbanView: View {
                     .foregroundStyle(LColors.textSecondary)
                     .multilineTextAlignment(.center)
                 LButton(title: "Add Column", icon: "plus", style: .gradient) {
+                    let currentCount = (selectedBoard?.columns ?? []).count
+                    let decision = limits.canCreate(.kanbanColumnsPerBoard, currentCount: currentCount)
+                    guard decision.allowed else { return }
                     showNewColumn = true
                 }
                 Spacer()
             }
             .padding(.horizontal, 32)
         } else {
+            let allowedColumnIds = Set(
+                (board.columns ?? [])
+                    .sorted { $0.createdAt < $1.createdAt }
+                    .prefix(3)
+                    .map { $0.persistentModelID }
+            )
             HStack(alignment: .top) {
                 // Column action button
-                Button { showNewColumn = true } label: {
+                Button {
+                    let currentCount = (selectedBoard?.columns ?? []).count
+                    let decision = limits.canCreate(.kanbanColumnsPerBoard, currentCount: currentCount)
+                    guard decision.allowed else { return }
+                    showNewColumn = true
+                } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(LColors.accent)
@@ -283,6 +321,7 @@ struct KanbanView: View {
                                 onMarkDone: { reminder in markDone(reminder) },
                                 onUnassign: { reminder in unassign(reminder) }
                             )
+                            .premiumLocked(!limits.hasPremiumAccess && !allowedColumnIds.contains(column.persistentModelID))
                         }
 
                         // Inbox column — unassigned reminders
@@ -730,39 +769,47 @@ struct KanbanCard: View {
 
         return schedule.kind.label
     }
-    @ViewBuilder
-    private var actionRow: some View {
-        HStack(spacing: 6) {
-            Text(scheduleLabel.uppercased())
-                .font(.system(size: 8, weight: .bold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .background(badgeColor.opacity(0.35))
-                .clipShape(Capsule())
+            @ViewBuilder
+            private var actionRow: some View {
+                HStack(spacing: 6) {
+                    Text(scheduleLabel.uppercased())
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(badgeColor.opacity(0.35))
+                        .clipShape(Capsule())
 
-            if isDueNow {
-                dueNowBadge
-            } else if isUpcoming {
-                upcomingBadge
-            }
+                    Text(reminderKindLabel.uppercased())
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(reminderKindBadgeColor)
+                        .clipShape(Capsule())
 
-            Spacer()
+                    if isDueNow {
+                        dueNowBadge
+                    } else if isUpcoming {
+                        upcomingBadge
+                    }
 
-            if let menu = columnMenu {
-                menu()
-            }
+                    Spacer()
 
-            if let unassign = onUnassign {
-                Button { unassign() } label: {
-                    Image(systemName: "xmark.circle")
-                        .font(.caption)
-                        .foregroundStyle(LColors.textSecondary)
+                    if let menu = columnMenu {
+                        menu()
+                    }
+
+                    if let unassign = onUnassign {
+                        Button { unassign() } label: {
+                            Image(systemName: "xmark.circle")
+                                .font(.caption)
+                                .foregroundStyle(LColors.textSecondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
-                .buttonStyle(.plain)
             }
-        }
-    }
 
     private var scheduleKind: ReminderScheduleKind {
         reminder.schedule?.kind ?? .once
@@ -788,6 +835,32 @@ struct KanbanCard: View {
             return LColors.gradientPurple
         case .interval:
             return LColors.badgeInterval
+        }
+    }
+    
+    private var reminderKindLabel: String {
+        switch reminder.linkedKindRaw?.lowercased() {
+        case "habit":
+            return "Habit"
+        case "event":
+            return "Event"
+        case "medication":
+            return "Medication"
+        default:
+            return "General"
+        }
+    }
+
+    private var reminderKindBadgeColor: Color {
+        switch reminder.linkedKindRaw?.lowercased() {
+        case "habit":
+            return Color(red: 0.14, green: 0.63, blue: 0.56).opacity(0.82)
+        case "event":
+            return Color(red: 0.95, green: 0.56, blue: 0.20).opacity(0.82)
+        case "medication":
+            return Color(red: 0.86, green: 0.28, blue: 0.58).opacity(0.82)
+        default:
+            return Color.white.opacity(0.9)
         }
     }
     

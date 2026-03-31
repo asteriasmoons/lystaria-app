@@ -2,16 +2,32 @@
 //  WaterTrackingView.swift
 //  Lystaria
 //
-//  Created by Asteria Moon on 3/9/26.
-//
 
 import SwiftUI
+import SwiftData
 import Foundation
+import WatchConnectivity
 
 struct WaterTrackingView: View {
+    @Environment(\.modelContext) private var modelContext
     @StateObject private var water = WaterHealthKitManager.shared
+    @StateObject private var limits = LimitManager.shared
 
-    @AppStorage("waterGoalFlOz") private var amountGoal: Double = 80
+    @Query(
+        filter: #Predicate<DailyCompletionSettings> { $0.key == "default" }
+    ) private var settingsResults: [DailyCompletionSettings]
+
+    private var settings: DailyCompletionSettings {
+        if let existing = settingsResults.first { return existing }
+        let s = DailyCompletionSettings(key: DailyCompletionSettings.defaultKey)
+        modelContext.insert(s)
+        return s
+    }
+
+    private var amountGoal: Double {
+        settings.waterGoalFlOz
+    }
+
     @State private var showCustomAmountPopup = false
     @State private var customAmountText = ""
     @State private var showGoalPopup = false
@@ -49,8 +65,12 @@ struct WaterTrackingView: View {
     private var weekdaySymbols: [String] {
         ["S", "M", "T", "W", "T", "F", "S"]
     }
-    
-    private var effectiveSelectedDate: Date {
+
+    private var isGoalCalendarLocked: Bool {
+        !limits.canAccess(.waterGoalCalendar)
+    }
+
+    private var selectedGoalCalendarDate: Date {
         selectedDate ?? Date()
     }
 
@@ -64,30 +84,31 @@ struct WaterTrackingView: View {
 
     private var cardTitleText: String {
         if let selectedDate {
-            if calendar.isDateInToday(selectedDate) {
-                return "Today’s Water"
-            }
-
+            if calendar.isDateInToday(selectedDate) { return "Today's Water" }
             let formatter = DateFormatter()
             formatter.dateFormat = "LLLL d"
             return "Water for \(formatter.string(from: selectedDate))"
         }
-
-        return "Today’s Water"
+        return "Today's Water"
     }
 
     private var cardSubtitleText: String {
         if let selectedDate {
-            if calendar.isDateInToday(selectedDate) {
-                return "Track your intake in FL OZ"
-            }
-
+            if calendar.isDateInToday(selectedDate) { return "Track your intake in FL OZ" }
             let formatter = DateFormatter()
             formatter.dateFormat = "EEEE, LLLL d"
             return formatter.string(from: selectedDate)
         }
-
         return "Track your intake in FL OZ"
+    }
+
+    @ViewBuilder
+    private func premiumBlockedCalendar<Content: View>(
+        _ locked: Bool,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        content()
+            .premiumLocked(locked)
     }
 
     private var daysInDisplayedMonth: [CalendarDayItem] {
@@ -133,7 +154,7 @@ struct WaterTrackingView: View {
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: date)
     }
-    
+
     private func totalWater(for date: Date) async -> Double {
         let startOfDay = calendar.startOfDay(for: date)
         guard let nextDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { return 0 }
@@ -151,16 +172,20 @@ struct WaterTrackingView: View {
         while cursor < monthInterval.end && cursor <= today {
             let startOfDay = calendar.startOfDay(for: cursor)
             guard let nextDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { break }
-
             let total = await water.totalWaterFlOz(from: startOfDay, to: nextDay)
-            if total >= amountGoal {
-                result.insert(dateKey(for: startOfDay))
-            }
-
+            if total >= amountGoal { result.insert(dateKey(for: startOfDay)) }
             cursor = nextDay
         }
 
         reachedGoalDates = result
+    }
+
+    // MARK: - Watch Sync
+
+    private func syncGoalToWatch(_ goal: Double) {
+        guard WCSession.isSupported(),
+              WCSession.default.activationState == .activated else { return }
+        try? WCSession.default.updateApplicationContext(["waterGoal": goal])
     }
 
     var body: some View {
@@ -190,9 +215,7 @@ struct WaterTrackingView: View {
                                 ZStack {
                                     Circle()
                                         .fill(Color.white.opacity(0.08))
-                                        .overlay(
-                                            Circle().stroke(LColors.glassBorder, lineWidth: 1)
-                                        )
+                                        .overlay(Circle().stroke(LColors.glassBorder, lineWidth: 1))
                                         .frame(width: 42, height: 42)
 
                                     Image("glassfill")
@@ -216,11 +239,7 @@ struct WaterTrackingView: View {
                                         .trim(from: 0, to: progress)
                                         .stroke(
                                             LGradients.blue,
-                                            style: StrokeStyle(
-                                                lineWidth: 14,
-                                                lineCap: .round,
-                                                lineJoin: .round
-                                            )
+                                            style: StrokeStyle(lineWidth: 14, lineCap: .round, lineJoin: .round)
                                         )
                                         .rotationEffect(.degrees(-90))
                                         .frame(width: 170, height: 170)
@@ -243,9 +262,7 @@ struct WaterTrackingView: View {
 
                             HStack(spacing: 10) {
                                 Button {
-                                    Task {
-                                        await water.addWater(flOz: 8)
-                                    }
+                                    Task { await water.addWater(flOz: 8) }
                                 } label: {
                                     Text("8 FL OZ")
                                         .font(.system(size: 13, weight: .semibold))
@@ -254,17 +271,12 @@ struct WaterTrackingView: View {
                                         .padding(.vertical, 12)
                                         .background(Color.white.opacity(0.10))
                                         .clipShape(RoundedRectangle(cornerRadius: 14))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 14)
-                                                .stroke(LColors.glassBorder, lineWidth: 1)
-                                        )
+                                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
                                 }
                                 .buttonStyle(.plain)
 
                                 Button {
-                                    Task {
-                                        await water.addWater(flOz: 20)
-                                    }
+                                    Task { await water.addWater(flOz: 20) }
                                 } label: {
                                     Text("20 FL OZ")
                                         .font(.system(size: 13, weight: .semibold))
@@ -273,10 +285,7 @@ struct WaterTrackingView: View {
                                         .padding(.vertical, 12)
                                         .background(Color.white.opacity(0.10))
                                         .clipShape(RoundedRectangle(cornerRadius: 14))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 14)
-                                                .stroke(LColors.glassBorder, lineWidth: 1)
-                                        )
+                                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
                                 }
                                 .buttonStyle(.plain)
 
@@ -291,18 +300,13 @@ struct WaterTrackingView: View {
                                         .padding(.vertical, 12)
                                         .background(Color.white.opacity(0.10))
                                         .clipShape(RoundedRectangle(cornerRadius: 14))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 14)
-                                                .stroke(LColors.glassBorder, lineWidth: 1)
-                                        )
+                                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
                                 }
                                 .buttonStyle(.plain)
                             }
 
                             Button {
-                                Task {
-                                    await water.fetchTodayWater()
-                                }
+                                Task { await water.fetchTodayWater() }
                             } label: {
                                 Text("Refresh")
                                     .font(.system(size: 14, weight: .semibold))
@@ -313,7 +317,7 @@ struct WaterTrackingView: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 14))
                             }
                             .buttonStyle(.plain)
-                            
+
                             Button {
                                 selectedDate = Date()
                                 selectedDayWater = water.todayWaterFlOz
@@ -325,10 +329,7 @@ struct WaterTrackingView: View {
                                     .padding(.vertical, 14)
                                     .background(Color.white.opacity(0.10))
                                     .clipShape(RoundedRectangle(cornerRadius: 14))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 14)
-                                            .stroke(LColors.glassBorder, lineWidth: 1)
-                                    )
+                                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
                             }
                             .buttonStyle(.plain)
 
@@ -347,9 +348,7 @@ struct WaterTrackingView: View {
                             .buttonStyle(.plain)
 
                             Button {
-                                Task {
-                                    await water.clearTodayWater()
-                                }
+                                Task { await water.clearTodayWater() }
                             } label: {
                                 Text("Clear")
                                     .font(.system(size: 14, weight: .semibold))
@@ -361,116 +360,101 @@ struct WaterTrackingView: View {
                             }
                             .buttonStyle(.plain)
                         }
-
                     }
 
-                    GlassCard {
-                        VStack(alignment: .leading, spacing: 18) {
-                            HStack {
-                                Text("Goal Calendar")
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .foregroundStyle(LColors.textPrimary)
+                    premiumBlockedCalendar(isGoalCalendarLocked) {
+                        GlassCard {
+                            VStack(alignment: .leading, spacing: 18) {
+                                HStack {
+                                    Text("Goal Calendar")
+                                        .font(.system(size: 18, weight: .semibold))
+                                        .foregroundStyle(LColors.textPrimary)
 
-                                Spacer()
+                                    Spacer()
 
-                                HStack(spacing: 8) {
-                                    Button {
-                                        changeMonth(by: -1)
-                                    } label: {
-                                        ZStack {
-                                            Circle()
-                                                .fill(Color.white.opacity(0.08))
-                                                .overlay(
-                                                    Circle().stroke(LColors.glassBorder, lineWidth: 1)
-                                                )
-                                                .frame(width: 34, height: 34)
-
-                                            Image("chevleft")
-                                                .renderingMode(.template)
-                                                .resizable()
-                                                .scaledToFit()
-                                                .frame(width: 14, height: 14)
-                                                .foregroundColor(.white)
-                                        }
-                                    }
-                                    .buttonStyle(.plain)
-
-                                    Button {
-                                        changeMonth(by: 1)
-                                    } label: {
-                                        ZStack {
-                                            Circle()
-                                                .fill(Color.white.opacity(0.08))
-                                                .overlay(
-                                                    Circle().stroke(LColors.glassBorder, lineWidth: 1)
-                                                )
-                                                .frame(width: 34, height: 34)
-
-                                            Image("chevright")
-                                                .renderingMode(.template)
-                                                .resizable()
-                                                .scaledToFit()
-                                                .frame(width: 14, height: 14)
-                                                .foregroundColor(.white)
-                                        }
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-
-                            Text(monthTitle)
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(LColors.textSecondary)
-
-                            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 7), spacing: 12) {
-                                ForEach(weekdaySymbols, id: \.self) { symbol in
-                                    Text(symbol)
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(LColors.textSecondary)
-                                        .frame(maxWidth: .infinity)
-                                }
-
-                                ForEach(daysInDisplayedMonth) { item in
-                                    if let day = item.dayNumber, let itemDate = item.date {
-                                        let isSelected = calendar.isDate(itemDate, inSameDayAs: effectiveSelectedDate)
-
-                                        ZStack {
-                                            Circle()
-                                                .fill(Color.white.opacity(0.08))
-                                                .frame(width: 36, height: 36)
-                                                .overlay {
-                                                    if item.isGoalMet {
-                                                        ZStack {
-                                                            LGradients.blue
-                                                            GradientOverlayBackground()
-                                                                .clipShape(Circle())
-                                                        }
-                                                        .clipShape(Circle())
-                                                    }
-                                                }
-                                                .overlay(
-                                                    Circle().stroke(
-                                                        isSelected ? Color.white : (item.isToday ? Color.white.opacity(0.55) : LColors.glassBorder),
-                                                        lineWidth: isSelected ? 2 : 1
-                                                    )
-                                                )
-
-                                            Text("\(day)")
-                                                .font(.system(size: 13, weight: .semibold))
-                                                .foregroundStyle(.white)
-                                        }
-                                        .frame(maxWidth: .infinity)
-                                        .contentShape(Rectangle())
-                                        .onTapGesture {
-                                            selectedDate = itemDate
-                                            Task {
-                                                selectedDayWater = await totalWater(for: itemDate)
+                                    HStack(spacing: 8) {
+                                        Button { changeMonth(by: -1) } label: {
+                                            ZStack {
+                                                Circle()
+                                                    .fill(Color.white.opacity(0.08))
+                                                    .overlay(Circle().stroke(LColors.glassBorder, lineWidth: 1))
+                                                    .frame(width: 34, height: 34)
+                                                Image("chevleft")
+                                                    .renderingMode(.template)
+                                                    .resizable()
+                                                    .scaledToFit()
+                                                    .frame(width: 14, height: 14)
+                                                    .foregroundColor(.white)
                                             }
                                         }
-                                    } else {
-                                        Color.clear
-                                            .frame(width: 36, height: 36)
+                                        .buttonStyle(.plain)
+
+                                        Button { changeMonth(by: 1) } label: {
+                                            ZStack {
+                                                Circle()
+                                                    .fill(Color.white.opacity(0.08))
+                                                    .overlay(Circle().stroke(LColors.glassBorder, lineWidth: 1))
+                                                    .frame(width: 34, height: 34)
+                                                Image("chevright")
+                                                    .renderingMode(.template)
+                                                    .resizable()
+                                                    .scaledToFit()
+                                                    .frame(width: 14, height: 14)
+                                                    .foregroundColor(.white)
+                                            }
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+
+                                Text(monthTitle)
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundStyle(LColors.textSecondary)
+
+                                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 7), spacing: 12) {
+                                    ForEach(weekdaySymbols, id: \.self) { symbol in
+                                        Text(symbol)
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundStyle(LColors.textSecondary)
                                             .frame(maxWidth: .infinity)
+                                    }
+
+                                    ForEach(daysInDisplayedMonth) { item in
+                                        if let day = item.dayNumber, let itemDate = item.date {
+                                            let isSelected = calendar.isDate(itemDate, inSameDayAs: selectedGoalCalendarDate)
+
+                                            ZStack {
+                                                Circle()
+                                                    .fill(Color.white.opacity(0.08))
+                                                    .frame(width: 36, height: 36)
+                                                    .overlay {
+                                                        if item.isGoalMet {
+                                                            ZStack {
+                                                                LGradients.blue
+                                                                GradientOverlayBackground().clipShape(Circle())
+                                                            }
+                                                            .clipShape(Circle())
+                                                        }
+                                                    }
+                                                    .overlay(
+                                                        Circle().stroke(
+                                                            isSelected ? Color.white : (item.isToday ? Color.white.opacity(0.55) : LColors.glassBorder),
+                                                            lineWidth: isSelected ? 2 : 1
+                                                        )
+                                                    )
+                                                Text("\(day)")
+                                                    .font(.system(size: 13, weight: .semibold))
+                                                    .foregroundStyle(.white)
+                                            }
+                                            .frame(maxWidth: .infinity)
+                                            .contentShape(Rectangle())
+                                            .onTapGesture {
+                                                selectedDate = itemDate
+                                                Task { selectedDayWater = await totalWater(for: itemDate) }
+                                            }
+                                        } else {
+                                            Color.clear.frame(width: 36, height: 36).frame(maxWidth: .infinity)
+                                        }
                                     }
                                 }
                             }
@@ -493,7 +477,6 @@ struct WaterTrackingView: View {
 
                 VStack {
                     Spacer()
-
                     VStack(spacing: 18) {
                         GradientTitle(text: "Other FL OZ", font: .title2.bold())
 
@@ -507,19 +490,14 @@ struct WaterTrackingView: View {
                             .padding(12)
                             .background(Color.white.opacity(0.08))
                             .clipShape(RoundedRectangle(cornerRadius: 14))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14)
-                                    .stroke(LColors.glassBorder, lineWidth: 1)
-                            )
+                            .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
 
                         LButton(title: "Add Water", style: .secondary) {
                             let cleaned = customAmountText.trimmingCharacters(in: .whitespacesAndNewlines)
                             if let value = Double(cleaned), value > 0 {
                                 focusedField = nil
                                 showCustomAmountPopup = false
-                                Task {
-                                    await water.addWater(flOz: value)
-                                }
+                                Task { await water.addWater(flOz: value) }
                             }
                         }
                     }
@@ -528,19 +506,14 @@ struct WaterTrackingView: View {
                     .background {
                         ZStack {
                             LGradients.blue
-                            GradientOverlayBackground()
-                                .clipShape(RoundedRectangle(cornerRadius: 24))
+                            GradientOverlayBackground().clipShape(RoundedRectangle(cornerRadius: 24))
                         }
                     }
                     .clipShape(RoundedRectangle(cornerRadius: 24))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 24)
-                            .stroke(Color.white.opacity(0.14), lineWidth: 1)
-                    )
+                    .overlay(RoundedRectangle(cornerRadius: 24).stroke(Color.white.opacity(0.14), lineWidth: 1))
                     .shadow(color: .black.opacity(0.25), radius: 16, y: 8)
                     .contentShape(RoundedRectangle(cornerRadius: 24))
                     .onTapGesture { }
-
                     Spacer()
                 }
                 .padding(.horizontal, 24)
@@ -558,7 +531,6 @@ struct WaterTrackingView: View {
 
                 VStack {
                     Spacer()
-
                     VStack(spacing: 18) {
                         GradientTitle(text: "Set Goal", font: .title2.bold())
 
@@ -572,17 +544,21 @@ struct WaterTrackingView: View {
                             .padding(12)
                             .background(Color.white.opacity(0.08))
                             .clipShape(RoundedRectangle(cornerRadius: 14))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14)
-                                    .stroke(LColors.glassBorder, lineWidth: 1)
-                            )
+                            .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
 
                         LButton(title: "Save Goal", style: .secondary) {
                             let cleaned = goalText.trimmingCharacters(in: .whitespacesAndNewlines)
                             if let value = Double(cleaned), value > 0 {
-                                amountGoal = value
+                                settings.waterGoalFlOz = value
+                                settings.touchUpdated()
+                                try? modelContext.save()
                                 focusedField = nil
                                 showGoalPopup = false
+                                Task {
+                                    await recalculateReachedGoalDates()
+                                    HealthWidgetSync.syncWater(waterToday: water.todayWaterFlOz, waterGoal: value)
+                                    syncGoalToWatch(value)
+                                }
                             }
                         }
                     }
@@ -591,19 +567,14 @@ struct WaterTrackingView: View {
                     .background {
                         ZStack {
                             LGradients.blue
-                            GradientOverlayBackground()
-                                .clipShape(RoundedRectangle(cornerRadius: 24))
+                            GradientOverlayBackground().clipShape(RoundedRectangle(cornerRadius: 24))
                         }
                     }
                     .clipShape(RoundedRectangle(cornerRadius: 24))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 24)
-                            .stroke(Color.white.opacity(0.14), lineWidth: 1)
-                    )
+                    .overlay(RoundedRectangle(cornerRadius: 24).stroke(Color.white.opacity(0.14), lineWidth: 1))
                     .shadow(color: .black.opacity(0.25), radius: 16, y: 8)
                     .contentShape(RoundedRectangle(cornerRadius: 24))
                     .onTapGesture { }
-
                     Spacer()
                 }
                 .padding(.horizontal, 24)
@@ -617,11 +588,8 @@ struct WaterTrackingView: View {
             selectedDate = Date()
             selectedDayWater = water.todayWaterFlOz
             await recalculateReachedGoalDates()
-
-            HealthWidgetSync.syncWater(
-                waterToday: water.todayWaterFlOz,
-                waterGoal: amountGoal
-            )
+            HealthWidgetSync.syncWater(waterToday: water.todayWaterFlOz, waterGoal: amountGoal)
+            syncGoalToWatch(amountGoal)
         }
         .onChange(of: displayedMonth) { _, _ in
             if let selectedDate {
@@ -632,47 +600,25 @@ struct WaterTrackingView: View {
                     self.selectedDayWater = water.todayWaterFlOz
                 }
             }
-            Task {
-                await recalculateReachedGoalDates()
-            }
-        }
-        .onChange(of: amountGoal) { _, newValue in
-            Task {
-                await recalculateReachedGoalDates()
-            }
-
-            HealthWidgetSync.syncWater(
-                waterToday: water.todayWaterFlOz,
-                waterGoal: newValue
-            )
+            Task { await recalculateReachedGoalDates() }
         }
         .onChange(of: water.todayWaterFlOz) { _, newValue in
             if let selectedDate, calendar.isDateInToday(selectedDate) {
                 selectedDayWater = newValue
             }
-            Task {
-                await recalculateReachedGoalDates()
-            }
-
-            HealthWidgetSync.syncWater(
-                waterToday: newValue,
-                waterGoal: amountGoal
-            )
+            Task { await recalculateReachedGoalDates() }
+            HealthWidgetSync.syncWater(waterToday: newValue, waterGoal: amountGoal)
         }
         .onChange(of: showCustomAmountPopup) { _, isShowing in
             if isShowing {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                    focusedField = .customAmount
-                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { focusedField = .customAmount }
             } else if focusedField == .customAmount {
                 focusedField = nil
             }
         }
         .onChange(of: showGoalPopup) { _, isShowing in
             if isShowing {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                    focusedField = .goal
-                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { focusedField = .goal }
             } else if focusedField == .goal {
                 focusedField = nil
             }
@@ -680,14 +626,13 @@ struct WaterTrackingView: View {
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
-                Button("Done") {
-                    focusedField = nil
-                }
+                Button("Done") { focusedField = nil }
             }
         }
         .animation(.spring(response: 0.32, dampingFraction: 0.82), value: showCustomAmountPopup)
         .animation(.spring(response: 0.32, dampingFraction: 0.82), value: showGoalPopup)
     }
+
     private struct CalendarDayItem: Identifiable {
         let id = UUID()
         let dayNumber: Int?

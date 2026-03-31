@@ -13,6 +13,7 @@ import UniformTypeIdentifiers
 
 struct ChecklistsView: View {
     @Environment(\.modelContext) private var modelContext
+    @StateObject private var limits = LimitManager.shared
     @Environment(\.dismiss) private var dismiss
 
     // Using your existing container model.
@@ -188,8 +189,17 @@ struct ChecklistsView: View {
 
     private var checklistItemsSection: some View {
         VStack(spacing: 12) {
+            let allowedIds = Set(
+                checklists
+                    .flatMap { $0.items ?? [] }
+                    .filter { !$0.isCompleted }
+                    .sorted { $0.createdAt < $1.createdAt }
+                    .prefix(30)
+                    .map { $0.persistentModelID }
+            )
             ForEach(visibleItems, id: \.persistentModelID) { item in
                 draggableChecklistCard(for: item)
+                    .premiumLocked(!limits.hasPremiumAccess && !item.isCompleted && !allowedIds.contains(item.persistentModelID))
             }
 
             if canLoadMore {
@@ -365,6 +375,9 @@ struct ChecklistsView: View {
     }
 
     private func addNewChecklist() {
+        // Enforce checklist tab limit (2 total for free users)
+        let decision = limits.canCreate(.checklistTabsTotal, currentCount: checklists.count)
+        guard decision.allowed else { return }
         let nextSortOrder = (checklistTabs.map { $0.sortOrder }.max() ?? -1) + 1
         let checklistNumber = checklistTabs.count + 1
         let newChecklist = Checklist(name: "Checklist \(checklistNumber)", sortOrder: nextSortOrder)
@@ -447,6 +460,10 @@ struct ChecklistsView: View {
         guard let c = activeChecklist else {
             ensureDefaultChecklistIfNeeded()
             guard let checklist = activeChecklist else { return }
+            // Enforce checklist item limit (30 total across all tabs)
+            let totalItems = checklists.flatMap { $0.items ?? [] }.filter { !$0.isCompleted }.count
+            let decision = limits.canCreate(.checklistItemsTotalAcrossAllTabs, currentCount: totalItems)
+            guard decision.allowed else { return }
             let nextOrder = ((checklist.items ?? []).map { $0.sortOrder }.max() ?? -1) + 1
 
             let item = ChecklistItem(
@@ -461,6 +478,10 @@ struct ChecklistsView: View {
             tab = .active
             return
         }
+        // Enforce checklist item limit (30 total across all tabs)
+        let totalItems = checklists.flatMap { $0.items ?? [] }.filter { !$0.isCompleted }.count
+        let decision = limits.canCreate(.checklistItemsTotalAcrossAllTabs, currentCount: totalItems)
+        guard decision.allowed else { return }
         let nextOrder = ((c.items ?? []).map { $0.sortOrder }.max() ?? -1) + 1
 
         let item = ChecklistItem(

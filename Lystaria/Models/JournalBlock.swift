@@ -18,6 +18,7 @@ enum JournalBlockType: String, Codable, CaseIterable {
     case callout
     case divider
     case code
+    case image
 
     // Lists & Toggles
     case toggle
@@ -47,6 +48,9 @@ final class JournalBlock {
     var calloutEmoji: String = ""
     var languageHint: String = ""
 
+    // Image block data. languageHint stores alignment: "" = left, "center" = center.
+    var imageData: Data? = nil
+
     var entry: JournalEntry?
 
     var inlineStyles: [JournalInlineStyle]? = nil
@@ -60,7 +64,8 @@ final class JournalBlock {
         isExpanded: Bool = true,
         indentLevel: Int = 0,
         calloutEmoji: String = "",
-        languageHint: String = ""
+        languageHint: String = "",
+        imageData: Data? = nil
     ) {
         self.id = UUID()
         self.typeRaw = type.rawValue
@@ -74,6 +79,7 @@ final class JournalBlock {
         self.updatedAt = Date()
         self.calloutEmoji = calloutEmoji
         self.languageHint = languageHint
+        self.imageData = imageData
     }
 
     var type: JournalBlockType {
@@ -88,6 +94,40 @@ final class JournalBlock {
         default:
             return false
         }
+    }
+
+    // languageHint stores pipe-separated image options: "alignment|size|displayMode"
+    // e.g. "center|medium|fit", "|large|fill", "|small|fit"
+    // Defaults: left, medium, fit
+
+    private var imageParts: [String] {
+        let parts = languageHint.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        return [
+            parts.count > 0 ? parts[0] : "",
+            parts.count > 1 ? parts[1] : "",
+            parts.count > 2 ? parts[2] : ""
+        ]
+    }
+
+    private func setImagePart(_ index: Int, value: String) {
+        var parts = imageParts
+        parts[index] = value
+        languageHint = parts.joined(separator: "|")
+    }
+
+    var imageAlignment: ImageBlockAlignment {
+        get { ImageBlockAlignment(rawValue: imageParts[0]) ?? .left }
+        set { setImagePart(0, value: newValue.rawValue) }
+    }
+
+    var imageSize: ImageBlockSize {
+        get { ImageBlockSize(rawValue: imageParts[1]) ?? .medium }
+        set { setImagePart(1, value: newValue.rawValue) }
+    }
+
+    var imageDisplayMode: ImageBlockDisplayMode {
+        get { ImageBlockDisplayMode(rawValue: imageParts[2]) ?? .fit }
+        set { setImagePart(2, value: newValue.rawValue) }
     }
 
     var isToggleBlock: Bool {
@@ -105,5 +145,49 @@ final class JournalBlock {
 
     func touch() {
         updatedAt = Date()
+    }
+}
+
+// MARK: - Image Block Supporting Types
+
+enum ImageBlockAlignment: String {
+    case left = ""
+    case center = "center"
+}
+
+enum ImageBlockSize: String, CaseIterable {
+    case small  = "small"   // ~380pt tall
+    case medium = "medium"  // ~520pt tall
+    case large  = "large"   // ~680pt tall
+    case full   = "full"    // scaledToFit, unconstrained
+
+    var maxHeight: CGFloat? {
+        switch self {
+        case .small:  return 380
+        case .medium: return 520
+        case .large:  return 680
+        case .full:   return nil
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .small:  return "S"
+        case .medium: return "M"
+        case .large:  return "L"
+        case .full:   return "Full"
+        }
+    }
+}
+
+enum ImageBlockDisplayMode: String {
+    case fit  = "fit"   // shows whole image, letterboxed
+    case fill = "fill"  // crops to fill the frame
+
+    var label: String {
+        switch self {
+        case .fit:  return "Fit"
+        case .fill: return "Fill"
+        }
     }
 }

@@ -10,6 +10,7 @@ import SwiftData
 
 struct AddExercisePopupView: View {
     @Environment(\.modelContext) private var modelContext
+    @StateObject private var limits = LimitManager.shared
 
     var onClose: () -> Void
 
@@ -88,6 +89,14 @@ struct AddExercisePopupView: View {
         let trimmedName = exerciseName.trimmingCharacters(in: .whitespacesAndNewlines)
         let durationValue = Int(duration) ?? 0
         let repsValue = Int(reps) ?? 0
+
+        // Enforce daily exercise limit (3 per day)
+        let descriptor = FetchDescriptor<ExerciseLogEntry>()
+        let entries = (try? modelContext.fetch(descriptor)) ?? []
+        let todayCount = entries.filter { limits.isSameDay($0.createdAt, Date()) }.count
+
+        let decision = limits.canCreate(.exercisesPerDay, currentCount: todayCount)
+        guard decision.allowed else { return }
 
         let entry: ExerciseLogEntry
 

@@ -13,14 +13,19 @@ enum ReadingCheckInWriter {
     static func alreadyCheckedInToday(modelContext: ModelContext, userId: String) -> Bool {
         let currentUserId = userId
 
-        var descriptor = FetchDescriptor<ReadingStats>(
-            predicate: #Predicate<ReadingStats> { record in
-                record.userId == currentUserId
-            }
-        )
-        descriptor.fetchLimit = 1
+        let descriptor = FetchDescriptor<ReadingStats>()
+        let allRecords = (try? modelContext.fetch(descriptor)) ?? []
 
-        guard let record = try? modelContext.fetch(descriptor).first,
+        let record: ReadingStats?
+        if let exact = allRecords
+            .filter({ $0.userId == currentUserId })
+            .max(by: { $0.updatedAt < $1.updatedAt }) {
+            record = exact
+        } else {
+            record = allRecords.max(by: { $0.updatedAt < $1.updatedAt })
+        }
+
+        guard let record,
               let lastCheckIn = record.lastCheckInDate else {
             return false
         }
@@ -31,19 +36,14 @@ enum ReadingCheckInWriter {
     static func checkInToday(modelContext: ModelContext, userId: String) throws -> Bool {
         let currentUserId = userId
 
-        var descriptor = FetchDescriptor<ReadingStats>(
-            predicate: #Predicate<ReadingStats> { record in
-                record.userId == currentUserId
-            }
-        )
-        descriptor.fetchLimit = 50
-
-        let matches = try modelContext.fetch(descriptor)
+        let descriptor = FetchDescriptor<ReadingStats>()
+        let allRecords = try modelContext.fetch(descriptor)
+        let matches = allRecords.filter { $0.userId == currentUserId }
         let now = Date()
 
         let record: ReadingStats
-        if let best = matches.max(by: { $0.streakDays < $1.streakDays }) {
-            record = best
+        if let exact = matches.max(by: { $0.updatedAt < $1.updatedAt }) {
+            record = exact
 
             if let lastCheckIn = record.lastCheckInDate,
                Calendar.current.isDateInToday(lastCheckIn) {
@@ -51,10 +51,20 @@ enum ReadingCheckInWriter {
             }
 
             if matches.count > 1 {
-                for dupe in matches where dupe.persistentModelID != best.persistentModelID {
+                let mergedBestStreak = matches.map { max($0.bestStreakDays, $0.streakDays) }.max() ?? 0
+                let mergedCurrentStreak = matches.map { $0.streakDays }.max() ?? 0
+                record.bestStreakDays = max(record.bestStreakDays, mergedBestStreak)
+                record.streakDays = max(record.streakDays, mergedCurrentStreak)
+
+                for dupe in matches where dupe.persistentModelID != record.persistentModelID {
                     modelContext.delete(dupe)
                 }
             }
+        } else if let adopted = allRecords.max(by: { $0.updatedAt < $1.updatedAt }) {
+            adopted.userId = currentUserId
+            adopted.bestStreakDays = max(adopted.bestStreakDays, adopted.streakDays)
+            adopted.updatedAt = now
+            record = adopted
         } else {
             let newRecord = ReadingStats(userId: currentUserId, streakDays: 0, bestStreakDays: 0)
             modelContext.insert(newRecord)
@@ -72,6 +82,8 @@ enum ReadingCheckInWriter {
 
         record.streakDays = newStreakDays
         record.bestStreakDays = max(record.bestStreakDays, newStreakDays)
+        let allBest = allRecords.map { max($0.bestStreakDays, $0.streakDays) }.max() ?? 0
+        record.bestStreakDays = max(record.bestStreakDays, allBest)
         record.lastCheckInDate = now
         record.updatedAt = now
 

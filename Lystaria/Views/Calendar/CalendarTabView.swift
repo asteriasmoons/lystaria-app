@@ -34,6 +34,7 @@ struct CalendarTabView: View {
     @State private var showDeleteRecurringDialog = false
     // Onboarding for hidden header icons
     @StateObject private var onboarding = OnboardingManager()
+    @StateObject private var limits = LimitManager.shared
 
     // FIX 1: Pre-compute event instances once per render into a State dict,
     // instead of calling eventsFor() inside @ViewBuilder (which touches
@@ -64,6 +65,17 @@ struct CalendarTabView: View {
         return range.compactMap { day in
             cal.date(from: DateComponents(year: comps.year, month: comps.month, day: day))
         }
+    }
+
+    /// Global display-order index for every event instance rendered this month.
+    /// The first 20 instances (in day + time order) are free; the rest are locked.
+    private var allowedEventIds: Set<String> {
+        guard !limits.hasPremiumAccess else { return Set() }
+        let instances = daysInMonth.flatMap { date -> [EventInstance] in
+            let key = isoDayString(tzCalendar.startOfDay(for: date))
+            return (eventsByDay[key] ?? []).sorted { $0.occurrenceStart < $1.occurrenceStart }
+        }
+        return Set(instances.prefix(20).map { $0.id })
     }
 
     enum CalendarFilterOption: Equatable {
@@ -569,8 +581,9 @@ struct CalendarTabView: View {
                         }
                         .padding(.vertical, 12)
                     } else {
-                        ForEach(events) { instance in
+                        ForEach(Array(events.enumerated()), id: \.element.id) { index, instance in
                             eventCard(instance)
+                                .premiumLocked(!limits.hasPremiumAccess && !allowedEventIds.contains(instance.id))
                         }
 
                         Button {
@@ -875,6 +888,11 @@ struct CalendarTabView: View {
         currentMonth = tzCalendar.date(byAdding: .month, value: 1, to: currentMonth) ?? currentMonth
     }
     private func saveNewCalendar() {
+        // Enforce calendar limit (3 total for free users)
+        let descriptor = FetchDescriptor<EventCalendar>()
+        let existingCalendars = (try? modelContext.fetch(descriptor)) ?? []
+        let decision = limits.canCreate(.calendarsTotal, currentCount: existingCalendars.count)
+        guard decision.allowed else { return }
         let trimmed = newCalendarName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
@@ -917,6 +935,7 @@ struct CalendarTabView: View {
 
 struct EventSheet: View {
     @Environment(\.modelContext) private var modelContext
+    @StateObject private var limits = LimitManager.shared
     var onClose: (() -> Void)? = nil
 
     let selectedDate: Date
@@ -1820,6 +1839,7 @@ struct EventSheet: View {
 
         return (parts + [until]).joined(separator: ";")
     }
+    
 
     private func save(editScope: RecurringEditScope) {
         let cleanTitle      = titleTrimmed
@@ -1961,6 +1981,12 @@ struct EventSheet: View {
         let existingReminderId: String? = editingEvent?.reminderServerId
 
         let targetEvent: CalendarEvent
+        if editingEvent == nil {
+            let descriptor = FetchDescriptor<CalendarEvent>()
+            let existingEvents = (try? modelContext.fetch(descriptor)) ?? []
+            let decision = limits.canCreate(.calendarEventsTotal, currentCount: existingEvents.count)
+            guard decision.allowed else { return }
+        }
         if let e = editingEvent {
             switch editScope {
             case .allEvents:
@@ -3189,4 +3215,3 @@ struct ExceptionPills: View {
         }
     }
 }
-

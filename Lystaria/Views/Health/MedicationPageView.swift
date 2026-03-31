@@ -10,6 +10,7 @@ import SwiftData
 
 struct MedicationPageView: View {
     @Environment(\.modelContext) private var modelContext
+    @StateObject private var limits = LimitManager.shared
 
     @Query(sort: \Medication.updatedAt, order: .reverse)
     private var medications: [Medication]
@@ -34,6 +35,10 @@ struct MedicationPageView: View {
     @State private var showDeleteMedicationConfirm = false
     @State private var showMedicationDetailsPopup = false
     @State private var showMedicationHistoryPopup = false
+    @State private var selectedHistoryEntry: MedicationHistoryEntry? = nil
+    @State private var showDeleteHistoryConfirm = false
+    @State private var showInventoryAdjustPopup = false
+    @State private var inventoryStepAmount = 1
 
     var body: some View {
         ZStack {
@@ -48,8 +53,9 @@ struct MedicationPageView: View {
                     if medications.isEmpty {
                         emptyState
                     } else {
-                        ForEach(medications) { med in
+                        ForEach(Array(medications.enumerated()), id: \.element.id) { index, med in
                             medicationCard(med)
+                                .premiumLocked(index >= 4 && !limits.hasPremiumAccess)
                         }
                     }
 
@@ -117,7 +123,22 @@ struct MedicationPageView: View {
                     .zIndex(13)
             }
 
+            if showInventoryAdjustPopup {
+                Color.black.opacity(0.45)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                            showInventoryAdjustPopup = false
+                        }
+                    }
+
+                inventoryAdjustPopup
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    .zIndex(14)
+            }
+
             deleteMedicationConfirm
+            deleteHistoryConfirm
         }
     }
 
@@ -128,6 +149,28 @@ struct MedicationPageView: View {
             HStack {
                 GradientTitle(text: "Medications", font: .title2.bold())
                 Spacer()
+
+                NavigationLink {
+                    SymptomLoggerView()
+                        .preferredColorScheme(.dark)
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.08))
+                            .overlay(
+                                Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                            .frame(width: 34, height: 34)
+
+                        Image("medicon")
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 16, height: 16)
+                            .foregroundStyle(.white)
+                    }
+                }
+                .buttonStyle(.plain)
 
                 Button {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
@@ -332,29 +375,33 @@ struct MedicationPageView: View {
                         selectedMedication = med
                         showDeleteMedicationConfirm = true
                     } label: {
-                        HStack(spacing: 8) {
+                        ZStack {
+                            Circle()
+                                .fill(LGradients.blue)
+                                .overlay(
+                                    Circle()
+                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                )
+                                .frame(width: 34, height: 34)
+
                             Image("trashfill")
                                 .renderingMode(.template)
                                 .resizable()
                                 .scaledToFit()
                                 .frame(width: 16, height: 16)
                                 .foregroundStyle(.white)
-
-                            Text("Delete")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(.white)
                         }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .background(LGradients.blue)
-                        .clipShape(Capsule())
-                        .overlay(
-                            Capsule()
-                                .stroke(LColors.glassBorder, lineWidth: 1)
-                        )
                     }
                     .buttonStyle(.plain)
                 }
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            selectedMedication = med
+            inventoryStepAmount = 1
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                showInventoryAdjustPopup = true
             }
         }
     }
@@ -499,6 +546,8 @@ struct MedicationPageView: View {
         let supplyAmount = Int(newMedicationSupplyAmount) ?? 0
 
         guard !trimmedName.isEmpty else { return }
+        let decision = limits.canCreate(.medicationCardsTotal, currentCount: medications.count)
+        guard decision.allowed else { return }
 
         let medication = Medication(
             name: trimmedName,
@@ -652,8 +701,46 @@ struct MedicationPageView: View {
             showEditMedicationPopup = false
             showMedicationDetailsPopup = false
             showMedicationHistoryPopup = false
+            showInventoryAdjustPopup = false
             showDeleteMedicationConfirm = false
+            showDeleteHistoryConfirm = false
         }
+        selectedHistoryEntry = nil
+    }
+
+    private func adjustSelectedMedicationInventory(by amount: Int) {
+        guard let medication = selectedMedication else { return }
+
+        let previousAmount = medication.currentAmount
+        let newAmount = max(0, medication.currentAmount + amount)
+        medication.currentAmount = newAmount
+        medication.updatedAt = Date()
+
+        let historyEntry = MedicationHistoryEntry(
+            type: .edited,
+            amountText: "\(previousAmount) → \(newAmount)",
+            details: amount >= 0 ? "Manual inventory increase" : "Manual inventory decrease",
+            createdAt: Date(),
+            medication: medication
+        )
+        modelContext.insert(historyEntry)
+    }
+
+    private func fillSelectedMedicationToSupply() {
+        guard let medication = selectedMedication else { return }
+
+        let previousAmount = medication.currentAmount
+        medication.currentAmount = max(0, medication.supplyAmount)
+        medication.updatedAt = Date()
+
+        let historyEntry = MedicationHistoryEntry(
+            type: .refilled,
+            amountText: "\(previousAmount) → \(medication.currentAmount)",
+            details: "Set inventory to full supply",
+            createdAt: Date(),
+            medication: medication
+        )
+        modelContext.insert(historyEntry)
     }
 
     private var medicationDetailsPopup: some View {
@@ -835,7 +922,18 @@ struct MedicationPageView: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(LColors.glassBorder, lineWidth: 1)
         )
+        .onLongPressGesture {
+            selectedHistoryEntry = entry
+            showDeleteHistoryConfirm = true
+        }
     }
+    private func deleteSelectedHistoryEntry() {
+        guard let entry = selectedHistoryEntry else { return }
+        modelContext.delete(entry)
+        selectedHistoryEntry = nil
+        showDeleteHistoryConfirm = false
+    }
+
 
     private var linkedReminderCount: Int {
         reminders.filter {
@@ -855,5 +953,155 @@ struct MedicationPageView: View {
                     deleteSelectedMedication()
                 }
             )
+    }
+
+    private var deleteHistoryConfirm: some View {
+        Color.clear
+            .lystariaAlertConfirm(
+                isPresented: $showDeleteHistoryConfirm,
+                title: "Delete History Record",
+                message: "Are you sure you want to delete this medication history record?",
+                confirmTitle: "Delete",
+                confirmRole: .destructive,
+                onConfirm: {
+                    deleteSelectedHistoryEntry()
+                }
+            )
+    }
+
+    private var inventoryAdjustPopup: some View {
+        LystariaOverlayPopup(
+            onClose: {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                    showInventoryAdjustPopup = false
+                }
+            },
+            width: 560,
+            heightRatio: 0.72,
+            header: {
+                GradientTitle(text: "Adjust Inventory", size: 28)
+            },
+            content: {
+                VStack(alignment: .leading, spacing: 16) {
+                    if let medication = selectedMedication {
+                        detailRow(icon: "heartsum", title: "Medication", value: medication.name)
+                        detailRow(icon: "hashtag", title: "Current Inventory", value: "\(medication.currentAmount)")
+                        detailRow(icon: "handpill", title: "Supply Amount", value: "\(medication.supplyAmount)")
+
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("STEP AMOUNT")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(LColors.textSecondary)
+
+                            HStack(spacing: 12) {
+                                Button {
+                                    if inventoryStepAmount > 1 {
+                                        inventoryStepAmount -= 1
+                                    }
+                                } label: {
+                                    Image(systemName: "minus")
+                                        .font(.system(size: 12, weight: .bold))
+                                        .foregroundStyle(inventoryStepAmount <= 1 ? LColors.textSecondary.opacity(0.5) : .white)
+                                        .frame(width: 32, height: 32)
+                                        .background(inventoryStepAmount <= 1 ? Color.white.opacity(0.05) : LColors.accent.opacity(0.85))
+                                        .clipShape(Circle())
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(inventoryStepAmount <= 1)
+
+                                Text("\(inventoryStepAmount)")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(LColors.textPrimary)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 8)
+                                    .background(Color.white.opacity(0.08))
+                                    .clipShape(Capsule())
+                                    .overlay(
+                                        Capsule()
+                                            .stroke(LColors.glassBorder, lineWidth: 1)
+                                    )
+
+                                Button {
+                                    if inventoryStepAmount < 100 {
+                                        inventoryStepAmount += 1
+                                    }
+                                } label: {
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 12, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .frame(width: 32, height: 32)
+                                        .background(LColors.accent.opacity(0.85))
+                                        .clipShape(Circle())
+                                }
+                                .buttonStyle(.plain)
+
+                                Spacer()
+                            }
+                        }
+                        .padding(14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .fill(Color.white.opacity(0.08))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .stroke(LColors.glassBorder, lineWidth: 1)
+                        )
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 8)
+            },
+            footer: {
+                HStack(spacing: 12) {
+                    Button {
+                        adjustSelectedMedicationInventory(by: -inventoryStepAmount)
+                    } label: {
+                        Text("-\(inventoryStepAmount)")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 14)
+                            .frame(height: 36)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(Capsule())
+                            .overlay(
+                                Capsule()
+                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        adjustSelectedMedicationInventory(by: inventoryStepAmount)
+                    } label: {
+                        Text("+\(inventoryStepAmount)")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 14)
+                            .frame(height: 36)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(Capsule())
+                            .overlay(
+                                Capsule()
+                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+
+                    LButton(title: "Set Full", style: .secondary) {
+                        fillSelectedMedicationToSupply()
+                    }
+
+                    LButton(title: "Close", style: .gradient) {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                            showInventoryAdjustPopup = false
+                        }
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 16)
+            }
+        )
     }
 }

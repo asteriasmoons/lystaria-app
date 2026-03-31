@@ -2,16 +2,31 @@
 //  StepCountView.swift
 //  Lystaria
 //
-//  Created by Asteria Moon on 3/9/26.
-//
 
 import SwiftUI
+import SwiftData
 import Foundation
 
 struct StepCountView: View {
+    @Environment(\.modelContext) private var modelContext
     @StateObject private var health = HealthKitManager.shared
+    @StateObject private var limits = LimitManager.shared
 
-    @AppStorage("stepGoal") private var stepGoal: Double = 5000
+    @Query(
+        filter: #Predicate<DailyCompletionSettings> { $0.key == "default" }
+    ) private var settingsResults: [DailyCompletionSettings]
+
+    private var settings: DailyCompletionSettings {
+        if let existing = settingsResults.first { return existing }
+        let s = DailyCompletionSettings(key: DailyCompletionSettings.defaultKey)
+        modelContext.insert(s)
+        return s
+    }
+
+    private var stepGoal: Double {
+        settings.stepGoal
+    }
+
     @State private var showGoalPopup = false
     @State private var goalText = ""
     @State private var displayedMonth = Date()
@@ -31,8 +46,12 @@ struct StepCountView: View {
     private var weekdaySymbols: [String] {
         ["S", "M", "T", "W", "T", "F", "S"]
     }
-    
-    private var effectiveSelectedDate: Date {
+
+    private var isGoalCalendarLocked: Bool {
+        !limits.canAccess(.stepsGoalCalendar)
+    }
+
+    private var selectedGoalCalendarDate: Date {
         selectedDate ?? Date()
     }
 
@@ -46,30 +65,31 @@ struct StepCountView: View {
 
     private var cardTitleText: String {
         if let selectedDate {
-            if calendar.isDateInToday(selectedDate) {
-                return "Today’s Steps"
-            }
-
+            if calendar.isDateInToday(selectedDate) { return "Today's Steps" }
             let formatter = DateFormatter()
             formatter.dateFormat = "LLLL d"
             return "Steps for \(formatter.string(from: selectedDate))"
         }
-
-        return "Today’s Steps"
+        return "Today's Steps"
     }
 
     private var cardSubtitleText: String {
         if let selectedDate {
-            if calendar.isDateInToday(selectedDate) {
-                return "Your movement progress for today"
-            }
-
+            if calendar.isDateInToday(selectedDate) { return "Your movement progress for today" }
             let formatter = DateFormatter()
             formatter.dateFormat = "EEEE, LLLL d"
             return formatter.string(from: selectedDate)
         }
-
         return "Your movement progress for today"
+    }
+
+    @ViewBuilder
+    private func premiumBlockedCalendar<Content: View>(
+        _ locked: Bool,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        content()
+            .premiumLocked(locked)
     }
 
     private var daysInDisplayedMonth: [CalendarDayItem] {
@@ -178,7 +198,7 @@ struct StepCountView: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 14))
                             }
                             .buttonStyle(.plain)
-                            
+
                             Button {
                                 selectedDate = Date()
                                 selectedDaySteps = health.todaySteps
@@ -213,113 +233,115 @@ struct StepCountView: View {
                         }
                     }
 
-                    GlassCard {
-                        VStack(alignment: .leading, spacing: 18) {
-                            HStack {
-                                Text("Goal Calendar")
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .foregroundStyle(LColors.textPrimary)
+                    premiumBlockedCalendar(isGoalCalendarLocked) {
+                        GlassCard {
+                            VStack(alignment: .leading, spacing: 18) {
+                                HStack {
+                                    Text("Goal Calendar")
+                                        .font(.system(size: 18, weight: .semibold))
+                                        .foregroundStyle(LColors.textPrimary)
 
-                                Spacer()
+                                    Spacer()
 
-                                HStack(spacing: 8) {
-                                    Button {
-                                        changeMonth(by: -1)
-                                    } label: {
-                                        ZStack {
-                                            Circle()
-                                                .fill(Color.white.opacity(0.08))
-                                                .overlay(
-                                                    Circle().stroke(LColors.glassBorder, lineWidth: 1)
-                                                )
-                                                .frame(width: 34, height: 34)
-
-                                            Image("chevleft")
-                                                .renderingMode(.template)
-                                                .resizable()
-                                                .scaledToFit()
-                                                .frame(width: 14, height: 14)
-                                                .foregroundColor(.white)
-                                        }
-                                    }
-                                    .buttonStyle(.plain)
-
-                                    Button {
-                                        changeMonth(by: 1)
-                                    } label: {
-                                        ZStack {
-                                            Circle()
-                                                .fill(Color.white.opacity(0.08))
-                                                .overlay(
-                                                    Circle().stroke(LColors.glassBorder, lineWidth: 1)
-                                                )
-                                                .frame(width: 34, height: 34)
-
-                                            Image("chevright")
-                                                .renderingMode(.template)
-                                                .resizable()
-                                                .scaledToFit()
-                                                .frame(width: 14, height: 14)
-                                                .foregroundColor(.white)
-                                        }
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-
-                            Text(monthTitle)
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(LColors.textSecondary)
-
-                            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 7), spacing: 12) {
-                                ForEach(weekdaySymbols, id: \.self) { symbol in
-                                    Text(symbol)
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(LColors.textSecondary)
-                                        .frame(maxWidth: .infinity)
-                                }
-
-                                ForEach(daysInDisplayedMonth) { item in
-                                    if let day = item.dayNumber, let itemDate = item.date {
-                                        let isSelected = calendar.isDate(itemDate, inSameDayAs: effectiveSelectedDate)
-
-                                        ZStack {
-                                            Circle()
-                                                .fill(Color.white.opacity(0.08))
-                                                .frame(width: 36, height: 36)
-                                                .overlay {
-                                                    if item.isGoalMet {
-                                                        ZStack {
-                                                            LGradients.blue
-                                                            GradientOverlayBackground()
-                                                                .clipShape(Circle())
-                                                        }
-                                                        .clipShape(Circle())
-                                                    }
-                                                }
-                                                .overlay(
-                                                    Circle().stroke(
-                                                        isSelected ? Color.white : (item.isToday ? Color.white.opacity(0.55) : LColors.glassBorder),
-                                                        lineWidth: isSelected ? 2 : 1
+                                    HStack(spacing: 8) {
+                                        Button {
+                                            changeMonth(by: -1)
+                                        } label: {
+                                            ZStack {
+                                                Circle()
+                                                    .fill(Color.white.opacity(0.08))
+                                                    .overlay(
+                                                        Circle().stroke(LColors.glassBorder, lineWidth: 1)
                                                     )
-                                                )
+                                                    .frame(width: 34, height: 34)
 
-                                            Text("\(day)")
-                                                .font(.system(size: 13, weight: .semibold))
-                                                .foregroundStyle(.white)
-                                        }
-                                        .frame(maxWidth: .infinity)
-                                        .contentShape(Rectangle())
-                                        .onTapGesture {
-                                            selectedDate = itemDate
-                                            Task {
-                                                selectedDaySteps = await totalSteps(for: itemDate)
+                                                Image("chevleft")
+                                                    .renderingMode(.template)
+                                                    .resizable()
+                                                    .scaledToFit()
+                                                    .frame(width: 14, height: 14)
+                                                    .foregroundColor(.white)
                                             }
                                         }
-                                    } else {
-                                        Color.clear
-                                            .frame(width: 36, height: 36)
+                                        .buttonStyle(.plain)
+
+                                        Button {
+                                            changeMonth(by: 1)
+                                        } label: {
+                                            ZStack {
+                                                Circle()
+                                                    .fill(Color.white.opacity(0.08))
+                                                    .overlay(
+                                                        Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                                                    )
+                                                    .frame(width: 34, height: 34)
+
+                                                Image("chevright")
+                                                    .renderingMode(.template)
+                                                    .resizable()
+                                                    .scaledToFit()
+                                                    .frame(width: 14, height: 14)
+                                                    .foregroundColor(.white)
+                                            }
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+
+                                Text(monthTitle)
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundStyle(LColors.textSecondary)
+
+                                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 7), spacing: 12) {
+                                    ForEach(weekdaySymbols, id: \.self) { symbol in
+                                        Text(symbol)
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundStyle(LColors.textSecondary)
                                             .frame(maxWidth: .infinity)
+                                    }
+
+                                    ForEach(daysInDisplayedMonth) { item in
+                                        if let day = item.dayNumber, let itemDate = item.date {
+                                            let isSelected = calendar.isDate(itemDate, inSameDayAs: selectedGoalCalendarDate)
+
+                                            ZStack {
+                                                Circle()
+                                                    .fill(Color.white.opacity(0.08))
+                                                    .frame(width: 36, height: 36)
+                                                    .overlay {
+                                                        if item.isGoalMet {
+                                                            ZStack {
+                                                                LGradients.blue
+                                                                GradientOverlayBackground()
+                                                                    .clipShape(Circle())
+                                                            }
+                                                            .clipShape(Circle())
+                                                        }
+                                                    }
+                                                    .overlay(
+                                                        Circle().stroke(
+                                                            isSelected ? Color.white : (item.isToday ? Color.white.opacity(0.55) : LColors.glassBorder),
+                                                            lineWidth: isSelected ? 2 : 1
+                                                        )
+                                                    )
+
+                                                Text("\(day)")
+                                                    .font(.system(size: 13, weight: .semibold))
+                                                    .foregroundStyle(.white)
+                                            }
+                                            .frame(maxWidth: .infinity)
+                                            .contentShape(Rectangle())
+                                            .onTapGesture {
+                                                selectedDate = itemDate
+                                                Task {
+                                                    selectedDaySteps = await totalSteps(for: itemDate)
+                                                }
+                                            }
+                                        } else {
+                                            Color.clear
+                                                .frame(width: 36, height: 36)
+                                                .frame(maxWidth: .infinity)
+                                        }
                                     }
                                 }
                             }
@@ -369,13 +391,19 @@ struct StepCountView: View {
                         Button {
                             let cleaned = goalText.trimmingCharacters(in: .whitespacesAndNewlines)
                             if let value = Double(cleaned), value > 0 {
-                                stepGoal = value
+                                settings.stepGoal = value
+                                settings.touchUpdated()
+                                try? modelContext.save()
                                 isGoalFieldFocused = false
                                 withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                                     showGoalPopup = false
                                 }
                                 Task {
                                     await recalculateReachedGoalDates()
+                                    HealthWidgetSync.syncSteps(
+                                        stepsToday: health.todaySteps,
+                                        stepGoal: value
+                                    )
                                 }
                             }
                         } label: {
@@ -415,7 +443,6 @@ struct StepCountView: View {
                         ZStack {
                             LGradients.blue
                                 .clipShape(RoundedRectangle(cornerRadius: 24))
-
                             GradientOverlayBackground()
                                 .clipShape(RoundedRectangle(cornerRadius: 24))
                                 .overlay(
@@ -438,7 +465,6 @@ struct StepCountView: View {
             selectedDate = Date()
             selectedDaySteps = health.todaySteps
             await recalculateReachedGoalDates()
-
             HealthWidgetSync.syncSteps(
                 stepsToday: health.todaySteps,
                 stepGoal: stepGoal
@@ -453,44 +479,22 @@ struct StepCountView: View {
                     self.selectedDaySteps = health.todaySteps
                 }
             }
-            Task {
-                await recalculateReachedGoalDates()
-            }
-        }
-        .onChange(of: stepGoal) { _, newValue in
-            Task {
-                await recalculateReachedGoalDates()
-            }
-
-            HealthWidgetSync.syncSteps(
-                stepsToday: health.todaySteps,
-                stepGoal: newValue
-            )
+            Task { await recalculateReachedGoalDates() }
         }
         .onChange(of: health.todaySteps) { _, newValue in
             if let selectedDate, calendar.isDateInToday(selectedDate) {
                 selectedDaySteps = newValue
             }
-            Task {
-                await recalculateReachedGoalDates()
-            }
-
-            HealthWidgetSync.syncSteps(
-                stepsToday: newValue,
-                stepGoal: stepGoal
-            )
+            Task { await recalculateReachedGoalDates() }
+            HealthWidgetSync.syncSteps(stepsToday: newValue, stepGoal: stepGoal)
         }
         .onChange(of: showGoalPopup) { _, isShowing in
-            if !isShowing {
-                isGoalFieldFocused = false
-            }
+            if !isShowing { isGoalFieldFocused = false }
         }
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
-                Button("Done") {
-                    isGoalFieldFocused = false
-                }
+                Button("Done") { isGoalFieldFocused = false }
             }
         }
         .animation(.spring(response: 0.32, dampingFraction: 0.82), value: showGoalPopup)
@@ -512,7 +516,7 @@ struct StepCountView: View {
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: date)
     }
-    
+
     private func totalSteps(for date: Date) async -> Double {
         let startOfDay = calendar.startOfDay(for: date)
         guard let nextDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { return 0 }
@@ -530,12 +534,8 @@ struct StepCountView: View {
         while cursor < monthInterval.end && cursor <= today {
             let startOfDay = calendar.startOfDay(for: cursor)
             guard let nextDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { break }
-
             let total = await health.totalSteps(from: startOfDay, to: nextDay)
-            if total >= stepGoal {
-                result.insert(dateKey(for: startOfDay))
-            }
-
+            if total >= stepGoal { result.insert(dateKey(for: startOfDay)) }
             cursor = nextDay
         }
 

@@ -179,6 +179,42 @@ struct JournalBlockDisplayView: View {
             )
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .padding(.leading, CGFloat(block.indentLevel) * 20)
+
+        case .image:
+            if let data = block.imageData, let uiImage = UIImage(data: data) {
+                displayImageView(uiImage: uiImage, block: block)
+                    .frame(maxWidth: .infinity, alignment: block.imageAlignment == .center ? .center : .leading)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func displayImageView(uiImage: UIImage, block: JournalBlock) -> some View {
+        let size = block.imageSize
+        let mode = block.imageDisplayMode
+
+        if let maxH = size.maxHeight {
+            if mode == .fill {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity)
+                    .frame(height: maxH)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity)
+                    .frame(maxHeight: maxH)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+        } else {
+            Image(uiImage: uiImage)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
         }
     }
 

@@ -41,9 +41,10 @@ struct ExerciseLogCard: View {
 
                     VStack(alignment: .leading, spacing: 12) {
                         if latestDayEntries.isEmpty {
-                            metricRow("Exercise", value: "—")
-                            metricRow("Reps", value: "—")
-                            metricRow("Duration", value: "—")
+                            Text("Log your exercises to see them here every day. Refreshes automatically at midnight. Tap card to view your history.")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(LColors.textSecondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         } else {
                             ForEach(Array(latestDayEntries.enumerated()), id: \.element.id) { index, entry in
                                 exerciseSection(entry: entry, index: index)
@@ -61,12 +62,11 @@ struct ExerciseLogCard: View {
     // MARK: - Latest Day Entries
 
     private var latestDayEntries: [ExerciseLogEntry] {
-        guard let latestDate = entries.map(\.date).max() else { return [] }
         let calendar = Calendar.current
-        let latestDay = calendar.startOfDay(for: latestDate)
+        let today = calendar.startOfDay(for: Date())
 
         return entries
-            .filter { calendar.isDate($0.date, inSameDayAs: latestDay) }
+            .filter { calendar.isDate($0.date, inSameDayAs: today) }
             .sorted { $0.date < $1.date }
     }
 

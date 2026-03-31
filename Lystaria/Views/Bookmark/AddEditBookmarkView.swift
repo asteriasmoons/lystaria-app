@@ -13,6 +13,7 @@ import UIKit
 
 struct AddEditBookmarkView: View {
     @Environment(\.modelContext) private var modelContext
+    @StateObject private var limits = LimitManager.shared
 
     let bookmark: BookmarkItem?   // nil = create mode
     let folders: [BookmarkFolder]
@@ -247,6 +248,13 @@ private extension AddEditBookmarkView {
                 }
             }
         } else {
+            let descriptor = FetchDescriptor<BookmarkItem>()
+            let bookmarks = (try? modelContext.fetch(descriptor)) ?? []
+            let decision = limits.canCreate(.bookmarksTotal, currentCount: bookmarks.count)
+            guard decision.allowed else {
+                return
+            }
+
             let new = BookmarkItem(
                 title: cleanedTitle,
                 bookmarkDescription: cleanedDescription,

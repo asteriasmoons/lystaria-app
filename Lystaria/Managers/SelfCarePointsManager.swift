@@ -143,28 +143,6 @@ enum SelfCarePointsManager {
         let currentWeekKey = weekStartDayKey(from: now, calendar: calendar)
 
         if profile.currentWeekStartDayKey.isEmpty {
-            let hasLegacyWeeklyState = profile.currentPoints > 0 || profile.level > 0
-
-            if hasLegacyWeeklyState {
-                insertResetLog(
-                    in: modelContext,
-                    userId: userId,
-                    weekStartDayKey: "legacy-pre-weekly-reset",
-                    resetAt: now,
-                    pointsBeforeReset: profile.currentPoints,
-                    levelBeforeReset: profile.level
-                )
-
-                profile.currentPoints = 0
-                profile.level = 0
-                profile.lastWeeklyResetAt = now
-                profile.currentWeekStartDayKey = currentWeekKey
-                profile.updatedAt = now
-
-                try modelContext.save()
-                return true
-            }
-
             profile.currentWeekStartDayKey = currentWeekKey
             profile.updatedAt = now
             try modelContext.save()

@@ -19,6 +19,7 @@ struct DailyLenormandTip: Identifiable, Hashable, Codable {
 
 struct DashboardView: View {
     @Environment(\.modelContext) private var modelContext
+    @StateObject private var limits = LimitManager.shared
 
     // MARK: - Data Queries
 
@@ -80,6 +81,7 @@ struct DashboardView: View {
     @EnvironmentObject private var appState: AppState
 
     @State private var showToolbox = false
+    @State private var showMoonPhaseDetails = false
     @State private var momentumRefreshID = UUID()
     @State private var moonPhaseData = MoonPhaseCalculator.calculate(for: Date())
     @State private var dashboardDayRefreshID = UUID()
@@ -146,6 +148,22 @@ struct DashboardView: View {
 
     private var currentUserId: String? {
         appState.currentAppleUserId
+    }
+
+    private var isSelfCareDashboardLocked: Bool {
+        !limits.canAccess(.dashboardSelfCareCard)
+    }
+
+    private var isDailyBalanceLocked: Bool {
+        !limits.canAccess(.dashboardDailyBalanceCard)
+    }
+
+    private var isDailyTarotLocked: Bool {
+        !limits.canAccess(.dashboardDailyTarotCard)
+    }
+
+    private var isWellnessWallLocked: Bool {
+        !limits.canAccess(.dashboardWellnessWallCard)
     }
 
 
@@ -946,7 +964,14 @@ struct DashboardView: View {
     }
 
     private var moonPhaseSection: some View {
-        DashboardMoonPhaseCard(data: moonPhaseData)
+        Button {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                showMoonPhaseDetails = true
+            }
+        } label: {
+            DashboardMoonPhaseCard(data: moonPhaseData)
+        }
+        .buttonStyle(.plain)
     }
 
 
@@ -960,12 +985,14 @@ struct DashboardView: View {
     }
 
     private var selfCareSection: some View {
-        DashboardSelfCareCard(
-            points: selfCareCurrentPoints,
-            level: selfCareLevel,
-            progress: selfCareLevelProgress
-        )
-        .id(dashboardSupportRefreshID)
+        premiumBlockedCard(isSelfCareDashboardLocked) {
+            DashboardSelfCareCard(
+                points: selfCareCurrentPoints,
+                level: selfCareLevel,
+                progress: selfCareLevelProgress
+            )
+            .id(dashboardSupportRefreshID)
+        }
     }
 
     private var activeStreaksSection: some View {
@@ -974,14 +1001,18 @@ struct DashboardView: View {
     }
 
     private var dailyBalanceSection: some View {
-        DailyBalanceCard(items: dailyBalanceItems)
+        premiumBlockedCard(isDailyBalanceLocked) {
+            DailyBalanceCard(items: dailyBalanceItems)
+        }
     }
 
     private var tarotSection: some View {
-        DashboardTarotCard(
-            tip: currentDailyTarotTip,
-            onDraw: drawDailyTarotTip
-        )
+        premiumBlockedCard(isDailyTarotLocked) {
+            DashboardTarotCard(
+                tip: currentDailyTarotTip,
+                onDraw: drawDailyTarotTip
+            )
+        }
     }
 
     private var lenormandSection: some View {
@@ -1006,12 +1037,55 @@ struct DashboardView: View {
     }
 
     private var wellnessSection: some View {
-        WellnessWallCard(items: wellnessInsights)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        premiumBlockedCard(isWellnessWallLocked) {
+            WellnessWallCard(items: wellnessInsights)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private func premiumBlockedCard<Content: View>(
+        _ locked: Bool,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        ZStack(alignment: .topTrailing) {
+            content()
+                .blur(radius: locked ? 12 : 0)
+                .allowsHitTesting(!locked)
+
+            if locked {
+                // subtle dark overlay
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(Color.black.opacity(0.25))
+
+                // clean premium banner (top right)
+                HStack(spacing: 6) {
+                    Image("lockfill")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 12, height: 12)
+                        .foregroundStyle(.white)
+
+                    Text("Premium only")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.black.opacity(0.6))
+                .clipShape(Capsule())
+                .overlay(
+                    Capsule()
+                        .stroke(LColors.glassBorder, lineWidth: 1)
+                )
+                .padding(10)
+            }
+        }
     }
 
     private var habitCompletionProgressToday: Double {
-        let activeHabits = habits.filter { !$0.isArchived }
+        let activeHabits = habits
 
         guard !activeHabits.isEmpty else {
             return habitCompletedToday ? 1.0 : 0.0
@@ -1069,6 +1143,12 @@ struct DashboardView: View {
                     if anchors.count > 0 {
                         onboarding.start(page: OnboardingPages.dashboard)
                     }
+                }
+            }
+            .overlay {
+                if showMoonPhaseDetails, let detail = currentMoonPhaseDetail {
+                    moonPhaseDetailsPopup(detail)
+                        .zIndex(100)
                 }
             }
     }
@@ -1201,6 +1281,155 @@ struct DashboardView: View {
             errorText: horoscopeError,
             onFetch: fetchDailyHoroscope,
             onClearPreview: clearPreviewHoroscope
+        )
+    }
+
+
+    private var currentMoonPhaseDetail: MoonPhaseDetail? {
+        MoonPhaseDetailData.detail(for: moonPhaseData.phaseName)
+    }
+
+    private var moonPhasePopupSymbolName: String {
+        switch moonPhaseData.phaseName.lowercased() {
+        case "new moon":
+            return "moonphase.new.moon"
+        case "waxing crescent":
+            return "moonphase.waxing.crescent"
+        case "first quarter":
+            return "moonphase.first.quarter"
+        case "waxing gibbous":
+            return "moonphase.waxing.gibbous"
+        case "full moon":
+            return "moonphase.full.moon"
+        case "waning gibbous":
+            return "moonphase.waning.gibbous"
+        case "last quarter":
+            return "moonphase.last.quarter"
+        case "waning crescent":
+            return "moonphase.waning.crescent"
+        default:
+            return "moonphase.full.moon"
+        }
+    }
+
+    @ViewBuilder
+    private func moonPhaseDetailsPopup(_ detail: MoonPhaseDetail) -> some View {
+        LystariaOverlayPopup(
+            onClose: {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                    showMoonPhaseDetails = false
+                }
+            },
+            width: 560,
+            heightRatio: 0.76
+        ) {
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: moonPhasePopupSymbolName)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 22, height: 22)
+
+                GradientTitle(text: detail.phaseName, font: .system(size: 24, weight: .bold))
+                Spacer()
+
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                        showMoonPhaseDetails = false
+                    }
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.08))
+                            .overlay(
+                                Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                            .frame(width: 34, height: 34)
+
+                        Image(systemName: "xmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        } content: {
+            VStack(alignment: .leading, spacing: 16) {
+                moonPhaseDetailSection(title: "VIBE") {
+                    Text(detail.vibe)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                moonPhaseDetailSection(title: "DESCRIPTION") {
+                    Text(detail.description)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                moonPhaseDetailSection(title: "RITUALS") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(detail.rituals, id: \.self) { ritual in
+                            HStack(alignment: .top, spacing: 10) {
+                                Circle()
+                                    .fill(LColors.textSecondary)
+                                    .frame(width: 6, height: 6)
+                                    .padding(.top, 6)
+
+                                Text(ritual)
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                }
+
+                moonPhaseDetailSection(title: "BEST FOR") {
+                    FlexibleKeywordWrap(keywords: detail.bestFor)
+                }
+            }
+        } footer: {
+            HStack {
+                Spacer()
+
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                        showMoonPhaseDetails = false
+                    }
+                } label: {
+                    Text("Close")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 10)
+                        .background(LGradients.blue)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func moonPhaseDetailSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(LColors.textSecondary)
+                .tracking(0.5)
+
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 14)
+        .background(Color.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(LColors.glassBorder, lineWidth: 1)
         )
     }
 }

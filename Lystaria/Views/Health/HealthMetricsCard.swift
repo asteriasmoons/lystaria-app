@@ -40,10 +40,17 @@ struct HealthMetricsCard: View {
                     }
 
                     VStack(alignment: .leading, spacing: 12) {
-                        metricRow("Blood Oxygen", value: bloodOxygenText)
-                        metricRow("Blood Pressure", value: bloodPressureText)
-                        metricRow("Body Temperature", value: temperatureText)
-                        metricRow("Weight", value: weightText)
+                        if latestEntry == nil {
+                            Text("Log your health metrics to see them here every day. Refreshes automatically at midnight every night. Tap card to view your history.")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(LColors.textSecondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        } else {
+                            metricRow("Blood Oxygen", value: bloodOxygenText)
+                            metricRow("Blood Pressure", value: bloodPressureText)
+                            metricRow("Body Temperature", value: temperatureText)
+                            metricRow("Weight", value: weightText)
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

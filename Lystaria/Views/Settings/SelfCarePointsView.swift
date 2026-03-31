@@ -11,6 +11,7 @@ import Combine
 
 struct SelfCarePointsView: View {
     @Environment(\.modelContext) private var modelContext
+    @StateObject private var limits = LimitManager.shared
     
     @AppStorage("isAdminMode") private var isAdminMode: Bool = false
     @State private var selectedEntryForAdminAction: SelfCarePointEntry? = nil
@@ -94,38 +95,41 @@ struct SelfCarePointsView: View {
 
     var body: some View {
         ZStack {
-            LystariaBackground()
+            ZStack {
+                LystariaBackground()
 
-            ScrollView {
-                VStack(spacing: 14) {
-                    headerSection
-                    statsGridSection
-                    levelProgressSection
-                    breakdownSection
-                    recentActivitySection
-                    earningGuideSection
-                    manualLogHistoryButtonSection
-                    logHistoryButtonSection
+                ScrollView {
+                    VStack(spacing: 14) {
+                        headerSection
+                        statsGridSection
+                        levelProgressSection
+                        breakdownSection
+                        recentActivitySection
+                        earningGuideSection
+                        manualLogHistoryButtonSection
+                        logHistoryButtonSection
 
-                    Spacer(minLength: 80)
-                }
-                .task {
-                    activeUserId = try? SelfCarePointsManager.resolveActiveUserId(in: modelContext)
-                    if let userId = activeUserId {
-                        _ = try? SelfCarePointsManager.fetchOrCreateProfile(in: modelContext, userId: userId)
+                        Spacer(minLength: 80)
                     }
-                }
-                .onReceive(dayRefreshTimer) { _ in
-                    let newDayKey = SelfCarePointsManager.dayKey()
-                    if newDayKey != currentDayKey {
-                        currentDayKey = newDayKey
-                        visibleRecentEntryCount = 4
+                    .task {
+                        activeUserId = try? SelfCarePointsManager.resolveActiveUserId(in: modelContext)
+                        if let userId = activeUserId {
+                            _ = try? SelfCarePointsManager.fetchOrCreateProfile(in: modelContext, userId: userId)
+                        }
                     }
+                    .onReceive(dayRefreshTimer) { _ in
+                        let newDayKey = SelfCarePointsManager.dayKey()
+                        if newDayKey != currentDayKey {
+                            currentDayKey = newDayKey
+                            visibleRecentEntryCount = 4
+                        }
+                    }
+                    .frame(maxWidth: 680)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, LSpacing.pageHorizontal)
+                    .padding(.vertical, 20)
                 }
-                .frame(maxWidth: 680)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, LSpacing.pageHorizontal)
-                .padding(.vertical, 20)
+                .premiumLocked(!limits.canAccess(.selfCareSystem))
             }
 
             if showLogHistoryPopup {

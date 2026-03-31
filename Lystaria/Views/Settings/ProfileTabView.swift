@@ -37,6 +37,7 @@ struct ProfileTabView: View {
     @State private var timezoneSearch: String = ""
     @State private var showSelfCarePointsPage: Bool = false
     @AppStorage("isAdminMode") private var isAdminMode: Bool = false
+    @AppStorage("isPremiumDevBypass") private var isPremiumDevBypass: Bool = false
 
     // Cached list of IANA timezones
     private let allTimezones: [String] = TimeZone.knownTimeZoneIdentifiers.sorted()
@@ -441,6 +442,28 @@ struct ProfileTabView: View {
                                 .frame(width: 18, height: 18)
                                 .foregroundStyle(.white)
                             Text("Admin Mode")
+                                .font(.system(size: 16, weight: .semibold))
+                        }
+                        .foregroundStyle(LColors.textPrimary)
+                    }
+                    .tint(LColors.accent)
+                    .padding(.horizontal, 14)
+                    .frame(minHeight: 56)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .stroke(LColors.glassBorder, lineWidth: 1)
+                    )
+                }
+
+                if isAdminUser {
+                    Toggle(isOn: $isPremiumDevBypass) {
+                        HStack(spacing: 10) {
+                            Image(systemName: "crown.fill")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(.white)
+                            Text("Premium Dev Bypass")
                                 .font(.system(size: 16, weight: .semibold))
                         }
                         .foregroundStyle(LColors.textPrimary)

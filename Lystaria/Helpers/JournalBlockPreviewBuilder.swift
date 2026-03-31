@@ -48,6 +48,9 @@ extension JournalEntry {
             case .paragraph, .heading1, .heading2, .heading3, .heading4:
                 let trimmed = block.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 return trimmed.isEmpty ? nil : trimmed
+
+            case .image:
+                return block.imageData != nil ? "🖼️ Photo" : nil
             }
         }
 

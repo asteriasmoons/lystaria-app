@@ -10,7 +10,10 @@ import SwiftData
 
 struct HealthPageView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var bodyStateManager = BodyStateHealthKitManager.shared
+    @StateObject private var stepManager = HealthKitManager.shared
+    @StateObject private var waterManager = WaterHealthKitManager.shared
     @Query(sort: \HealthMetricEntry.date, order: .reverse)
     private var healthEntries: [HealthMetricEntry]
 
@@ -28,6 +31,8 @@ struct HealthPageView: View {
     @State private var selectedHealthEntry: HealthMetricEntry?
     @State private var selectedExerciseEntry: ExerciseLogEntry?
     @State private var hasRequestedHealthAuthorization = false
+    @State private var completionRefreshTick = Date()
+    @State private var dayRefreshID = UUID()
     @StateObject private var onboarding = OnboardingManager()
 
 
@@ -40,20 +45,22 @@ struct HealthPageView: View {
 
                 VStack(alignment: .leading, spacing: 18) {
                     healthStreaksCard
+                    dailyCompletionCard
+                        .id(completionRefreshTick)
                     bodyStateCard
-
                     HealthMetricsCard(latestEntry: latestHealthEntry) {
                         withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                             showHealthHistoryPopup = true
                         }
                     }
+                    .id(dayRefreshID)
 
                     ExerciseLogCard(entries: exerciseEntries) {
                         withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                             showExerciseHistoryPopup = true
                         }
                     }
-
+                    .id(dayRefreshID)
                     Color.clear
                         .frame(height: 120)
                 }
@@ -189,6 +196,119 @@ struct HealthPageView: View {
                 print("HealthKit authorization error:", error)
             }
         }
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                await MainActor.run {
+                    completionRefreshTick = Date()
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
+            dayRefreshID = UUID()
+            completionRefreshTick = Date()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active {
+                dayRefreshID = UUID()
+                completionRefreshTick = Date()
+            }
+        }
+    }
+    private var dailyCompletionCard: some View {
+        let arcData = DailyCompletionArcHelper.build(
+            modelContext: modelContext,
+            waterToday: waterManager.todayWaterFlOz,
+            stepsToday: stepManager.todaySteps
+        )
+
+        return GlassCard {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 12) {
+                    Image("sparklefill")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 22, height: 22)
+                        .foregroundStyle(.white)
+
+                    GradientTitle(text: "Daily Completion", size: 24)
+
+                    Spacer()
+                }
+
+                HStack {
+                    Spacer()
+
+                    ZStack {
+                        DailyCompletionBubbleArc(
+                            fillStates: arcData.bubbleFillStates,
+                            size: 220
+                        )
+
+                        VStack(spacing: 4) {
+                            Text("\(Int((arcData.percentage * 100).rounded()))%")
+                                .font(.system(size: 28, weight: .bold))
+                                .foregroundStyle(.white)
+
+                            Text("complete")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(LColors.textSecondary)
+                        }
+                    }
+
+                    Spacer()
+                }
+
+                HStack(spacing: 10) {
+                    completionPill(
+                        title: "Water",
+                        value: "\(Int((arcData.waterProgress * 100).rounded()))%"
+                    )
+
+                    completionPill(
+                        title: "Steps",
+                        value: "\(Int((arcData.stepsProgress * 100).rounded()))%"
+                    )
+                }
+
+                HStack(spacing: 10) {
+                    completionPill(
+                        title: "Mood",
+                        value: arcData.moodComplete ? "Done" : "Not Yet"
+                    )
+
+                    completionPill(
+                        title: "Journal",
+                        value: arcData.journalComplete ? "Done" : "Not Yet"
+                    )
+                }
+            }
+        }
+    }
+
+    private func completionPill(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title.uppercased())
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(LColors.textSecondary)
+                .tracking(0.5)
+
+            Text(value)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 14)
+        .background(Color.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(LColors.glassBorder, lineWidth: 1)
+        )
     }
 
     private var header: some View {
@@ -204,9 +324,10 @@ struct HealthPageView: View {
                         }
                     } label: {
                         Text("+ Metrics")
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(.white)
-                            .frame(width: 104, height: 42)
+                            .padding(.horizontal, 10)
+                            .frame(height: 30)
                             .background(LGradients.blue)
                             .clipShape(Capsule())
                             .overlay(
@@ -222,9 +343,10 @@ struct HealthPageView: View {
                         }
                     } label: {
                         Text("+ Exercise")
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(.white)
-                            .frame(width: 104, height: 42)
+                            .padding(.horizontal, 10)
+                            .frame(height: 30)
                             .background(LGradients.blue)
                             .clipShape(Capsule())
                             .overlay(
@@ -238,9 +360,10 @@ struct HealthPageView: View {
                         MedicationPageView()
                     } label: {
                         Text("+ Manager")
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(.white)
-                            .frame(width: 104, height: 42)
+                            .padding(.horizontal, 10)
+                            .frame(height: 30)
                             .background(LGradients.blue)
                             .clipShape(Capsule())
                             .overlay(
@@ -491,9 +614,86 @@ struct HealthPageView: View {
     }
 
     private var latestHealthEntry: HealthMetricEntry? {
-        healthEntries.first
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+
+        return healthEntries.first {
+            calendar.isDate($0.date, inSameDayAs: today)
+        }
     }
 
+}
+
+
+private struct DailyCompletionBubbleArc: View {
+    let fillStates: [Double]
+    let size: CGFloat
+
+    private let bubbleSize: CGFloat = 20
+
+    var body: some View {
+        GeometryReader { geo in
+            let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2 + 30)
+            let radius = size * 0.42
+            let startAngle = Double.pi * 1.0
+            let endAngle = Double.pi * 2.0
+            let count = max(fillStates.count, 1)
+
+            ZStack {
+                ForEach(Array(fillStates.enumerated()), id: \.offset) { index, fill in
+                    let progress = count == 1 ? 0 : Double(index) / Double(count - 1)
+                    let angle = startAngle + ((endAngle - startAngle) * progress)
+                    let x = center.x + CGFloat(cos(angle)) * radius
+                    let y = center.y + CGFloat(sin(angle)) * radius
+
+                    DailyCompletionBubble(fill: fill)
+                        .frame(width: bubbleSize, height: bubbleSize)
+                        .position(x: x, y: y)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(width: size, height: size * 0.84)
+    }
+}
+
+private struct DailyCompletionBubble: View {
+    let fill: Double
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color.white.opacity(0.08))
+                .overlay(
+                    Circle()
+                        .stroke(LColors.glassBorder, lineWidth: 1)
+                )
+
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 3/255, green: 219/255, blue: 252/255),
+                            Color(red: 125/255, green: 25/255, blue: 247/255)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .mask(
+                    GeometryReader { geo in
+                        Rectangle()
+                            .frame(
+                                width: geo.size.width,
+                                height: geo.size.height * CGFloat(min(max(fill, 0), 1)),
+                                alignment: .bottom
+                            )
+                            .frame(maxHeight: .infinity, alignment: .bottom)
+                    }
+                )
+                .opacity(fill > 0 ? 1 : 0)
+        }
+    }
 }
 
 #Preview {

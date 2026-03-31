@@ -2,34 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>API_NINJAS_KEY</key>
-    <string>$(API_NINJAS_KEY)</string>
-    <key>CFBundleURLTypes</key>
-    <array>
-        <dict>
-            <key>CFBundleTypeRole</key>
-            <string>Viewer</string>
-            <key>CFBundleURLName</key>
-            <string>com.asteriasmoons.LystariaDev</string>
-            <key>CFBundleURLSchemes</key>
-            <array>
-                <string>lystaria</string>
-            </array>
-        </dict>
-    </array>
-    <key>GOOGLE_BOOKS_API_KEY</key>
-    <string>$(GOOGLE_BOOKS_API_KEY)</string>
-    <key>GROQ_API_KEY</key>
-    <string>$(GROQ_API_KEY)</string>
-    <key>GROQ_API_MODEL</key>
-    <string>$(GROQ_API_MODEL)</string>
-    <key>UIAppFonts</key>
-    <array>
-        <string>LilyScriptOne-Regular.ttf</string>
-    </array>
-    <key>UIBackgroundModes</key>
-    <array>
-        <string>remote-notification</string>
-    </array>
+	<key>UIAppFonts</key>
+	<array>
+		<string>LilyScriptOne-Regular.ttf</string>
+	</array>
 </dict>
 </plist>

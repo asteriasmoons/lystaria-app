@@ -10,8 +10,17 @@ import SwiftData
 
 struct HealthMetricsHistoryPopupView: View {
     let entries: [HealthMetricEntry]
+    @StateObject private var limits = LimitManager.shared
     let onSelect: (HealthMetricEntry) -> Void
     let onClose: () -> Void
+
+    private var visibleEntries: [HealthMetricEntry] {
+        guard let cutoff = limits.cutoffDate(for: .healthHistory) else {
+            return entries
+        }
+
+        return entries.filter { $0.createdAt >= cutoff }
+    }
 
     var body: some View {
         LystariaOverlayPopup(
@@ -24,7 +33,7 @@ struct HealthMetricsHistoryPopupView: View {
             content: {
                 VStack(alignment: .leading, spacing: 12) {
 
-                    if entries.isEmpty {
+                    if visibleEntries.isEmpty {
                         Text("No health metric entries yet.")
                             .foregroundStyle(LColors.textSecondary)
                     } else {
@@ -32,7 +41,7 @@ struct HealthMetricsHistoryPopupView: View {
                             .font(.subheadline)
                             .foregroundStyle(LColors.textSecondary)
 
-                        dateBubbleWrap(entries: entries)
+                        dateBubbleWrap(entries: visibleEntries)
                     }
                 }
             },

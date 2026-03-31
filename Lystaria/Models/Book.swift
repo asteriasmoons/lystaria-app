@@ -38,6 +38,8 @@ final class Book {
     var statusRaw: String = BookStatus.tbr.rawValue
     var totalPages: Int?
     var currentPage: Int?
+    var seriesIndex: Int? = nil
+    var seriesLabel: String = ""
     var startedAt: Date? = nil
     var finishedAt: Date? = nil
     var createdAt: Date = Date()
@@ -52,6 +54,9 @@ final class Book {
 
     @Relationship(deleteRule: .cascade, inverse: \BookNote.book)
     var notes: [BookNote]? = nil
+
+    @Relationship(deleteRule: .nullify, inverse: \BookSeries.books)
+    var series: BookSeries? = nil
 
     // MARK: - Computed
     var status: BookStatus {
@@ -81,6 +86,8 @@ final class Book {
         status: BookStatus = .tbr,
         totalPages: Int? = nil,
         currentPage: Int? = nil,
+        seriesIndex: Int? = nil,
+        seriesLabel: String = "",
         startedAt: Date? = nil,
         finishedAt: Date? = nil,
         deletedAt: Date? = nil,
@@ -94,12 +101,15 @@ final class Book {
         self.statusRaw = status.rawValue
         self.totalPages = totalPages
         self.currentPage = currentPage
+        self.seriesIndex = seriesIndex
+        self.seriesLabel = seriesLabel
         self.startedAt = startedAt
         self.finishedAt = finishedAt
         self.deletedAt = deletedAt
         self.coverImageData = coverImageData
         self.sessions = nil
         self.notes = nil
+        self.series = nil
         self.createdAt = Date()
         self.updatedAt = Date()
     }

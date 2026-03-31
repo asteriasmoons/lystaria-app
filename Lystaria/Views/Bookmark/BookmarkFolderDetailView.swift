@@ -10,6 +10,7 @@ import SwiftData
 
 struct BookmarkFolderDetailView: View {
     @Environment(\.modelContext) private var modelContext
+    @StateObject private var limits = LimitManager.shared
 
     let folder: BookmarkFolder
 
@@ -240,7 +241,7 @@ private extension BookmarkFolderDetailView {
                 emptyStateCard
             } else {
                 LazyVStack(spacing: 14) {
-                    ForEach(filteredAndSortedBookmarks) { bookmark in
+                    ForEach(Array(filteredAndSortedBookmarks.enumerated()), id: \.element.id) { index, bookmark in
                         BookmarkCard(
                             bookmark: bookmark,
                             folderName: folder.name.isEmpty ? "Untitled Folder" : folder.name,
@@ -260,6 +261,7 @@ private extension BookmarkFolderDetailView {
                             availableFolders: sortedFoldersForMoves
                         )
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .premiumLocked(index >= 20 && !limits.hasPremiumAccess)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

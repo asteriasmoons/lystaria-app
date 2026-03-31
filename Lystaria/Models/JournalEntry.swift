@@ -1,7 +1,7 @@
+//
 // JournalEntry.swift
 // Lystaria
 //
-// SwiftData model — mirrors the MongoDB JournalEntry schema
 
 import Foundation
 import UIKit

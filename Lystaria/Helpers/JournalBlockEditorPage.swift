@@ -2,14 +2,13 @@
 //  JournalBlockEditorPage.swift
 //  Lystaria
 //
-//  Created by Asteria Moon on 3/18/26.
-//
 
 import SwiftUI
 import SwiftData
 
 struct JournalBlockEditorPage: View {
     @Environment(\.modelContext) private var modelContext
+    @StateObject private var limits = LimitManager.shared
     @Environment(\.dismiss) private var dismiss
 
     let book: JournalBook
@@ -154,6 +153,12 @@ struct JournalBlockEditorPage: View {
             return
         }
 
+        // Enforce journal entry limit (50 total for free users)
+        let descriptor = FetchDescriptor<JournalEntry>()
+        let existingEntries = (try? modelContext.fetch(descriptor)) ?? []
+        let decision = limits.canCreate(.journalEntriesTotal, currentCount: existingEntries.count)
+        guard decision.allowed else { return }
+
         let entry = JournalEntry()
         entry.updatedAt = Date()
         entry.book = book
@@ -250,6 +255,9 @@ struct JournalBlockEditorPage: View {
             case .code, .paragraph, .heading1, .heading2, .heading3, .heading4, .blockquote, .toggle, .bulletedList, .numberedList:
                 let text = block.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 return !text.isEmpty
+
+            case .image:
+                return block.imageData != nil
             }
         }
 

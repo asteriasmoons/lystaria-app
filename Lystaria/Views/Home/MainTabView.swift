@@ -5,8 +5,8 @@ import SwiftUI
 
 struct MainTabView: View {
     @EnvironmentObject private var appState: AppState
+    @Binding var selectedTab: Tab
     @State private var showSignIn = false
-    @State private var selectedTab: Tab = .dashboard
 
     enum Tab: String, CaseIterable {
         case reminders = "Reminders"
@@ -134,5 +134,5 @@ struct MainTabView: View {
 }
 
 #Preview {
-    MainTabView().preferredColorScheme(.dark)
+    MainTabView(selectedTab: .constant(.dashboard)).preferredColorScheme(.dark)
 }

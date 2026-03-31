@@ -5,8 +5,21 @@ import SwiftUI
 import SwiftData
 
 import UIKit
+import UserNotifications
 
-final class AppDelegate: NSObject, UIApplicationDelegate {}
+final class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        // Set the notification delegate as early as possible — before SwiftUI
+        // initialises any views — so didReceive fires correctly on cold-launch
+        // taps where the app is woken by a notification.
+        print("🔔🚀 AppDelegate didFinishLaunching — setting UNUserNotificationCenter delegate")
+        UNUserNotificationCenter.current().delegate = NotificationManager.shared
+        return true
+    }
+}
 
 @main
 struct LystariaApp: App {
@@ -14,6 +27,7 @@ struct LystariaApp: App {
     static let sharedModelContainer: ModelContainer = {
         let schema = Schema([
             AuthUser.self,
+            DistractionBubble.self,
             CalendarEvent.self,
             Habit.self,
             HabitSkip.self,
@@ -23,8 +37,11 @@ struct LystariaApp: App {
             BodyStateRecord.self,
             HealthMetricEntry.self,
             Medication.self,
+            SymptomLog.self,
             ExerciseLogEntry.self,
+            DailyCompletionSettings.self,
             Book.self,
+            BookSeries.self,
             BookNote.self,
             ReadingStats.self,
             ReadingSession.self,
@@ -113,21 +130,38 @@ struct LystariaApp: App {
     // ─────────────────────────────────────────────
 
     private func setupNotifications() {
-        notificationManager.setup()
+        // Set container BEFORE setup() so the initial calendar reschedule inside
+        // setup() actually has a container to work with.
         notificationManager.modelContainer = sharedModelContainer
+        notificationManager.setup()
 
         Task {
-            let granted = await notificationManager.requestPermission()
-            print("🔔 Notification permission: \(granted ? "granted" : "denied")")
+            // Check current status first — avoid prompting again if already decided.
+            let center = UNUserNotificationCenter.current()
+            let settings = await center.notificationSettings()
 
-            if granted {
+            switch settings.authorizationStatus {
+            case .authorized, .provisional:
+                // Already granted — reschedule immediately, no prompt needed.
                 notificationManager.rescheduleAll(from: sharedModelContainer)
+                print("🔔 Notifications already authorized — rescheduled")
+
+            case .notDetermined:
+                // First time — ask, then reschedule if granted.
+                let granted = await notificationManager.requestPermission()
+                print("🔔 Notification permission: \(granted ? "granted" : "denied")")
+                if granted {
+                    notificationManager.rescheduleAll(from: sharedModelContainer)
+                }
+
+            default:
+                print("🔔 Notifications not authorized (status=\(settings.authorizationStatus.rawValue))")
             }
         }
 
         #if DEBUG
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            notificationManager.printPendingNotifications()
+            notificationManager.printAllPendingLystariaNotifications()
         }
         #endif
     }
@@ -139,25 +173,32 @@ struct LystariaApp: App {
     private func handleNotificationAction(_ notification: Foundation.Notification) {
         guard let info = notification.userInfo,
               let actionID = info["actionID"] as? String,
-              let originalUserInfo = info["userInfo"] as? [String: Any],
-              let idHashString = originalUserInfo["reminderIDHash"] as? String
+              let originalUserInfo = info["userInfo"] as? [String: Any]
         else { return }
 
-        let context = sharedModelContainer.mainContext
+        let reminderID = originalUserInfo["reminderID"] as? String
 
-        let descriptor = FetchDescriptor<LystariaReminder>(
-            predicate: #Predicate<LystariaReminder> { $0.statusRaw == "scheduled" }
-        )
-
-        guard let reminders = try? context.fetch(descriptor) else { return }
-        guard let reminder = reminders.first(where: {
-            $0.persistentModelID.hashValue.description == idHashString
-        }) else {
-            print("⚠️ Could not find reminder for hash: \(idHashString)")
+        guard let reminderID else {
+            print("⚠️ handleNotificationAction: no reminderID in userInfo")
             return
         }
 
-        let message = [reminder.title, reminder.details].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.joined(separator: ": ")
+        let context = sharedModelContainer.mainContext
+
+        // Fetch all non-deleted reminders and match on stable persistent model ID string.
+        let descriptor = FetchDescriptor<LystariaReminder>()
+        guard let reminders = try? context.fetch(descriptor) else { return }
+        guard let reminder = reminders.first(where: {
+            String(describing: $0.persistentModelID) == reminderID
+        }) else {
+            print("⚠️ Could not find reminder for id: \(reminderID)")
+            return
+        }
+
+        let message = [reminder.title, reminder.details]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: ": ")
 
         switch actionID {
         case NotificationManager.doneActionID:
@@ -165,6 +206,13 @@ struct LystariaApp: App {
             if !reminder.isRecurring {
                 reminder.status = .sent
                 notificationManager.cancelReminder(reminder)
+            } else {
+                // Advance to next occurrence so it reschedules correctly.
+                let next = ReminderCompute.nextRun(after: Date().addingTimeInterval(91), reminder: reminder)
+                reminder.nextRunAt = next
+                reminder.acknowledgedAt = nil
+                notificationManager.cancelReminder(reminder)
+                notificationManager.scheduleReminder(reminder)
             }
             reminder.updatedAt = Date()
             print("✅ Marked done: \(message.prefix(30))")
@@ -174,7 +222,7 @@ struct LystariaApp: App {
             print("💤 Snoozed: \(message.prefix(30))")
 
         default:
-            print("📱 Notification tapped: \(message.prefix(30))")
+            break
         }
     }
 }

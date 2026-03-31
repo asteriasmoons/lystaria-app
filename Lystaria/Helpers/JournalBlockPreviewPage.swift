@@ -24,7 +24,47 @@ struct JournalBlockPreviewPage: View {
             LystariaBackground()
                 .ignoresSafeArea()
 
-            JournalBlockDisplayView(entry: entry)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    // Entry title
+                    if !entry.title.isEmpty {
+                        GradientTitle(text: entry.title, font: .title.bold())
+                            .padding(.horizontal, 20)
+                            .padding(.top, 16)
+                            .padding(.bottom, entry.tags.isEmpty ? 16 : 10)
+                    }
+
+                    // Tags row
+                    if !entry.tags.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(entry.tags, id: \.self) { tag in
+                                    HStack(spacing: 6) {
+                                        Image("tagheart")
+                                            .resizable()
+                                            .renderingMode(.template)
+                                            .scaledToFit()
+                                            .frame(width: 14, height: 14)
+                                            .foregroundStyle(.white)
+                                        Text(tag)
+                                            .font(.system(size: 12, weight: .semibold))
+                                    }
+                                    .foregroundStyle(LColors.textPrimary)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(Color.white.opacity(0.08))
+                                    .clipShape(Capsule())
+                                    .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
+                                }
+                            }
+                            .padding(.horizontal, 20)
+                        }
+                        .padding(.bottom, 12)
+                    }
+
+                    JournalBlockDisplayView(entry: entry)
+                }
+            }
         }
         .navigationTitle("Journal Entry")
         .navigationBarTitleDisplayMode(.inline)

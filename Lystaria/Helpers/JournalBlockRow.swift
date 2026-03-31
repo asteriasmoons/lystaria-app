@@ -9,6 +9,7 @@
 import SwiftUI
 import SwiftData
 import UIKit
+import PhotosUI
 
 extension Notification.Name {
     static let journalBlockRequestFocusNextParagraph = Notification.Name("JournalBlockRequestFocusNextParagraph")
@@ -28,6 +29,7 @@ struct JournalBlockRow: View {
     @State private var selectedRange: NSRange = NSRange(location: 0, length: 0)
     @State private var showLinkEditor = false
     @State private var linkDraft = ""
+    @State private var selectedPhotoItem: PhotosPickerItem? = nil
 
     @FocusState private var isFocused: Bool
 
@@ -111,9 +113,184 @@ struct JournalBlockRow: View {
         case .callout:
             calloutEditor
 
+        case .image:
+            imageEditor
+
         case .paragraph, .heading1, .heading2, .heading3, .heading4, .toggle, .bulletedList, .numberedList, .blockquote:
             textEditor
         }
+    }
+
+    private var imageEditor: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let data = block.imageData, let uiImage = UIImage(data: data) {
+                VStack(alignment: block.imageAlignment == .center ? .center : .leading, spacing: 8) {
+
+                    // Image display
+                    imageView(uiImage: uiImage)
+                        .frame(maxWidth: .infinity, alignment: block.imageAlignment == .center ? .center : .leading)
+
+                    // Controls row 1 — alignment + fit/fill
+                    HStack(spacing: 8) {
+                        // Alignment toggle
+                        imageControlButton(
+                            icon: block.imageAlignment == .center ? "text.aligncenter" : "text.alignleft",
+                            label: block.imageAlignment == .center ? "Center" : "Left"
+                        ) {
+                            block.imageAlignment = block.imageAlignment == .center ? .left : .center
+                            block.touch()
+                        }
+
+                        // Fit / Fill toggle
+                        imageControlButton(
+                            icon: block.imageDisplayMode == .fill ? "arrow.up.left.and.arrow.down.right" : "arrow.down.right.and.arrow.up.left",
+                            label: block.imageDisplayMode.label
+                        ) {
+                            block.imageDisplayMode = block.imageDisplayMode == .fit ? .fill : .fit
+                            block.touch()
+                        }
+
+                        // Replace photo
+                        PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "arrow.triangle.2.circlepath")
+                                    .font(.system(size: 12, weight: .semibold))
+                                Text("Replace")
+                                    .font(.system(size: 12, weight: .semibold))
+                            }
+                            .foregroundStyle(LColors.textPrimary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(Capsule())
+                            .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    // Controls row 2 — size selector
+                    HStack(spacing: 6) {
+                        ForEach(ImageBlockSize.allCases, id: \.rawValue) { size in
+                            let active = block.imageSize == size
+                            Button {
+                                block.imageSize = size
+                                block.touch()
+                            } label: {
+                                Text(size.label)
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(active ? .white : LColors.textPrimary)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(active ? AnyShapeStyle(LGradients.blue) : AnyShapeStyle(Color.white.opacity(0.08)))
+                                    .clipShape(Capsule())
+                                    .overlay(Capsule().stroke(active ? AnyShapeStyle(LGradients.blue) : AnyShapeStyle(LColors.glassBorder), lineWidth: 1))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            } else {
+                // No image yet — show photo picker
+                PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                    VStack(spacing: 10) {
+                        Image(systemName: "photo.badge.plus")
+                            .font(.system(size: 28, weight: .regular))
+                            .foregroundStyle(AnyShapeStyle(LGradients.blue))
+
+                        Text("Add Photo")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(AnyShapeStyle(LGradients.blue))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 28)
+                    .background(Color.white.opacity(0.05))
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .stroke(AnyShapeStyle(LGradients.blue), lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .onChange(of: selectedPhotoItem) { _, item in
+            guard let item else { return }
+            Task {
+                if let data = try? await item.loadTransferable(type: Data.self) {
+                    let compressed = UIImage(data: data)
+                        .flatMap { $0.jpegData(compressionQuality: 0.75) } ?? data
+                    await MainActor.run {
+                        block.imageData = compressed
+                        block.touch()
+                    }
+                }
+                await MainActor.run { selectedPhotoItem = nil }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func imageView(uiImage: UIImage) -> some View {
+        let size = block.imageSize
+        let mode = block.imageDisplayMode
+
+        if let maxH = size.maxHeight {
+            if mode == .fill {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity)
+                    .frame(height: maxH)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity)
+                    .frame(maxHeight: maxH)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+        } else {
+            // Full size — always fit
+            Image(uiImage: uiImage)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
+    private func imageControlButton(_ label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(LColors.textPrimary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.white.opacity(0.08))
+                .clipShape(Capsule())
+                .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func imageControlButton(icon: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .semibold))
+                Text(label)
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundStyle(LColors.textPrimary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.white.opacity(0.08))
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
     }
 
     private var textEditor: some View {
@@ -314,7 +491,7 @@ struct JournalBlockRow: View {
         switch block.type {
         case .paragraph, .heading1, .heading2, .heading3, .heading4, .toggle, .bulletedList, .numberedList, .blockquote, .callout:
             return true
-        case .divider, .code:
+        case .divider, .code, .image:
             return false
         }
     }
@@ -453,6 +630,8 @@ struct JournalBlockRow: View {
         switch block.type {
         case .divider:
             return true
+        case .image:
+            return block.imageData == nil
         case .callout:
             return block.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         case .paragraph, .heading1, .heading2, .heading3, .heading4, .toggle, .bulletedList, .numberedList, .blockquote, .code:
@@ -474,7 +653,7 @@ struct JournalBlockRow: View {
             return .systemFont(ofSize: 16, weight: .medium)
         case .paragraph, .toggle, .bulletedList, .numberedList, .callout:
             return .systemFont(ofSize: 16, weight: .regular)
-        case .divider:
+        case .divider, .image:
             return .systemFont(ofSize: 16, weight: .regular)
         case .code:
             return .monospacedSystemFont(ofSize: UIFont.preferredFont(forTextStyle: .body).pointSize, weight: .regular)
@@ -487,7 +666,7 @@ struct JournalBlockRow: View {
             return UIColor(LColors.textPrimary)
         case .blockquote:
             return UIColor(LColors.textPrimary)
-        case .divider:
+        case .divider, .image:
             return .clear
         }
     }
@@ -812,6 +991,7 @@ struct JournalBlockRow: View {
         case .callout: return "Callout"
         case .divider: return ""
         case .code: return "Code"
+        case .image: return ""
         }
     }
 
@@ -829,6 +1009,7 @@ struct JournalBlockRow: View {
         case .callout: return "Callout"
         case .divider: return "Divider"
         case .code: return "Code Block"
+        case .image: return "Image"
         }
     }
 
@@ -846,7 +1027,7 @@ struct JournalBlockRow: View {
             return .system(size: 16)
         case .paragraph, .toggle, .bulletedList, .numberedList, .callout:
             return .system(size: 16)
-        case .divider:
+        case .divider, .image:
             return .system(size: 16)
         case .code:
             return .system(.body, design: .monospaced)
@@ -859,7 +1040,7 @@ struct JournalBlockRow: View {
             return LColors.textPrimary
         case .blockquote:
             return LColors.textPrimary
-        case .divider:
+        case .divider, .image:
             return .clear
         }
     }

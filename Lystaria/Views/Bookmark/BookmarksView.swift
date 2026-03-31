@@ -11,6 +11,7 @@ import UniformTypeIdentifiers
 
 struct BookmarksView: View {
     @Environment(\.modelContext) private var modelContext
+    @StateObject private var limits = LimitManager.shared
 
     @Query(sort: \BookmarkFolder.createdAt, order: .forward)
     private var folders: [BookmarkFolder]
@@ -179,7 +180,7 @@ private extension BookmarksView {
 
     var folderSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            ForEach(visibleFolders) { folder in
+            ForEach(Array(visibleFolders.enumerated()), id: \.element.id) { index, folder in
                 GlassCard {
                     HStack(spacing: 14) {
                         Button {
@@ -268,6 +269,7 @@ private extension BookmarksView {
                         }
                     }
                 }
+                .premiumLocked(index >= 2 && !limits.hasPremiumAccess)
                 .contextMenu {
                     Button {
                         withAnimation {

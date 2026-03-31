@@ -1,5 +1,7 @@
+//
 // MoodLoggerView.swift
 // Lystaria
+//
 
 import SwiftUI
 import SwiftData
@@ -7,6 +9,7 @@ import WidgetKit
 
 struct MoodLoggerView: View {
     @Environment(\.modelContext) private var modelContext
+    @StateObject private var limits = LimitManager.shared
     @Environment(\.dismiss) private var dismiss
     
     private let moodWidgetAppGroupID = "group.com.asteriasmoons.LystariaDev"
@@ -23,6 +26,7 @@ struct MoodLoggerView: View {
     @State private var selectedMoods: Set<String> = []
     @State private var selectedActivities: Set<String> = []
     @State private var note: String = ""
+    @FocusState private var noteEditorFocused: Bool
     
     @State private var moodsExpanded: Bool = false
     @State private var activitiesExpanded: Bool = false
@@ -44,6 +48,18 @@ struct MoodLoggerView: View {
     
     private var shouldShowMoodInsights: Bool {
         logs.count >= 3
+    }
+
+    private var allowedHistoryLogIds: Set<PersistentIdentifier> {
+        guard let cutoff = limits.cutoffDate(for: .moodHistory) else {
+            return Set(logs.map { $0.persistentModelID })
+        }
+
+        return Set(
+            logs
+                .filter { $0.createdAt >= cutoff }
+                .map { $0.persistentModelID }
+        )
     }
     
     private var averageMoodScore: Double {
@@ -230,7 +246,8 @@ struct MoodLoggerView: View {
                                 AutoGrowingMoodNoteEditor(
                                     placeholder: "How's your day going?",
                                     text: $note,
-                                    minHeight: 80
+                                    minHeight: 80,
+                                    isFocused: $noteEditorFocused
                                 )
                             }
                             
@@ -282,6 +299,7 @@ struct MoodLoggerView: View {
                                             showDeleteConfirmation = true
                                         }
                                     )
+                                    .premiumLocked(!limits.hasPremiumAccess && !allowedHistoryLogIds.contains(log.persistentModelID))
                                 }
                                 
                                 if canLoadMoreHistory {
@@ -328,6 +346,16 @@ struct MoodLoggerView: View {
             }
         } message: { _ in
             Text("This mood log will be permanently removed.")
+        }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+
+                Button("Done") {
+                    noteEditorFocused = false
+                }
+                .font(.system(size: 16, weight: .bold))
+            }
         }
     }
     
@@ -386,6 +414,12 @@ struct MoodLoggerView: View {
     // MARK: - Actions
     
     private func logMood() {
+        // Enforce 1 mood log per day
+        let descriptor = FetchDescriptor<MoodLog>()
+        let existingLogs = (try? modelContext.fetch(descriptor)) ?? []
+        let todayCount = existingLogs.filter { limits.isSameDay($0.createdAt, Date()) }.count
+        let decision = limits.canCreate(.moodEntriesPerDay, currentCount: todayCount)
+        guard decision.allowed else { return }
         guard !selectedMoods.isEmpty else { return }
         
         do {
@@ -476,6 +510,7 @@ private struct AutoGrowingMoodNoteEditor: View {
     let placeholder: String
     @Binding var text: String
     let minHeight: CGFloat
+    var isFocused: FocusState<Bool>.Binding
 
     @State private var measuredHeight: CGFloat = 80
 
@@ -495,6 +530,7 @@ private struct AutoGrowingMoodNoteEditor: View {
             }
 
             TextEditor(text: $text)
+                .focused(isFocused)
                 .font(.system(size: 15))
                 .foregroundStyle(LColors.textPrimary)
                 .frame(height: editorHeight)

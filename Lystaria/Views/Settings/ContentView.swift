@@ -8,6 +8,8 @@ struct ContentView: View {
     @EnvironmentObject private var appState: AppState
     @AppStorage("hasSeenWelcome") private var hasSeenWelcome = false
     @Query(filter: #Predicate<JournalBook> { $0.deletedAt == nil }, sort: \JournalBook.createdAt, order: .reverse) private var journalBooks: [JournalBook]
+    @ObservedObject private var notificationManager = NotificationManager.shared
+    @State private var selectedTab: MainTabView.Tab = .dashboard
     @State private var showMoodRoute = false
     @State private var pendingOpenMoodFromWidget = false
     @State private var showJournalBookRoute = false
@@ -32,7 +34,7 @@ struct ContentView: View {
             } else if case .signedIn = appState.status {
                 NavigationStack {
                     ZStack {
-                        MainTabView()
+                        MainTabView(selectedTab: $selectedTab)
                             .environmentObject(appState)
                             .preferredColorScheme(.dark)
 
@@ -73,6 +75,12 @@ struct ContentView: View {
             if case .signedIn = appState.status, pendingJournalBookIDFromWidget != nil {
                 openPendingJournalBookRoute()
             }
+
+            // Handle notification tap that arrived before the view was in the hierarchy.
+            // onChange only fires on changes, not the initial value, so we must also
+            // check here on appear.
+            print("🔔📲 ContentView onAppear — checking for pending deep link (status=\(appState.status))")
+            applyPendingNotificationDeepLink()
         }
         .onReceive(appState.$status) { newStatus in
             if case .signedIn = newStatus, pendingOpenMoodFromWidget {
@@ -82,10 +90,40 @@ struct ContentView: View {
             if case .signedIn = newStatus, pendingJournalBookIDFromWidget != nil {
                 openPendingJournalBookRoute()
             }
+
+            // Handle notification tap that arrived during a cold launch while auth was
+            // still resolving — apply the deep link once we know we're signed in.
+            if case .signedIn = newStatus {
+                print("🔔🔓 Auth resolved to signedIn — checking for pending deep link")
+                applyPendingNotificationDeepLink()
+            }
         }
         .onOpenURL { url in
             print("DEEPLINK URL:", url)
             handleDeepLink(url)
+        }
+        .onChange(of: notificationManager.pendingDeepLink) { _, link in
+            print("🔔🔄 onChange pendingDeepLink=\(String(describing: link))")
+            guard link != nil else { return }
+            applyPendingNotificationDeepLink()
+        }
+    }
+
+    private func applyPendingNotificationDeepLink() {
+        guard let link = notificationManager.pendingDeepLink else {
+            print("🔔➡️ applyPendingNotificationDeepLink: no pending link, skipping")
+            return
+        }
+        guard case .signedIn = appState.status else {
+            print("🔔⏳ applyPendingNotificationDeepLink: link=\(link) but not yet signed in — will retry on auth")
+            return
+        }
+        print("🔔✅ applyPendingNotificationDeepLink: applying link=\(link)")
+        notificationManager.pendingDeepLink = nil
+        switch link {
+        case .reminders:
+            print("🔔📋 Switching to Reminders tab")
+            withAnimation(.easeInOut(duration: 0.2)) { selectedTab = .reminders }
         }
     }
 

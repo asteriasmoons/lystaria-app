@@ -10,6 +10,7 @@ import SwiftData
 
 struct AddEditBookmarkFolderView: View {
     @Environment(\.modelContext) private var modelContext
+    @StateObject private var limits = LimitManager.shared
 
     let folder: BookmarkFolder? // nil = create
     let onClose: () -> Void
@@ -178,6 +179,16 @@ private extension AddEditBookmarkFolderView {
             folder.iconName = selectedIconName
             folder.updatedAt = Date()
         } else {
+            // Enforce free folder limit (exclude inbox)
+            let descriptor = FetchDescriptor<BookmarkFolder>()
+            let folders = (try? modelContext.fetch(descriptor)) ?? []
+            let customFolderCount = folders.filter { $0.systemKey != "inbox" }.count
+
+            let decision = limits.canCreate(.bookmarkFoldersTotal, currentCount: customFolderCount)
+            guard decision.allowed else {
+                return
+            }
+
             let new = BookmarkFolder(
                 name: cleaned,
                 systemKey: "",

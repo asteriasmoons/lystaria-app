@@ -115,6 +115,7 @@ struct JournalBlockEditorView: View {
             calloutEmoji: type == .callout ? "✦" : "",
             languageHint: type == .divider ? DividerStyle.line.rawValue : ""
         )
+        // Image blocks start with no data — the user picks from Photos in the row UI
         newBlock.entry = entry
         newBlock.touch()
         if entry.blocks == nil {
@@ -137,6 +138,7 @@ struct JournalBlockEditorView: View {
         // Capture the current block's sortOrder before any mutations
         let insertAfterOrder = block.sortOrder
 
+        // Image blocks inserted inline just get an empty block; user picks photo in row UI
         let shouldContinueSameList = block.type == type && block.isListBlock && type == .bulletedList || block.type == type && block.isListBlock && type == .numberedList
         let inheritedListGroupID: UUID? = {
             if shouldContinueSameList {
@@ -330,6 +332,14 @@ struct JournalBlockEditorView: View {
                 modelContext.delete(inlineStyle)
             }
             block.inlineStyles = []
+        case .image:
+            block.parentBlockID = nil
+            block.indentLevel = 0
+            block.text = ""
+            for inlineStyle in (block.inlineStyles ?? []) {
+                modelContext.delete(inlineStyle)
+            }
+            block.inlineStyles = []
         case .paragraph, .heading1, .heading2, .heading3, .heading4, .blockquote:
             block.parentBlockID = nil
             block.indentLevel = 0
@@ -364,6 +374,7 @@ struct JournalBlockEditorView: View {
         case .callout: return "Callout"
         case .divider: return "Divider"
         case .code: return "Code Block"
+        case .image: return "Image"
         }
     }
 
