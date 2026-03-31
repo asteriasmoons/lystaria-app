@@ -40,9 +40,9 @@ struct WatchHomeView: View {
 
                     // PAGE 3
                     WatchHomePageView(items: [
+                        WatchHomeItem(title: "Health", icon: "hearthealth", destination: .health),
                         WatchHomeItem(title: "Profile", icon: "wavyuser", destination: .profile),
                         WatchHomeItem(title: "Settings", icon: "cogcircle", destination: .settings),
-                        WatchHomeItem.empty,
                         WatchHomeItem.empty
                     ])
 
@@ -115,6 +115,7 @@ enum WatchHomeDestination {
     case reminder
     case habits
     case checklists
+    case health
     case profile
     case settings
     case empty
@@ -189,7 +190,7 @@ struct WatchHomeIconButton: View {
             WatchPlaceholderView(title: "Stats")
 
         case .books:
-            WatchPlaceholderView(title: "Books")
+            WatchBooksMainView()
 
         case .journal:
             WatchJournalMainView()
@@ -205,6 +206,9 @@ struct WatchHomeIconButton: View {
 
         case .checklists:
             WatchPlaceholderView(title: "Checklists")
+            
+        case .health:
+            WatchHealthMainView()
 
         case .profile:
             WatchProfileView()

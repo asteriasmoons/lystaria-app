@@ -197,6 +197,26 @@
 		CF8D83822F548EAC0092FC98 /* ProfileTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83812F548EAC0092FC98 /* ProfileTabView.swift */; };
 		CF8D83862F54C4A10092FC98 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83852F54C4A10092FC98 /* NotificationManager.swift */; };
 		CF8D838A2F560F700092FC98 /* RemindersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83892F560F700092FC98 /* RemindersView.swift */; };
+		CF92D5112F746E8F00174F04 /* LimitCleanup.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF92D5102F746E8900174F04 /* LimitCleanup.swift */; };
+		CF92D5132F746EB400174F04 /* LimitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF92D5122F746EAF00174F04 /* LimitManager.swift */; };
+		CF92D5152F748C2B00174F04 /* PremiumLockModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF92D5142F748C2500174F04 /* PremiumLockModifier.swift */; };
+		CF92D5172F7565A600174F04 /* PremiumManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF92D5162F7565A100174F04 /* PremiumManager.swift */; };
+		CF92D5192F75660900174F04 /* PremiumView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF92D5182F75660500174F04 /* PremiumView.swift */; };
+		CF92D51B2F756D4100174F04 /* Lystaria.storekit in Resources */ = {isa = PBXBuildFile; fileRef = CF92D51A2F756D4100174F04 /* Lystaria.storekit */; };
+		CF92D51C2F756D4100174F04 /* Lystaria.storekit in Resources */ = {isa = PBXBuildFile; fileRef = CF92D51A2F756D4100174F04 /* Lystaria.storekit */; };
+		CF92D51D2F756D4100174F04 /* Lystaria.storekit in Resources */ = {isa = PBXBuildFile; fileRef = CF92D51A2F756D4100174F04 /* Lystaria.storekit */; };
+		CF92D51E2F756D4100174F04 /* Lystaria.storekit in Resources */ = {isa = PBXBuildFile; fileRef = CF92D51A2F756D4100174F04 /* Lystaria.storekit */; };
+		CF92D53A2F75837200174F04 /* MoodStreak.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF29FC852F6F4B4A00EC47F8 /* MoodStreak.swift */; };
+		CF92D5602F7591A400174F04 /* DailyCompletionSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF92D55F2F75919D00174F04 /* DailyCompletionSettings.swift */; };
+		CF92D5622F75920B00174F04 /* DailyCompletionArcHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF92D5612F7591FD00174F04 /* DailyCompletionArcHelper.swift */; };
+		CF92D56F2F75AD8500174F04 /* HealthWidgetSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF29FC982F70905300EC47F8 /* HealthWidgetSync.swift */; };
+		CFAF69002F76B57400E74833 /* DistractionBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFAF68FF2F76B56E00E74833 /* DistractionBubble.swift */; };
+		CFAF69022F76BF4900E74833 /* BubbleDistractionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFAF69012F76BF3F00E74833 /* BubbleDistractionView.swift */; };
+		CFAF69042F7708D900E74833 /* BookSeries.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFAF69032F7708D500E74833 /* BookSeries.swift */; };
+		CFAF69132F79787F00E74833 /* ReadingGoal.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF29FC7F2F6E140D00EC47F8 /* ReadingGoal.swift */; };
+		CFAF69152F79ED1900E74833 /* MoonPhaseDetailData.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFAF69142F79ED0F00E74833 /* MoonPhaseDetailData.swift */; };
+		CFAF69182F7AA67800E74833 /* SymptomLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFAF69172F7AA67800E74833 /* SymptomLog.swift */; };
+		CFAF691A2F7AA6D500E74833 /* SymptomLoggerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFAF69192F7AA6CE00E74833 /* SymptomLoggerView.swift */; };
 		CFF7C5AF2F72EA0D00A67EC3 /* Medication.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFF7C5AE2F72EA0800A67EC3 /* Medication.swift */; };
 		CFF7C5B12F72F19300A67EC3 /* MedicationPageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFF7C5B02F72F18900A67EC3 /* MedicationPageView.swift */; };
 		CFF7C5B32F734D8000A67EC3 /* DailyReadingProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFF7C5B22F734D7900A67EC3 /* DailyReadingProgress.swift */; };
@@ -424,6 +444,20 @@
 		CF8D83812F548EAC0092FC98 /* ProfileTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileTabView.swift; sourceTree = "<group>"; };
 		CF8D83852F54C4A10092FC98 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		CF8D83892F560F700092FC98 /* RemindersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemindersView.swift; sourceTree = "<group>"; };
+		CF92D5102F746E8900174F04 /* LimitCleanup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitCleanup.swift; sourceTree = "<group>"; };
+		CF92D5122F746EAF00174F04 /* LimitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitManager.swift; sourceTree = "<group>"; };
+		CF92D5142F748C2500174F04 /* PremiumLockModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumLockModifier.swift; sourceTree = "<group>"; };
+		CF92D5162F7565A100174F04 /* PremiumManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumManager.swift; sourceTree = "<group>"; };
+		CF92D5182F75660500174F04 /* PremiumView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumView.swift; sourceTree = "<group>"; };
+		CF92D51A2F756D4100174F04 /* Lystaria.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Lystaria.storekit; sourceTree = "<group>"; };
+		CF92D55F2F75919D00174F04 /* DailyCompletionSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyCompletionSettings.swift; sourceTree = "<group>"; };
+		CF92D5612F7591FD00174F04 /* DailyCompletionArcHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyCompletionArcHelper.swift; sourceTree = "<group>"; };
+		CFAF68FF2F76B56E00E74833 /* DistractionBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistractionBubble.swift; sourceTree = "<group>"; };
+		CFAF69012F76BF3F00E74833 /* BubbleDistractionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BubbleDistractionView.swift; sourceTree = "<group>"; };
+		CFAF69032F7708D500E74833 /* BookSeries.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookSeries.swift; sourceTree = "<group>"; };
+		CFAF69142F79ED0F00E74833 /* MoonPhaseDetailData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoonPhaseDetailData.swift; sourceTree = "<group>"; };
+		CFAF69172F7AA67800E74833 /* SymptomLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SymptomLog.swift; sourceTree = "<group>"; };
+		CFAF69192F7AA6CE00E74833 /* SymptomLoggerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SymptomLoggerView.swift; sourceTree = "<group>"; };
 		CFF7C5AE2F72EA0800A67EC3 /* Medication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Medication.swift; sourceTree = "<group>"; };
 		CFF7C5B02F72F18900A67EC3 /* MedicationPageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MedicationPageView.swift; sourceTree = "<group>"; };
 		CFF7C5B22F734D7900A67EC3 /* DailyReadingProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyReadingProgress.swift; sourceTree = "<group>"; };
@@ -439,13 +473,6 @@
 			);
 			target = CF29FC5D2F6D8C3600EC47F8 /* Lystaria WidgetsExtension */;
 		};
-		CF8421752F5F5B550069F12F /* Exceptions for "Lystaria Watch Watch App" folder in "Lystaria" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				WatchSessionManager.swift,
-			);
-			target = CF41A5922F4DF57000C96018 /* Lystaria */;
-		};
 		CF8B7FAF2F6C70EC006A7D3B /* Exceptions for "Lystaria Share" folder in "Lystaria Share" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -453,13 +480,28 @@
 			);
 			target = CF8B7FA02F6C70EC006A7D3B /* Lystaria Share */;
 		};
+		CF92D5642F75959600174F04 /* Exceptions for "Lystaria Watch Watch App" folder in "Lystaria" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Managers/WatchSessionManager.swift,
+			);
+			target = CF41A5922F4DF57000C96018 /* Lystaria */;
+		};
+		CF92D57A2F75B8E800174F04 /* Exceptions for "Lystaria Watch Watch App" folder in "Lystaria Watch Watch App" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = CF0A09DF2F5F14B200401658 /* Lystaria Watch Watch App */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		CF0A09E12F5F14B200401658 /* Lystaria Watch Watch App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				CF8421752F5F5B550069F12F /* Exceptions for "Lystaria Watch Watch App" folder in "Lystaria" target */,
+				CF92D5642F75959600174F04 /* Exceptions for "Lystaria Watch Watch App" folder in "Lystaria" target */,
+				CF92D57A2F75B8E800174F04 /* Exceptions for "Lystaria Watch Watch App" folder in "Lystaria Watch Watch App" target */,
 			);
 			path = "Lystaria Watch Watch App";
 			sourceTree = "<group>";
@@ -558,6 +600,7 @@
 		CF13B6692F69B2C1008D3CE9 /* Health */ = {
 			isa = PBXGroup;
 			children = (
+				CFAF69192F7AA6CE00E74833 /* SymptomLoggerView.swift */,
 				CFF7C5B02F72F18900A67EC3 /* MedicationPageView.swift */,
 				CF13B67C2F69B7C5008D3CE9 /* HealthFormatting.swift */,
 				CF13B67A2F69B773008D3CE9 /* ExerciseLogCard.swift */,
@@ -601,6 +644,7 @@
 		CF4790AD2F5B676E0026696B /* Managers */ = {
 			isa = PBXGroup;
 			children = (
+				CF92D5612F7591FD00174F04 /* DailyCompletionArcHelper.swift */,
 				CF8B7F822F6B738D006A7D3B /* SelfCarePointsManager.swift */,
 				CF8B7F5F2F6B0586006A7D3B /* BodyStateHealthKitManager.swift */,
 				CF13B6802F6A28B6008D3CE9 /* Secrets.xcconfig */,
@@ -665,6 +709,7 @@
 		CF8421C52F636DC50069F12F /* Tools */ = {
 			isa = PBXGroup;
 			children = (
+				CFAF69012F76BF3F00E74833 /* BubbleDistractionView.swift */,
 				CF8421C62F636DCB0069F12F /* ToolboxView.swift */,
 			);
 			path = Tools;
@@ -828,6 +873,13 @@
 		CF8D831F2F50A4770092FC98 /* Utilities */ = {
 			isa = PBXGroup;
 			children = (
+				CFAF69142F79ED0F00E74833 /* MoonPhaseDetailData.swift */,
+				CF92D5182F75660500174F04 /* PremiumView.swift */,
+				CF92D51A2F756D4100174F04 /* Lystaria.storekit */,
+				CF92D5162F7565A100174F04 /* PremiumManager.swift */,
+				CF92D5142F748C2500174F04 /* PremiumLockModifier.swift */,
+				CF92D5122F746EAF00174F04 /* LimitManager.swift */,
+				CF92D5102F746E8900174F04 /* LimitCleanup.swift */,
 				CF29FC9E2F70AC9300EC47F8 /* Lenormand.swift */,
 				CF8B7F5B2F6B04FE006A7D3B /* BodyStateClassifier.swift */,
 				CF13B6472F675DBA008D3CE9 /* DashboardConsistencyAnalyzer.swift */,
@@ -844,6 +896,10 @@
 		CF8D832C2F50A4940092FC98 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				CFAF69172F7AA67800E74833 /* SymptomLog.swift */,
+				CFAF69032F7708D500E74833 /* BookSeries.swift */,
+				CFAF68FF2F76B56E00E74833 /* DistractionBubble.swift */,
+				CF92D55F2F75919D00174F04 /* DailyCompletionSettings.swift */,
 				CFF7C5B62F737D4500A67EC3 /* BookNote.swift */,
 				CFF7C5B42F734D9900A67EC3 /* WeeklyReadingSnapshot.swift */,
 				CFF7C5B22F734D7900A67EC3 /* DailyReadingProgress.swift */,
@@ -1104,6 +1160,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CF92D51C2F756D4100174F04 /* Lystaria.storekit in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1111,6 +1168,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CF92D51E2F756D4100174F04 /* Lystaria.storekit in Resources */,
 				CF29FC7C2F6D9C7600EC47F8 /* LilyScriptOne-Regular.ttf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1120,6 +1178,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				CF2051E12F59EFCD006B71AA /* LilyScriptOne-Regular.ttf in Resources */,
+				CF92D51B2F756D4100174F04 /* Lystaria.storekit in Resources */,
 				CF8D836A2F535F810092FC98 /* Assets.xcassets in Resources */,
 				CF8D83702F53C36A0092FC98 /* GoogleService-Info.plist in Resources */,
 			);
@@ -1129,6 +1188,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CF92D51D2F756D4100174F04 /* Lystaria.storekit in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1142,9 +1202,12 @@
 				CF8421822F5FBD8B0069F12F /* WaterHealthKitManager.swift in Sources */,
 				CF8B7F7A2F6B4345006A7D3B /* JournalBlock.swift in Sources */,
 				CF84216D2F5F57520069F12F /* AuthUser.swift in Sources */,
+				CF92D56F2F75AD8500174F04 /* HealthWidgetSync.swift in Sources */,
 				CF0A09F22F5F1C5800401658 /* MoodLog.swift in Sources */,
+				CFAF69132F79787F00E74833 /* ReadingGoal.swift in Sources */,
 				CF84217D2F5FA7580069F12F /* HealthKitManager.swift in Sources */,
 				CF13B6522F678C27008D3CE9 /* JournalEntry.swift in Sources */,
+				CF92D53A2F75837200174F04 /* MoodStreak.swift in Sources */,
 				CF8B7F7B2F6B4375006A7D3B /* JournalInlineStyle.swift in Sources */,
 				CF13B6562F678D53008D3CE9 /* JournalBook.swift in Sources */,
 				CF13B6602F68C2CA008D3CE9 /* JournalPrompt.swift in Sources */,
@@ -1218,6 +1281,7 @@
 				CF0B8E652F6CBCEF00D5D2C8 /* ExerciseLogWriter.swift in Sources */,
 				CF13B61E2F63BA59008D3CE9 /* LogMoodIntent.swift in Sources */,
 				CF13B6732F69B636008D3CE9 /* HealthMetricDetailPopupView.swift in Sources */,
+				CF92D5132F746EB400174F04 /* LimitManager.swift in Sources */,
 				CF13B65D2F6864A0008D3CE9 /* DailyHoroscopeRecord.swift in Sources */,
 				CF2051422F5788F9006B71AA /* Color+Hex.swift in Sources */,
 				CF8B7F602F6B058E006A7D3B /* BodyStateHealthKitManager.swift in Sources */,
@@ -1233,14 +1297,18 @@
 				CF8421B42F61E7830069F12F /* SettingsView.swift in Sources */,
 				CFF7C5B52F734DA000A67EC3 /* WeeklyReadingSnapshot.swift in Sources */,
 				CF8B7FB32F6C7371006A7D3B /* SharedBookmarkPayload.swift in Sources */,
+				CFAF691A2F7AA6D500E74833 /* SymptomLoggerView.swift in Sources */,
 				CF8D83432F50E7930092FC98 /* AuthDTOs.swift in Sources */,
 				CF29FCA12F718C8100EC47F8 /* DividerStyle.swift in Sources */,
 				CF8D832F2F50A4940092FC98 /* UserSettings.swift in Sources */,
+				CF92D5622F75920B00174F04 /* DailyCompletionArcHelper.swift in Sources */,
 				CF8B7F6F2F6B3A4E006A7D3B /* JournalBlockPreviewBuilder.swift in Sources */,
 				CF8421912F607AE90069F12F /* WaterTrackingView.swift in Sources */,
 				CF8421922F607AE90069F12F /* StepCountView.swift in Sources */,
+				CFAF69022F76BF4900E74833 /* BubbleDistractionView.swift in Sources */,
 				CF84219E2F607BAE0069F12F /* OnboardingOverlay.swift in Sources */,
 				CF8B7F6D2F6B3553006A7D3B /* JournalBlock.swift in Sources */,
+				CF92D5602F7591A400174F04 /* DailyCompletionSettings.swift in Sources */,
 				CF13B66B2F69B454008D3CE9 /* HealthPageView.swift in Sources */,
 				CF13B66D2F69B524008D3CE9 /* AddHealthMetricsPopupView.swift in Sources */,
 				CF13B6752F69B6DB008D3CE9 /* ExerciseHistoryPopupView.swift in Sources */,
@@ -1268,6 +1336,7 @@
 				CF0A09D52F5C989400401658 /* BookRecommendationsSheet.swift in Sources */,
 				CF13B6442F671ACE008D3CE9 /* MoonPhaseData.swift in Sources */,
 				CF8B7F852F6B7C87006A7D3B /* SelfCarePointsView.swift in Sources */,
+				CFAF69152F79ED1900E74833 /* MoonPhaseDetailData.swift in Sources */,
 				CF20514A2F578DFB006B71AA /* JournalCard.swift in Sources */,
 				CF13B6372F65C044008D3CE9 /* ChecklistItemWriter.swift in Sources */,
 				CF8D83392F50A4A40092FC98 /* LystariaApp.swift in Sources */,
@@ -1295,10 +1364,12 @@
 				CF8B7F9C2F6C6A35006A7D3B /* BookmarkIconLibrary.swift in Sources */,
 				CF13B6402F65CECB008D3CE9 /* CalendarEventDetailOverlay.swift in Sources */,
 				CF8B7F982F6C507B006A7D3B /* BookmarkWebView.swift in Sources */,
+				CF92D5152F748C2B00174F04 /* PremiumLockModifier.swift in Sources */,
 				CFF7C5AF2F72EA0D00A67EC3 /* Medication.swift in Sources */,
 				CF13B6422F671AA6008D3CE9 /* MoonPhaseCalculator.swift in Sources */,
 				CF8D83342F50A4940092FC98 /* Reminder.swift in Sources */,
 				CF8421BC2F631C090069F12F /* StoredTarot.swift in Sources */,
+				CF92D5112F746E8F00174F04 /* LimitCleanup.swift in Sources */,
 				CF13B65B2F68645C008D3CE9 /* DailyTarotRecord.swift in Sources */,
 				CF8D835A2F5129A50092FC98 /* JournalTabView.swift in Sources */,
 				CF8D838A2F560F700092FC98 /* RemindersView.swift in Sources */,
@@ -1310,6 +1381,7 @@
 				CF8D83362F50A4940092FC98 /* CalendarEvent.swift in Sources */,
 				CF8421B12F61E7570069F12F /* CalendarSyncManager.swift in Sources */,
 				CFF7C5B72F737D4800A67EC3 /* BookNote.swift in Sources */,
+				CFAF69002F76B57400E74833 /* DistractionBubble.swift in Sources */,
 				CF0B8E612F6CB13A00D5D2C8 /* HealthMetricsWriter.swift in Sources */,
 				CF13B67D2F69B7CB008D3CE9 /* HealthFormatting.swift in Sources */,
 				CF84219A2F607B2D0069F12F /* OnboardingTarget.swift in Sources */,
@@ -1321,6 +1393,7 @@
 				CF8B7FB62F6C73AE006A7D3B /* SharedBookmarkInbox.swift in Sources */,
 				CF8B7F792F6B3ADD006A7D3B /* JournalBlockPreviewPage.swift in Sources */,
 				CF0B8E672F6CBD1500D5D2C8 /* LogExerciseIntent.swift in Sources */,
+				CFAF69042F7708D900E74833 /* BookSeries.swift in Sources */,
 				CF8B7F692F6B34DF006A7D3B /* RichBlockTextView.swift in Sources */,
 				CF8B7F6B2F6B3501006A7D3B /* JournalBlockDisplayView.swift in Sources */,
 				CF8B7F902F6C4C1A006A7D3B /* BookmarkCard.swift in Sources */,
@@ -1330,10 +1403,13 @@
 				CF8421BE2F6320590069F12F /* Tarot.swift in Sources */,
 				CF2051482F578D59006B71AA /* JournalEditorSheet.swift in Sources */,
 				CF13B6352F65B582008D3CE9 /* SetDailyIntentionIntent.swift in Sources */,
+				CF92D5172F7565A600174F04 /* PremiumManager.swift in Sources */,
 				CF29FC7E2F6DE7A100EC47F8 /* ReadingSession.swift in Sources */,
 				CF13B6772F69B6FA008D3CE9 /* ExerciseDetailPopupView.swift in Sources */,
 				CF8421C02F6329610069F12F /* DailyHoroscope.swift in Sources */,
+				CF92D5192F75660900174F04 /* PremiumView.swift in Sources */,
 				CF8B7F8E2F6C4BE2006A7D3B /* BookmarksView.swift in Sources */,
+				CFAF69182F7AA67800E74833 /* SymptomLog.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1380,12 +1456,14 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Lystaria Watch Watch App/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Lystaria Watch";
+				INFOPLIST_KEY_NSHealthClinicalHealthRecordsShareUsageDescription = "Lystaria reads your health records for step count and water tracking";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Lystaria reads step count and water intake to show daily wellness progress.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.asteriasmoons.LystariaDev;
-				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = NO;
+				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1418,12 +1496,14 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Lystaria Watch Watch App/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Lystaria Watch";
+				INFOPLIST_KEY_NSHealthClinicalHealthRecordsShareUsageDescription = "Lystaria reads your health records for step count and water tracking";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Lystaria reads step count and water intake to show daily wellness progress.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.asteriasmoons.LystariaDev;
-				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = NO;
+				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1671,6 +1751,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Lystaria/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Lystaria;
+				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Lystaria uses your calendar to sync your reminders and events with Apple Calendar.";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Lystaria saves water intake you log so it appears in Apple Health.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Lystaria reads your step count to display your daily movement progress.";
@@ -1746,6 +1827,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Lystaria/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Lystaria;
+				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Lystaria uses your calendar to sync your reminders and events with Apple Calendar.";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Lystaria saves water intake you log so it appears in Apple Health.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Lystaria reads your step count to display your daily movement progress.";
