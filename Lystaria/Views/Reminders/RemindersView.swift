@@ -496,7 +496,9 @@ struct RemindersView: View {
         if reminder.isRecurring {
             let now = Date()
             // Skip past the just-completed occurrence so we truly advance to the NEXT one.
-            reminder.nextRunAt = ReminderCompute.nextRun(after: now.addingTimeInterval(91), reminder: reminder)
+            // Use max(now, nextRunAt) so completing early still advances past the scheduled time.
+            let base = max(now, reminder.nextRunAt)
+            reminder.nextRunAt = ReminderCompute.nextRun(after: base.addingTimeInterval(91), reminder: reminder)
 
             // Clear acknowledged state so the circle unchecks immediately on re-render.
             reminder.acknowledgedAt = nil

@@ -217,6 +217,10 @@
 		CFAF69152F79ED1900E74833 /* MoonPhaseDetailData.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFAF69142F79ED0F00E74833 /* MoonPhaseDetailData.swift */; };
 		CFAF69182F7AA67800E74833 /* SymptomLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFAF69172F7AA67800E74833 /* SymptomLog.swift */; };
 		CFAF691A2F7AA6D500E74833 /* SymptomLoggerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFAF69192F7AA6CE00E74833 /* SymptomLoggerView.swift */; };
+		CFAF691E2F7C6B3600E74833 /* BookEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFAF691D2F7C6B3200E74833 /* BookEntity.swift */; };
+		CFAF69202F7C6B5500E74833 /* ReadingSessionWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFAF691F2F7C6B4D00E74833 /* ReadingSessionWriter.swift */; };
+		CFAF69222F7C6B7800E74833 /* LogReadingSessionIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFAF69212F7C6B7000E74833 /* LogReadingSessionIntent.swift */; };
+		CFAF69242F7DDAFB00E74833 /* WaterBottlePlanEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFAF69232F7DDAF200E74833 /* WaterBottlePlanEntry.swift */; };
 		CFF7C5AF2F72EA0D00A67EC3 /* Medication.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFF7C5AE2F72EA0800A67EC3 /* Medication.swift */; };
 		CFF7C5B12F72F19300A67EC3 /* MedicationPageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFF7C5B02F72F18900A67EC3 /* MedicationPageView.swift */; };
 		CFF7C5B32F734D8000A67EC3 /* DailyReadingProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFF7C5B22F734D7900A67EC3 /* DailyReadingProgress.swift */; };
@@ -458,6 +462,10 @@
 		CFAF69142F79ED0F00E74833 /* MoonPhaseDetailData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoonPhaseDetailData.swift; sourceTree = "<group>"; };
 		CFAF69172F7AA67800E74833 /* SymptomLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SymptomLog.swift; sourceTree = "<group>"; };
 		CFAF69192F7AA6CE00E74833 /* SymptomLoggerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SymptomLoggerView.swift; sourceTree = "<group>"; };
+		CFAF691D2F7C6B3200E74833 /* BookEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookEntity.swift; sourceTree = "<group>"; };
+		CFAF691F2F7C6B4D00E74833 /* ReadingSessionWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingSessionWriter.swift; sourceTree = "<group>"; };
+		CFAF69212F7C6B7000E74833 /* LogReadingSessionIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogReadingSessionIntent.swift; sourceTree = "<group>"; };
+		CFAF69232F7DDAF200E74833 /* WaterBottlePlanEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaterBottlePlanEntry.swift; sourceTree = "<group>"; };
 		CFF7C5AE2F72EA0800A67EC3 /* Medication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Medication.swift; sourceTree = "<group>"; };
 		CFF7C5B02F72F18900A67EC3 /* MedicationPageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MedicationPageView.swift; sourceTree = "<group>"; };
 		CFF7C5B22F734D7900A67EC3 /* DailyReadingProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyReadingProgress.swift; sourceTree = "<group>"; };
@@ -562,6 +570,7 @@
 		CF13B6212F6441F7008D3CE9 /* Intents */ = {
 			isa = PBXGroup;
 			children = (
+				CFAF69212F7C6B7000E74833 /* LogReadingSessionIntent.swift */,
 				CF0B8E662F6CBD0F00D5D2C8 /* LogExerciseIntent.swift */,
 				CF0B8E622F6CB1AA00D5D2C8 /* LogHealthMetricsIntent.swift */,
 				CF13B6382F65C05E008D3CE9 /* ChecklistItemIntent.swift */,
@@ -577,6 +586,7 @@
 		CF13B6222F644205008D3CE9 /* Writers */ = {
 			isa = PBXGroup;
 			children = (
+				CFAF691F2F7C6B4D00E74833 /* ReadingSessionWriter.swift */,
 				CF0B8E642F6CBCE400D5D2C8 /* ExerciseLogWriter.swift */,
 				CF0B8E602F6CB13200D5D2C8 /* HealthMetricsWriter.swift */,
 				CF13B6362F65C03B008D3CE9 /* ChecklistItemWriter.swift */,
@@ -591,6 +601,7 @@
 		CF13B6252F6442AD008D3CE9 /* Entities */ = {
 			isa = PBXGroup;
 			children = (
+				CFAF691D2F7C6B3200E74833 /* BookEntity.swift */,
 				CF13B67E2F69DCF1008D3CE9 /* ChecklistEntity.swift */,
 				CF13B6262F6442BC008D3CE9 /* JournalBookEntity.swift */,
 			);
@@ -896,6 +907,7 @@
 		CF8D832C2F50A4940092FC98 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				CFAF69232F7DDAF200E74833 /* WaterBottlePlanEntry.swift */,
 				CFAF69172F7AA67800E74833 /* SymptomLog.swift */,
 				CFAF69032F7708D500E74833 /* BookSeries.swift */,
 				CFAF68FF2F76B56E00E74833 /* DistractionBubble.swift */,
@@ -1269,6 +1281,7 @@
 				CF8421C92F638EAD0069F12F /* KanbanView.swift in Sources */,
 				CF13B6242F644268008D3CE9 /* JournalEntryWriter.swift in Sources */,
 				CF8D836E2F53B1170092FC98 /* ReadingStats.swift in Sources */,
+				CFAF69202F7C6B5500E74833 /* ReadingSessionWriter.swift in Sources */,
 				CF13B62F2F65AE26008D3CE9 /* ReadingCheckInWriter.swift in Sources */,
 				CF2051462F578C64006B71AA /* DailyIntentionView.swift in Sources */,
 				CF84217C2F5FA7580069F12F /* HealthKitManager.swift in Sources */,
@@ -1346,6 +1359,7 @@
 				CFF7C5B12F72F19300A67EC3 /* MedicationPageView.swift in Sources */,
 				CF8B7F652F6B346B006A7D3B /* JournalBlockEditorView.swift in Sources */,
 				CF13B62D2F644AD3008D3CE9 /* AddWaterIntent.swift in Sources */,
+				CFAF69222F7C6B7800E74833 /* LogReadingSessionIntent.swift in Sources */,
 				CF8D833F2F50D5EE0092FC98 /* AppState.swift in Sources */,
 				CF8B7F772F6B3AC5006A7D3B /* JournalBlockEditorPage.swift in Sources */,
 				CF0A09D72F5CA7A200401658 /* JournalPromptService.swift in Sources */,
@@ -1355,6 +1369,7 @@
 				CF13B6392F65C064008D3CE9 /* ChecklistItemIntent.swift in Sources */,
 				CF29FC9F2F70AC9300EC47F8 /* Lenormand.swift in Sources */,
 				CF8421832F5FBD8B0069F12F /* WaterHealthKitManager.swift in Sources */,
+				CFAF69242F7DDAFB00E74833 /* WaterBottlePlanEntry.swift in Sources */,
 				CF13B66F2F69B54A008D3CE9 /* AddExercisePopupView.swift in Sources */,
 				CF8421C72F636DD00069F12F /* ToolboxView.swift in Sources */,
 				CF29FC992F70905A00EC47F8 /* HealthWidgetSync.swift in Sources */,
@@ -1389,6 +1404,7 @@
 				CF13B6292F6442F5008D3CE9 /* JournalEntryIntent.swift in Sources */,
 				CF8B7F9A2F6C5F6D006A7D3B /* BookmarkFolderDetailView.swift in Sources */,
 				CF13B67B2F69B779008D3CE9 /* ExerciseLogCard.swift in Sources */,
+				CFAF691E2F7C6B3600E74833 /* BookEntity.swift in Sources */,
 				CF0A09D12F5C8C7400401658 /* BookSummarySheet.swift in Sources */,
 				CF8B7FB62F6C73AE006A7D3B /* SharedBookmarkInbox.swift in Sources */,
 				CF8B7F792F6B3ADD006A7D3B /* JournalBlockPreviewPage.swift in Sources */,
@@ -1783,13 +1799,14 @@
 				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = NO;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				XROS_DEPLOYMENT_TARGET = 26.2;
 			};
 			name = Debug;
@@ -1859,13 +1876,14 @@
 				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = NO;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				XROS_DEPLOYMENT_TARGET = 26.2;
 			};
 			name = Release;

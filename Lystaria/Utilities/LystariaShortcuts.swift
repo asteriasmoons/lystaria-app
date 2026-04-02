@@ -30,15 +30,6 @@ struct LystariaShortcuts: AppShortcutsProvider {
                 systemImageName: "book.closed"
             ),
             AppShortcut(
-                intent: Add8OzIntent(),
-                phrases: [
-                    "Add 8 oz of water in \(.applicationName)",
-                    "Log 8 oz water in \(.applicationName)"
-                ],
-                shortTitle: "Add 8 Fl Oz",
-                systemImageName: "drop.fill"
-            ),
-            AppShortcut(
                 intent: Add20OzIntent(),
                 phrases: [
                     "Add 20 oz of water in \(.applicationName)",
@@ -107,6 +98,16 @@ struct LystariaShortcuts: AppShortcutsProvider {
                 ],
                 shortTitle: "Log Exercise",
                 systemImageName: "figure.strengthtraining.traditional"
+            ),
+            AppShortcut(
+                intent: LogReadingSessionIntent(),
+                phrases: [
+                    "Log reading session in \(.applicationName)",
+                    "Add reading session in \(.applicationName)",
+                    "Track reading session in \(.applicationName)"
+                ],
+                shortTitle: "Log Reading Session",
+                systemImageName: "book.pages"
             )
         ]
     }

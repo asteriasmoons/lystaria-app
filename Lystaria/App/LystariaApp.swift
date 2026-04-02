@@ -39,6 +39,7 @@ struct LystariaApp: App {
             Medication.self,
             SymptomLog.self,
             ExerciseLogEntry.self,
+            WaterBottlePlanEntry.self,
             DailyCompletionSettings.self,
             Book.self,
             BookSeries.self,

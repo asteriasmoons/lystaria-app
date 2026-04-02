@@ -67,6 +67,33 @@ struct MoodLoggerView: View {
         let total = logs.reduce(0.0) { $0 + $1.score }
         return total / Double(logs.count)
     }
+
+    private var averageValence: Double {
+        guard !logs.isEmpty else { return 0.3 }
+
+        let total = logs.reduce(0.0) { $0 + $1.valence }
+        let rawAverage = total / Double(logs.count)
+
+        if abs(rawAverage) >= 0.15 {
+            return rawAverage
+        }
+
+        if let strongestNonZero = logs
+            .map(\.valence)
+            .filter({ abs($0) >= 0.15 })
+            .max(by: { abs($0) < abs($1) }) {
+            return strongestNonZero > 0 ? 0.3 : -0.3
+        }
+
+        let fallbackTone = averageMoodScore >= 3.0 ? 0.3 : -0.3
+        return fallbackTone
+    }
+
+    private var averageIntensity: Double {
+        guard !logs.isEmpty else { return 1 }
+        let total = logs.reduce(0.0) { $0 + $1.intensity }
+        return total / Double(logs.count)
+    }
     
     private var mostPickedMoodKey: String? {
         var stats: [String: (count: Int, latestDate: Date)] = [:]
@@ -198,7 +225,9 @@ struct MoodLoggerView: View {
                         MoodInsightsCard(
                             mostPickedMood: mostPickedMoodKey.map { moodLabel($0) } ?? "No mood yet",
                             mostPickedActivity: mostPickedActivityKey.map { activityLabel($0) } ?? "No activity yet",
-                            averageScore: averageMoodScore
+                            averageScore: averageMoodScore,
+                            averageValence: averageValence,
+                            averageIntensity: averageIntensity
                         )
                     }
 
@@ -689,9 +718,27 @@ private struct MoodInsightsCard: View {
     let mostPickedMood: String
     let mostPickedActivity: String
     let averageScore: Double
+    let averageValence: Double
+    let averageIntensity: Double
 
-    private var averageProgress: Double {
+    private var averageScoreProgress: Double {
         min(max(averageScore / 5.0, 0), 1)
+    }
+
+    private var averageValenceProgress: Double {
+        min(max((averageValence + 3.0) / 6.0, 0), 1)
+    }
+
+    private var averageIntensityProgress: Double {
+        min(max(averageIntensity / 5.0, 0), 1)
+    }
+    
+    private var averageValenceText: String {
+        if averageValence > 0 {
+            return String(format: "+%.1f", averageValence)
+        } else {
+            return String(format: "%.1f", averageValence)
+        }
     }
 
     var body: some View {
@@ -714,20 +761,43 @@ private struct MoodInsightsCard: View {
                     insightBubble(title: "MOST PICKED ACTIVITY", value: mostPickedActivity)
                 }
 
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("Average Mood Score")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(LColors.textSecondary)
-                        Spacer()
-                        Text(String(format: "%.1f / 5", averageScore))
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(LColors.textPrimary)
-                    }
+                VStack(alignment: .leading, spacing: 12) {
+                    insightProgressRow(
+                        title: "Average Score",
+                        valueText: String(format: "%.1f", averageScore),
+                        progress: averageScoreProgress
+                    )
 
-                    ScoreBar(progress: averageProgress)
+                    insightProgressRow(
+                        title: "Emotional Tone",
+                        valueText: averageValenceText,
+                        progress: averageValenceProgress
+                    )
+
+                    insightProgressRow(
+                        title: "Average Intensity",
+                        valueText: String(format: "%.1f", averageIntensity),
+                        progress: averageIntensityProgress
+                    )
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func insightProgressRow(title: String, valueText: String, progress: Double) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(LColors.textSecondary)
+                Spacer()
+                Text(valueText)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(LColors.textPrimary)
+            }
+
+            ScoreBar(progress: progress)
         }
     }
 
@@ -764,9 +834,36 @@ private struct MoodLogCard: View {
     var showsDeleteButton: Bool = false
     var onDelete: (() -> Void)? = nil
 
-    private var percent: Double {
-        // score is 1...5
-        (log.score / 5.0)
+    private var scoreProgress: Double {
+        min(max(log.score / 5.0, 0), 1)
+    }
+
+    private var valenceProgress: Double {
+        min(max((displayValence + 3.0) / 6.0, 0), 1)
+    }
+
+    private var intensityProgress: Double {
+        min(max(log.intensity / 5.0, 0), 1)
+    }
+
+    private var displayValence: Double {
+        if abs(log.valence) >= 0.15 {
+            return log.valence
+        }
+
+        if log.score >= 3.0 {
+            return 0.3
+        } else {
+            return -0.3
+        }
+    }
+
+    private var valenceText: String {
+        if displayValence > 0 {
+            return String(format: "+%.1f", displayValence)
+        } else {
+            return String(format: "%.1f", displayValence)
+        }
     }
 
     var body: some View {
@@ -780,19 +877,24 @@ private struct MoodLogCard: View {
                         .foregroundStyle(LColors.textSecondary)
                 }
 
-                // Score bar
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("Mood score")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(LColors.textSecondary)
-                        Spacer()
-                        Text(String(format: "%.1f / 5", log.score))
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(LColors.textPrimary)
-                    }
+                VStack(alignment: .leading, spacing: 12) {
+                    logMetricRow(
+                        title: "Mood Score",
+                        valueText: String(format: "%.1f", log.score),
+                        progress: scoreProgress
+                    )
 
-                    ScoreBar(progress: percent)
+                    logMetricRow(
+                        title: "Emotional Tone",
+                        valueText: valenceText,
+                        progress: valenceProgress
+                    )
+
+                    logMetricRow(
+                        title: "Intensity",
+                        valueText: String(format: "%.1f", log.intensity),
+                        progress: intensityProgress
+                    )
                 }
 
                 if !log.moods.isEmpty {
@@ -1058,3 +1160,20 @@ private struct MoodStreakCard: View {
         )
     }
 }
+
+    @ViewBuilder
+    private func logMetricRow(title: String, valueText: String, progress: Double) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(LColors.textSecondary)
+                Spacer()
+                Text(valueText)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(LColors.textPrimary)
+            }
+
+            ScoreBar(progress: progress)
+        }
+    }

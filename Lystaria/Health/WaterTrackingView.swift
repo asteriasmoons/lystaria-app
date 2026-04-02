@@ -10,12 +10,15 @@ import WatchConnectivity
 
 struct WaterTrackingView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var water = WaterHealthKitManager.shared
     @StateObject private var limits = LimitManager.shared
 
     @Query(
         filter: #Predicate<DailyCompletionSettings> { $0.key == "default" }
     ) private var settingsResults: [DailyCompletionSettings]
+
+    @Query private var waterBottlePlans: [WaterBottlePlanEntry]
 
     private var settings: DailyCompletionSettings {
         if let existing = settingsResults.first { return existing }
@@ -28,21 +31,77 @@ struct WaterTrackingView: View {
         settings.waterGoalFlOz
     }
 
+    private var todayWaterPlan: WaterBottlePlanEntry {
+        let todayKey = WaterBottlePlanEntry.key(for: Date(), calendar: calendar)
+
+        if let existing = waterBottlePlans.first(where: { $0.key == todayKey }) {
+            return existing
+        }
+
+        let entry = WaterBottlePlanEntry(
+            key: todayKey,
+            date: calendar.startOfDay(for: Date())
+        )
+        modelContext.insert(entry)
+        return entry
+    }
+
+    private var plannedBottlesToday: Int {
+        todayWaterPlan.plannedBottles
+    }
+
+    private var extraBottlesToday: Int {
+        todayWaterPlan.extraBottles
+    }
+
+    private var sortedWaterPlanningHistory: [WaterBottlePlanEntry] {
+        let sorted = waterBottlePlans.sorted {
+            if $0.key == $1.key {
+                return $0.updatedAt > $1.updatedAt
+            }
+            return $0.date > $1.date
+        }
+
+        var seenKeys = Set<String>()
+        var unique: [WaterBottlePlanEntry] = []
+
+        for entry in sorted {
+            guard !seenKeys.contains(entry.key) else { continue }
+            seenKeys.insert(entry.key)
+            unique.append(entry)
+        }
+
+        return unique
+    }
+    
+    private var displayedWaterPlanningHistory: [WaterBottlePlanEntry] {
+        Array(sortedWaterPlanningHistory.prefix(visibleWaterHistoryCount))
+    }
+
     @State private var showCustomAmountPopup = false
     @State private var customAmountText = ""
     @State private var showGoalPopup = false
     @State private var goalText = ""
+    @State private var showPlanPopup = false
+    @State private var showExtraPopup = false
+    @State private var plannedBottleText = ""
+    @State private var extraBottleText = ""
+    @State private var dayRefreshID = UUID()
 
     @State private var displayedMonth = Date()
     @State private var reachedGoalDates: Set<String> = []
     @State private var selectedDate: Date?
     @State private var selectedDayWater: Double = 0
+    @State private var showWaterPlanningHistoryPopup = false
+    @State private var visibleWaterHistoryCount = 4
 
     @FocusState private var focusedField: PopupField?
 
     private enum PopupField {
         case customAmount
         case goal
+        case plannedBottles
+        case extraBottles
     }
 
     private var currentAmount: Double {
@@ -196,6 +255,92 @@ struct WaterTrackingView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     GradientTitle(text: "Water", font: .title.bold())
                         .padding(.top, 24)
+
+                    GlassCard {
+                        VStack(alignment: .leading, spacing: 18) {
+                            HStack(alignment: .center) {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    HStack(spacing: 8) {
+                                        Image("bottlefill")
+                                            .renderingMode(.template)
+                                            .resizable()
+                                            .scaledToFit()
+                                            .frame(width: 20, height: 20)
+                                            .foregroundColor(.white)
+
+                                        Text("Water Planning")
+                                            .font(.system(size: 18, weight: .semibold))
+                                            .foregroundStyle(LColors.textPrimary)
+                                    }
+
+                                    Text("Track planned vs extra bottles for today")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundStyle(LColors.textSecondary)
+                                }
+
+                                Spacer()
+                            }
+
+                            HStack(spacing: 12) {
+                                planningBubble(title: "Planned", value: plannedBottlesToday)
+                                planningBubble(title: "Extra", value: extraBottlesToday)
+                            }
+
+                            HStack(spacing: 10) {
+                                Button {
+                                    plannedBottleText = plannedBottlesToday == 0 ? "" : String(plannedBottlesToday)
+                                    showPlanPopup = true
+                                } label: {
+                                    HStack(spacing: 8) {
+                                        Image("wavyplus")
+                                            .renderingMode(.template)
+                                            .resizable()
+                                            .scaledToFit()
+                                            .frame(width: 16, height: 16)
+                                            .foregroundStyle(.white)
+
+                                        Text("Plan")
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundStyle(.white)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 14)
+                                    .background(LGradients.blue)
+                                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                                }
+                                .buttonStyle(.plain)
+
+                                Button {
+                                    extraBottleText = extraBottlesToday == 0 ? "" : String(extraBottlesToday)
+                                    showExtraPopup = true
+                                } label: {
+                                    HStack(spacing: 8) {
+                                        Image("wavyplus")
+                                            .renderingMode(.template)
+                                            .resizable()
+                                            .scaledToFit()
+                                            .frame(width: 16, height: 16)
+                                            .foregroundStyle(.white)
+
+                                        Text("Extra")
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundStyle(.white)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 14)
+                                    .background(LGradients.blue)
+                                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        visibleWaterHistoryCount = 4
+                        showWaterPlanningHistoryPopup = true
+                    }
+                    .id(dayRefreshID)
 
                     GlassCard {
                         VStack(alignment: .leading, spacing: 18) {
@@ -521,6 +666,186 @@ struct WaterTrackingView: View {
                 .zIndex(20)
             }
 
+            if showPlanPopup {
+                Color.black.opacity(0.35)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        focusedField = nil
+                        showPlanPopup = false
+                    }
+
+                VStack {
+                    Spacer()
+                    LystariaOverlayPopup(
+                        onClose: {
+                            focusedField = nil
+                            showPlanPopup = false
+                        },
+                        width: 540,
+                        heightRatio: 0.70,
+                        header: {
+                            GradientTitle(text: "Planned Bottles", font: .title2.bold())
+                        },
+                        content: {
+                            TextField("Bottle count", text: $plannedBottleText)
+#if os(iOS) || os(visionOS)
+                                .keyboardType(.numberPad)
+#endif
+                                .focused($focusedField, equals: .plannedBottles)
+                                .textFieldStyle(.plain)
+                                .foregroundStyle(LColors.textPrimary)
+                                .padding(12)
+                                .background(Color.white.opacity(0.08))
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                                .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                        },
+                        footer: {
+                            HStack(spacing: 10) {
+                                LButton(title: "Close", style: .secondary) {
+                                    focusedField = nil
+                                    showPlanPopup = false
+                                }
+
+                                LButton(title: "Save", style: .gradient) {
+                                    savePlannedBottles()
+                                }
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 16)
+                        }
+                    )
+                    Spacer()
+                }
+                .padding(.horizontal, 24)
+                .transition(.scale.combined(with: .opacity))
+                .zIndex(21)
+            }
+
+            if showExtraPopup {
+                Color.black.opacity(0.35)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        focusedField = nil
+                        showExtraPopup = false
+                    }
+
+                VStack {
+                    Spacer()
+                    LystariaOverlayPopup(
+                        onClose: {
+                            focusedField = nil
+                            showExtraPopup = false
+                        },
+                        width: 540,
+                        heightRatio: 0.70,
+                        header: {
+                            GradientTitle(text: "Extra Bottles", font: .title2.bold())
+                        },
+                        content: {
+                            TextField("Bottle count", text: $extraBottleText)
+#if os(iOS) || os(visionOS)
+                                .keyboardType(.numberPad)
+#endif
+                                .focused($focusedField, equals: .extraBottles)
+                                .textFieldStyle(.plain)
+                                .foregroundStyle(LColors.textPrimary)
+                                .padding(12)
+                                .background(Color.white.opacity(0.08))
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                                .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 8)
+                        },
+                        footer: {
+                            HStack(spacing: 10) {
+                                LButton(title: "Close", style: .secondary) {
+                                    focusedField = nil
+                                    showExtraPopup = false
+                                }
+
+                                LButton(title: "Save", style: .gradient) {
+                                    saveExtraBottles()
+                                }
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 16)
+                        }
+                    )
+                    Spacer()
+                }
+                .padding(.horizontal, 24)
+                .transition(.scale.combined(with: .opacity))
+                .zIndex(21)
+            }
+
+            if showWaterPlanningHistoryPopup {
+                Color.black.opacity(0.35)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        visibleWaterHistoryCount = 4
+                        showWaterPlanningHistoryPopup = false
+                    }
+
+                VStack {
+                    Spacer()
+                    LystariaOverlayPopup(
+                        onClose: {
+                            visibleWaterHistoryCount = 4
+                            showWaterPlanningHistoryPopup = false
+                        },
+                        width: 540,
+                        heightRatio: 0.70,
+                        header: {
+                            GradientTitle(text: "Water Planning History", font: .title2.bold())
+                        },
+                        content: {
+                            ScrollView {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    if sortedWaterPlanningHistory.isEmpty {
+                                        Text("No water planning history yet")
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundStyle(LColors.textSecondary)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                    } else {
+                                        ForEach(displayedWaterPlanningHistory) { entry in
+                                            waterPlanningHistoryCard(entry: entry)
+                                        }
+
+                                        if sortedWaterPlanningHistory.count > visibleWaterHistoryCount {
+                                            HStack {
+                                                Spacer()
+                                                LoadMoreButton {
+                                                    visibleWaterHistoryCount += 4
+                                                }
+                                                Spacer()
+                                            }
+                                        }
+                                    }
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 8)
+                            }
+                        },
+                        footer: {
+                            HStack(spacing: 10) {
+                                LButton(title: "Close", style: .gradient) {
+                                    visibleWaterHistoryCount = 4
+                                    showWaterPlanningHistoryPopup = false
+                                }
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 16)
+                        }
+                    )
+                    Spacer()
+                }
+                .padding(.horizontal, 24)
+                .transition(.scale.combined(with: .opacity))
+                .zIndex(22)
+            }
+
             if showGoalPopup {
                 Color.black.opacity(0.35)
                     .ignoresSafeArea()
@@ -609,6 +934,16 @@ struct WaterTrackingView: View {
             Task { await recalculateReachedGoalDates() }
             HealthWidgetSync.syncWater(waterToday: newValue, waterGoal: amountGoal)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
+            dayRefreshID = UUID()
+            plannedBottleText = ""
+            extraBottleText = ""
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active {
+                dayRefreshID = UUID()
+            }
+        }
         .onChange(of: showCustomAmountPopup) { _, isShowing in
             if isShowing {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { focusedField = .customAmount }
@@ -623,6 +958,20 @@ struct WaterTrackingView: View {
                 focusedField = nil
             }
         }
+        .onChange(of: showPlanPopup) { _, isShowing in
+            if isShowing {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { focusedField = .plannedBottles }
+            } else if focusedField == .plannedBottles {
+                focusedField = nil
+            }
+        }
+        .onChange(of: showExtraPopup) { _, isShowing in
+            if isShowing {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { focusedField = .extraBottles }
+            } else if focusedField == .extraBottles {
+                focusedField = nil
+            }
+        }
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
@@ -631,6 +980,77 @@ struct WaterTrackingView: View {
         }
         .animation(.spring(response: 0.32, dampingFraction: 0.82), value: showCustomAmountPopup)
         .animation(.spring(response: 0.32, dampingFraction: 0.82), value: showGoalPopup)
+        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: showPlanPopup)
+        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: showExtraPopup)
+        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: showWaterPlanningHistoryPopup)
+    }
+
+    private func savePlannedBottles() {
+        let cleaned = plannedBottleText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = Int(cleaned) ?? 0
+
+        todayWaterPlan.plannedBottles = max(0, value)
+        todayWaterPlan.touchUpdated()
+        try? modelContext.save()
+
+        focusedField = nil
+        showPlanPopup = false
+    }
+
+    private func saveExtraBottles() {
+        let cleaned = extraBottleText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = Int(cleaned) ?? 0
+
+        todayWaterPlan.extraBottles = max(0, value)
+        todayWaterPlan.touchUpdated()
+        try? modelContext.save()
+
+        focusedField = nil
+        showExtraPopup = false
+    }
+
+    private func waterPlanningHistoryCard(entry: WaterBottlePlanEntry) -> some View {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM d, yyyy"
+
+        return VStack(alignment: .leading, spacing: 10) {
+            Text(formatter.string(from: entry.date))
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white)
+
+            HStack(spacing: 10) {
+                planningBubble(title: "Planned", value: entry.plannedBottles)
+                planningBubble(title: "Extra", value: entry.extraBottles)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(LColors.glassBorder, lineWidth: 1)
+        )
+    }
+
+    private func planningBubble(title: String, value: Int) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(LColors.textSecondary)
+
+            Text("\(value) bottles")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(.white)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(LColors.glassBorder, lineWidth: 1)
+        )
     }
 
     private struct CalendarDayItem: Identifiable {
