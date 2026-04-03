@@ -18,7 +18,7 @@ final class HoroscopeService {
 
     private init() {}
 
-    private let baseURL = "https://lystaria-api-production.up.railway.app"
+    private let baseURL = "https://lystaria-api.fly.dev"
 
     private struct HoroscopeRequest: Codable {
         let sign: String

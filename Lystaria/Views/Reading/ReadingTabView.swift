@@ -31,6 +31,7 @@ struct ReadingTabView: View {
     @State private var editingBook: Book? = nil
     @State private var visibleBookCount: Int = 4
     @State private var showBookmarksView = false
+    @State private var showNotesView = false
     @State private var showingReadingGoalSheet = false
     @State private var editingReadingGoal: ReadingGoal? = nil
     @State private var showingReadingGoalProgressPopup = false
@@ -275,6 +276,25 @@ struct ReadingTabView: View {
                 }
                 .buttonStyle(.plain)
                 .onboardingTarget("bookmarkIcon")
+                
+                Button {
+                    showNotesView = true
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.08))
+                            .overlay(
+                                Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                            .frame(width: 34, height: 34)
+                        Image("flipbook")
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 16, height: 16)
+                            .foregroundColor(.white)
+                    }
+                }
             }
             .padding(.top, 24)
             
@@ -340,7 +360,10 @@ struct ReadingTabView: View {
                 .navigationDestination(isPresented: $showBookmarksView) {
                     BookmarksView()
                 }
-        }
+                .navigationDestination(isPresented: $showNotesView) {
+                    NotesView()
+                }
+          }
     }
 
     // Extracted to break the modifier chain that was causing the type-checker timeout.
@@ -3226,6 +3249,7 @@ struct BookDetailSheet: View {
     var onShowSeries: (() -> Void)? = nil
 
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var appState: AppState
     @State private var selectedPhotoItem: PhotosPickerItem? = nil
 
     private var closeAction: () -> Void { onClose ?? {} }
@@ -3571,6 +3595,7 @@ struct BookDetailSheet: View {
                 HStack {
                     GradientTitle(text: "Book Details", font: .title2.bold())
                     Spacer()
+                    // EXISTING icon button
                     Button { closeAction() } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.title2)

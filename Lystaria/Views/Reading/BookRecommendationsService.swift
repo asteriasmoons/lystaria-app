@@ -55,7 +55,7 @@ final class BookRecommendationsService {
     private init() {}
 
     // Replace with your deployed server URL later.
-    private let baseURL = "https://lystaria-api-production.up.railway.app"
+    private let baseURL = "https://lystaria-api.fly.dev"
 
     func generateRecommendations(genre: String) async throws -> [BookRecommendationItem] {
         let cleanGenre = genre.trimmingCharacters(in: .whitespacesAndNewlines)

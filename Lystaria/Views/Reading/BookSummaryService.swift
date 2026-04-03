@@ -52,7 +52,7 @@ final class BookSummaryService {
     // Replace this with your deployed API URL when ready.
     // For simulator testing against your local machine, localhost works.
     // For a real device, localhost will NOT work.
-    private let baseURL = "https://lystaria-api-production.up.railway.app"
+    private let baseURL = "https://lystaria-api.fly.dev"
 
     func generateSummary(title: String, author: String?) async throws -> BookSummaryResponse {
         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)

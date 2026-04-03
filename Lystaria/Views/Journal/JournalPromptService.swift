@@ -14,29 +14,8 @@ struct JournalPromptResponse: Decodable {
     let dateKey: String
 }
 
-private struct GroqChatRequest: Encodable {
-    struct Message: Encodable {
-        let role: String
-        let content: String
-    }
-
-    let model: String
-    let messages: [Message]
-    let temperature: Double
-    let max_tokens: Int
-}
-
-private struct GroqChatResponse: Decodable {
-    struct Choice: Decodable {
-        struct Message: Decodable {
-            let role: String?
-            let content: String?
-        }
-
-        let message: Message
-    }
-
-    let choices: [Choice]
+private struct JournalPromptRequest: Encodable {
+    let userId: String
 }
 
 final class JournalPromptService {
@@ -45,20 +24,9 @@ final class JournalPromptService {
 
     private init() {}
 
+    private let baseURL = "https://lystaria-api.fly.dev"
+
     func generatePrompt(userId: String, modelContext: ModelContext) async throws -> JournalPromptResponse {
-        guard let apiKey = Bundle.main.object(forInfoDictionaryKey: "GROQ_API_KEY") as? String,
-              !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw NSError(
-                domain: "JournalPromptService",
-                code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "Missing GROQ_API_KEY in Info.plist or build configuration."]
-            )
-        }
-
-        guard let url = URL(string: "https://api.groq.com/openai/v1/chat/completions") else {
-            throw URLError(.badURL)
-        }
-
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -90,25 +58,14 @@ final class JournalPromptService {
             )
         }
 
-        let systemPrompt = "You create one emotionally intelligent, thoughtful journal prompt at a time. Return only the prompt text itself. Do not add numbering, quotation marks, titles, or extra commentary. The prompt should feel reflective, warm, and clear."
-
-        let userPrompt = "Generate one original journal prompt for a personal journaling app user. Make it introspective, emotionally meaningful, and suitable for general self-reflection."
-
-        let payload = GroqChatRequest(
-            model: "llama-3.3-70b-versatile",
-            messages: [
-                .init(role: "system", content: systemPrompt),
-                .init(role: "user", content: userPrompt)
-            ],
-            temperature: 0.9,
-            max_tokens: 120
-        )
+        guard let url = URL(string: "\(baseURL)/api/journal/prompt") else {
+            throw URLError(.badURL)
+        }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.httpBody = try JSONEncoder().encode(payload)
+        request.httpBody = try JSONEncoder().encode(JournalPromptRequest(userId: userId))
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -125,11 +82,10 @@ final class JournalPromptService {
             )
         }
 
-        let decoded = try JSONDecoder().decode(GroqChatResponse.self, from: data)
-        let prompt = decoded.choices.first?.message.content?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let decoded = try JSONDecoder().decode(JournalPromptResponse.self, from: data)
+        let prompt = decoded.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        guard let prompt, !prompt.isEmpty else {
+        guard !prompt.isEmpty else {
             throw NSError(
                 domain: "JournalPromptService",
                 code: -2,
@@ -143,8 +99,8 @@ final class JournalPromptService {
 
         return JournalPromptResponse(
             prompt: prompt,
-            remaining: max(0, 3 - usageRecord.usedCount),
-            dateKey: todayDateKey
+            remaining: decoded.remaining,
+            dateKey: decoded.dateKey
         )
     }
 }
