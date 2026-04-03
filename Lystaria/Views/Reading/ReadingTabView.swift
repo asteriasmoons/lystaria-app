@@ -295,6 +295,8 @@ struct ReadingTabView: View {
                             .foregroundColor(.white)
                     }
                 }
+                .buttonStyle(.plain)
+                .onboardingTarget("notesIcon")
             }
             .padding(.top, 24)
             

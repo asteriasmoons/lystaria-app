@@ -11,6 +11,8 @@ import SwiftData
 struct MedicationPageView: View {
     @Environment(\.modelContext) private var modelContext
     @StateObject private var limits = LimitManager.shared
+    // Onboarding for hidden header icons
+    @StateObject private var onboarding = OnboardingManager()
 
     @Query(sort: \Medication.updatedAt, order: .reverse)
     private var medications: [Medication]
@@ -140,6 +142,17 @@ struct MedicationPageView: View {
             deleteMedicationConfirm
             deleteHistoryConfirm
         }
+        .overlayPreferenceValue(OnboardingTargetKey.self) { anchors in
+            ZStack {
+                OnboardingOverlay(anchors: anchors)
+                    .environmentObject(onboarding)
+            }
+            .task(id: anchors.count) {
+                if anchors.count > 0 {
+                    onboarding.start(page: OnboardingPages.medicine)
+                }
+            }
+        }
     }
 
     // MARK: - Header
@@ -171,6 +184,7 @@ struct MedicationPageView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .onboardingTarget("starIcon")
 
                 Button {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {

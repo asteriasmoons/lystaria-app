@@ -84,7 +84,12 @@ struct OnboardingPages {
                 targetID: "bookmarkIcon",
                 title: "Bookmarks",
                 message: "Find and save links to folders or the inbox in the Bookmarks manager. You can also add them through the share sheet."
-                )
+                ),
+            OnboardingStep(
+                targetID: "notesIcon",
+                title: "Sticky Notes",
+                message: "Create colorful sticky notes in the app and view them. Pick your own color, pin or favorite your note and filter them by views too."
+               )
             ]
         )
     static let health = OnboardingPage(
@@ -97,4 +102,14 @@ struct OnboardingPages {
             )
         ]
     )
+  static let medicine = OnboardingPage(
+    pageID: "onboarding_medicine",
+    steps: [
+        OnboardingStep(
+            targetID: "starIcon",
+            title: "Symptom Tracker",
+            message: "Track all of your symptoms on this page. Log when you have a headache, feel nauseous or anything else you need to keep track of. Displayed nicely on a card view."
+        )
+     ]
+   )
 }
