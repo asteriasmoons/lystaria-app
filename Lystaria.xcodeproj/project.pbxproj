@@ -330,7 +330,6 @@
 		CF13B67A2F69B773008D3CE9 /* ExerciseLogCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseLogCard.swift; sourceTree = "<group>"; };
 		CF13B67C2F69B7C5008D3CE9 /* HealthFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthFormatting.swift; sourceTree = "<group>"; };
 		CF13B67E2F69DCF1008D3CE9 /* ChecklistEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChecklistEntity.swift; sourceTree = "<group>"; };
-		CF13B6802F6A28B6008D3CE9 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		CF13B6822F6A2DF9008D3CE9 /* JournalPromptUsage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalPromptUsage.swift; sourceTree = "<group>"; };
 		CF20513D2F5787D9006B71AA /* JournalBook.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalBook.swift; sourceTree = "<group>"; };
 		CF20513F2F5788C6006B71AA /* JournalBookEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalBookEditorSheet.swift; sourceTree = "<group>"; };
@@ -662,7 +661,6 @@
 				CF92D5612F7591FD00174F04 /* DailyCompletionArcHelper.swift */,
 				CF8B7F822F6B738D006A7D3B /* SelfCarePointsManager.swift */,
 				CF8B7F5F2F6B0586006A7D3B /* BodyStateHealthKitManager.swift */,
-				CF13B6802F6A28B6008D3CE9 /* Secrets.xcconfig */,
 				CF13B6672F69B1C2008D3CE9 /* ExerciseHealthKitManager.swift */,
 				CF13B6652F69B199008D3CE9 /* HealthMetricsHealthKitManager.swift */,
 				CF13B63A2F65C703008D3CE9 /* LocationPickerManager.swift */,
@@ -1753,7 +1751,6 @@
 		};
 		CF41A59F2F4DF57100C96018 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = CF13B6802F6A28B6008D3CE9 /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -1829,7 +1826,6 @@
 		};
 		CF41A5A02F4DF57100C96018 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = CF13B6802F6A28B6008D3CE9 /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
