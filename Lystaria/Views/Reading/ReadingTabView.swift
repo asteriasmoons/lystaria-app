@@ -4,6 +4,8 @@
 import SwiftUI
 import SwiftData
 import PhotosUI
+import Combine
+import ActivityKit
 
 // Cross-platform: numeric keyboard only exists on iOS/visionOS
 extension View {
@@ -25,6 +27,7 @@ struct ReadingTabView: View {
     @Query(sort: \ReadingGoal.updatedAt, order: .reverse) private var readingGoals: [ReadingGoal]
     @Query(sort: \ReadingSession.sessionDate, order: .reverse) private var readingSessions: [ReadingSession]
     @Query(sort: \WeeklyReadingSnapshot.startDate, order: .reverse) private var weeklyReadingSnapshots: [WeeklyReadingSnapshot]
+    @Query(sort: \ReadingPointsEntry.date, order: .reverse) private var readingPointsEntries: [ReadingPointsEntry]
     @EnvironmentObject private var appState: AppState
     
     @State private var showAddBook = false
@@ -50,12 +53,16 @@ struct ReadingTabView: View {
     @State private var showSummary = true
     @State private var showBookSummaryPopup = false
     @State private var showBookRecommendationsPopup = false
+    @State private var showReadingTimerSheet = false
     @State private var tagFilter: String? = nil
     @State private var selectedStatus: BookStatus? = nil
     
     @State private var loggingSessionForBook: Book? = nil
     @State private var selectedBookForDetails: Book? = nil
     @State private var showingSessionHistoryForBook: Book? = nil
+    
+    @State private var showingBookPointsPopup: Bool = false
+    @State private var selectedBookForPointsPopup: Book? = nil
     // Onboarding for hidden header icons
     @StateObject private var onboarding = OnboardingManager()
     
@@ -99,6 +106,23 @@ struct ReadingTabView: View {
         alreadyCheckedInToday
         ? "You already protected your streak today."
         : "Check in today to keep your streak going."
+    }
+
+    private var currentUserPointsEntries: [ReadingPointsEntry] {
+        guard let currentUserId else { return [] }
+        return readingPointsEntries.filter { $0.userId == currentUserId }
+    }
+
+    private var totalReadingPoints: Int {
+        currentUserPointsEntries.reduce(0) { $0 + max($1.pointsEarned, 0) }
+    }
+
+    private var totalReadingPointsMinutes: Int {
+        currentUserPointsEntries.reduce(0) { $0 + max($1.minutesRead, 0) }
+    }
+
+    private var totalReadingPointsSessions: Int {
+        currentUserPointsEntries.count
     }
     
     private var currentGoal: ReadingGoal? {
@@ -345,6 +369,24 @@ struct ReadingTabView: View {
             }
             .buttonStyle(.plain)
             
+            Button {
+                showReadingTimerSheet = true
+                showBookSummaryPopup = false
+                showBookRecommendationsPopup = false
+            } label: {
+                Text("Timer")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(LColors.textPrimary)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 10)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(Capsule())
+                    .overlay(
+                        Capsule().stroke(LColors.glassBorder, lineWidth: 1)
+                    )
+            }
+            .buttonStyle(.plain)
+            
             Spacer()
         }
     }
@@ -365,7 +407,14 @@ struct ReadingTabView: View {
                 .navigationDestination(isPresented: $showNotesView) {
                     NotesView()
                 }
-          }
+        }
+        .sheet(isPresented: $showReadingTimerSheet) {
+            ReadingTimerSheet(isPresented: $showReadingTimerSheet)
+                .preferredColorScheme(.dark)
+        }
+        .onOpenURL { url in
+            handleReadingDeepLink(url)
+        }
     }
 
     // Extracted to break the modifier chain that was causing the type-checker timeout.
@@ -459,6 +508,10 @@ struct ReadingTabView: View {
                     onShowSeries: {
                         selectedSeriesForPopup = book.series
                         showingSeriesPopup = true
+                    },
+                    onShowPoints: {
+                        selectedBookForPointsPopup = book
+                        showingBookPointsPopup = true
                     }
                 )
                 .preferredColorScheme(.dark)
@@ -550,11 +603,25 @@ struct ReadingTabView: View {
                         selectedSeriesForPopup = nil
                     }
                 )
-                .preferredColorScheme(.dark)
+                .environment(\.colorScheme, .dark)
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
                 .zIndex(120)
             }
+
+            if showingBookPointsPopup, let book = selectedBookForPointsPopup {
+                BookPointsPopup(
+                    book: book,
+                    onClose: {
+                        showingBookPointsPopup = false
+                        selectedBookForPointsPopup = nil
+                    }
+                )
+                .environment(\.colorScheme, .dark)
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                .zIndex(121)
+            }
         }
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showingBookPointsPopup)
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showingBookNotesPopup)
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showingAddBookNotePopup)
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: selectedBookNote != nil)
@@ -602,19 +669,19 @@ struct ReadingTabView: View {
                                 )
                         }
                         
-                        HStack(spacing: 14) {
-                            VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 10) {
+                            VStack(alignment: .leading, spacing: 8) {
                                 Text("CURRENT STREAK")
-                                    .font(.system(size: 12, weight: .bold))
+                                    .font(.system(size: 11, weight: .bold))
                                     .foregroundStyle(LColors.textSecondary)
                                     .tracking(0.8)
-                                
+
                                 Text("\(streakDays)")
-                                    .font(.system(size: 44, weight: .black))
+                                    .font(.system(size: 28, weight: .black))
                                     .foregroundStyle(LColors.textPrimary)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(16)
+                            .padding(12)
                             .background(LColors.glassSurface)
                             .clipShape(RoundedRectangle(cornerRadius: 16))
                             .overlay(
@@ -622,18 +689,18 @@ struct ReadingTabView: View {
                                     .stroke(LColors.glassBorder, lineWidth: 1)
                             )
                             
-                            VStack(alignment: .leading, spacing: 10) {
+                            VStack(alignment: .leading, spacing: 8) {
                                 Text("BEST DAYS")
-                                    .font(.system(size: 12, weight: .bold))
+                                    .font(.system(size: 11, weight: .bold))
                                     .foregroundStyle(LColors.textSecondary)
                                     .tracking(0.8)
-                                
+
                                 Text("\(bestStreakDays)")
-                                    .font(.system(size: 44, weight: .black))
+                                    .font(.system(size: 28, weight: .black))
                                     .foregroundStyle(LColors.textPrimary)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(16)
+                            .padding(12)
                             .background(LColors.glassSurface)
                             .clipShape(RoundedRectangle(cornerRadius: 16))
                             .overlay(
@@ -712,6 +779,77 @@ struct ReadingTabView: View {
                             }
                             .buttonStyle(.plain)
                             
+                            Spacer()
+                        }
+                    }
+                }
+
+                GlassCard {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(alignment: .center, spacing: 12) {
+                            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                                Image("trophyfill")
+                                    .renderingMode(.template)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 24, height: 24)
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    GradientTitle(text: "Reading Points", font: .system(size: 14, weight: .bold))
+                                    Text("Earned through reading timer sessions")
+                                        .font(.subheadline)
+                                        .foregroundStyle(LColors.textSecondary)
+                                }
+                            }
+
+                            Spacer()
+                        }
+
+                        HStack(spacing: 10) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("TOTAL POINTS")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundStyle(LColors.textSecondary)
+                                    .tracking(0.8)
+
+                                Text("\(totalReadingPoints)")
+                                    .font(.system(size: 28, weight: .black))
+                                    .foregroundStyle(LColors.textPrimary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(12)
+                            .background(LColors.glassSurface)
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("MINUTES READ")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundStyle(LColors.textSecondary)
+                                    .tracking(0.8)
+
+                                Text("\(totalReadingPointsMinutes)")
+                                    .font(.system(size: 28, weight: .black))
+                                    .foregroundStyle(LColors.textPrimary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(12)
+                            .background(LColors.glassSurface)
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                        }
+
+                        HStack(spacing: 10) {
+                            Text("Sessions logged: \(totalReadingPointsSessions)")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(LColors.textSecondary)
+
                             Spacer()
                         }
                     }
@@ -1264,6 +1402,14 @@ struct ReadingTabView: View {
         }
     }
     
+    private func handleReadingDeepLink(_ url: URL) {
+        guard url.scheme?.lowercased() == "lystaria" else { return }
+        guard url.host?.lowercased() == "reading-timer" else { return }
+
+        DispatchQueue.main.async {
+            showReadingTimerSheet = true
+        }
+    }
     
     private func syncBestReadingStreakIfNeeded() {
         guard let record = currentStats else { return }
@@ -1481,6 +1627,551 @@ struct ReadingTabView: View {
         } catch {
             print("[ReadingTabView] Failed to ensure ReadingStats record: \(error)")
         }
+    }
+}
+
+struct ReadingTimerSheet: View {
+    @Binding var isPresented: Bool
+    @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var appState: AppState
+    @Environment(\.scenePhase) private var scenePhase
+    @Query(sort: \Book.updatedAt, order: .reverse) private var books: [Book]
+
+    @State private var selectedPresetMinutes: Int = 20
+    @State private var customMinutesText: String = ""
+    @State private var useCustomTime: Bool = false
+    @State private var totalSeconds: Int = 20 * 60
+    @State private var remainingSeconds: Int = 20 * 60
+    @State private var isRunning: Bool = false
+    @State private var timerCancellable: AnyCancellable? = nil
+    @FocusState private var isCustomMinutesFocused: Bool
+    @State private var selectedBookPersistentIDString: String = ""
+    @State private var liveActivity: Activity<ReadingTimerActivityAttributes>? = nil
+    @State private var didFinalizeCurrentSession: Bool = false
+    @State private var timerStartedAt: Date? = nil
+
+    private let presetOptions: [Int] = [10, 15, 20, 30, 45, 60]
+    
+    private var currentUserId: String? {
+        appState.currentAppleUserId
+    }
+
+    private var readingBooks: [Book] {
+        books
+            .filter { $0.status == .reading }
+            .sorted { lhs, rhs in
+                lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+            }
+    }
+
+    private var selectedBook: Book? {
+        readingBooks.first {
+            String(describing: $0.persistentModelID) == selectedBookPersistentIDString
+        }
+    }
+
+    private var canStartTimer: Bool {
+        selectedBook != nil && resolvedMinutes > 0
+    }
+
+    private var resolvedMinutes: Int {
+        if useCustomTime {
+            let value = Int(customMinutesText.filter { $0.isNumber }) ?? 0
+            return max(value, 1)
+        }
+        return max(selectedPresetMinutes, 1)
+    }
+
+    private var progressFraction: Double {
+        guard totalSeconds > 0 else { return 0 }
+        return min(max(Double(remainingSeconds) / Double(totalSeconds), 0), 1)
+    }
+
+    private var timeDisplay: String {
+        let minutes = remainingSeconds / 60
+        let seconds = remainingSeconds % 60
+        return String(format: "%02d:%02d", minutes, seconds)
+    }
+
+    private var durationLabel: String {
+        "\(resolvedMinutes) min"
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                LystariaBackground()
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        isCustomMinutesFocused = false
+                    }
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        GlassCard {
+                            VStack(alignment: .leading, spacing: 16) {
+                                HStack {
+                                    GradientTitle(text: "Reading Timer", font: .title2.bold())
+                                    Spacer()
+                                    Button {
+                                        finalizeCurrentSessionIfNeeded()
+                                        stopTimer()
+                                        Task {
+                                            await endLiveActivity()
+                                        }
+                                        isPresented = false
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .font(.title2)
+                                            .foregroundStyle(LColors.textSecondary)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+
+                                Text("Set a timer for your reading session with a quick preset or your own custom time.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(LColors.textSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("BOOK")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(LColors.textSecondary)
+                                    .tracking(0.5)
+
+                                Menu {
+                                    if readingBooks.isEmpty {
+                                        Text("No books marked Reading")
+                                    } else {
+                                        ForEach(readingBooks) { book in
+                                            Button(book.title) {
+                                                selectedBookPersistentIDString = String(describing: book.persistentModelID)
+                                            }
+                                        }
+                                    }
+                                } label: {
+                                    HStack(spacing: 8) {
+                                        Image("booksfill")
+                                            .renderingMode(.template)
+                                            .resizable()
+                                            .scaledToFit()
+                                            .frame(width: 14, height: 14)
+
+                                        Text(selectedBook?.title ?? "Select a currently reading book")
+                                            .font(.system(size: 13, weight: .semibold))
+                                            .lineLimit(1)
+
+                                        Spacer()
+
+                                        Image(systemName: "chevron.down")
+                                            .font(.system(size: 11, weight: .bold))
+                                    }
+                                    .foregroundStyle(LColors.textPrimary)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 12)
+                                    .background(Color.white.opacity(0.08))
+                                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 14)
+                                            .stroke(LColors.glassBorder, lineWidth: 1)
+                                    )
+                                }
+
+                                if readingBooks.isEmpty {
+                                    Text("Mark a book as Reading to earn timer points.")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(LColors.textSecondary)
+                                }
+                            }
+                        }
+
+                        GlassCard {
+                            VStack(alignment: .leading, spacing: 14) {
+                                Text("TIME")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(LColors.textSecondary)
+                                    .tracking(0.5)
+
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 10) {
+                                        ForEach(presetOptions, id: \.self) { minutes in
+                                            Button {
+                                                useCustomTime = false
+                                                selectedPresetMinutes = minutes
+                                                applySelectedDuration()
+                                            } label: {
+                                                Text("\(minutes) min")
+                                                    .font(.system(size: 13, weight: .semibold))
+                                                    .foregroundStyle(!useCustomTime && selectedPresetMinutes == minutes ? .white : LColors.textPrimary)
+                                                    .padding(.horizontal, 16)
+                                                    .padding(.vertical, 10)
+                                                    .background(!useCustomTime && selectedPresetMinutes == minutes ? LColors.accent : Color.white.opacity(0.08))
+                                                    .clipShape(Capsule())
+                                                    .overlay(
+                                                        Capsule()
+                                                            .stroke(!useCustomTime && selectedPresetMinutes == minutes ? LColors.accent : LColors.glassBorder, lineWidth: 1)
+                                                    )
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                    }
+                                }
+
+                                Toggle(isOn: $useCustomTime) {
+                                    Text("CUSTOM TIME")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(LColors.textSecondary)
+                                        .tracking(0.5)
+                                }
+                                .tint(LColors.accent)
+                                .onChange(of: useCustomTime) { _, _ in
+                                    applySelectedDuration()
+                                }
+
+                                if useCustomTime {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text("MINUTES")
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundStyle(LColors.textSecondary)
+
+                                        TextField("25", text: $customMinutesText)
+                                            .textFieldStyle(.plain)
+                                            .padding(12)
+                                            .background(Color.white.opacity(0.08))
+                                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 14)
+                                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                            )
+                                            .foregroundStyle(LColors.textPrimary)
+                                            .keyboardType(.numberPad)
+                                            .focused($isCustomMinutesFocused)
+                                            .onChange(of: customMinutesText) { _, newValue in
+                                                let filtered = newValue.filter { $0.isNumber }
+                                                if filtered != newValue {
+                                                    customMinutesText = filtered
+                                                }
+                                                applySelectedDuration()
+                                            }
+                                    }
+                                }
+                            }
+                        }
+
+                        GlassCard {
+                            VStack(spacing: 16) {
+                                ZStack {
+                                    Circle()
+                                        .stroke(Color.white.opacity(0.10), lineWidth: 12)
+                                        .frame(width: 190, height: 190)
+
+                                    Circle()
+                                        .trim(from: 0, to: progressFraction)
+                                        .stroke(AnyShapeStyle(LGradients.blue), style: StrokeStyle(lineWidth: 12, lineCap: .round))
+                                        .frame(width: 190, height: 190)
+                                        .rotationEffect(.degrees(-90))
+
+                                    VStack(spacing: 6) {
+                                        Text(timeDisplay)
+                                            .font(.system(size: 34, weight: .black, design: .rounded))
+                                            .monospacedDigit()
+                                            .foregroundStyle(LColors.textPrimary)
+
+                                        Text(durationLabel)
+                                            .font(.system(size: 13, weight: .semibold))
+                                            .foregroundStyle(LColors.textSecondary)
+                                    }
+                                }
+
+                                HStack(spacing: 10) {
+                                    Button {
+                                        if isRunning {
+                                            pauseTimer()
+                                        } else {
+                                            startTimer()
+                                        }
+                                    } label: {
+                                        HStack(spacing: 8) {
+                                            Image(systemName: isRunning ? "pause.fill" : "play.fill")
+                                            Text(isRunning ? "Pause" : "Start")
+                                                .font(.system(size: 14, weight: .semibold))
+                                        }
+                                        .foregroundStyle(.white)
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 10)
+                                        .background(AnyShapeStyle(LGradients.blue))
+                                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .stroke(LColors.glassBorder, lineWidth: 1)
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(!isRunning && !canStartTimer)
+                                    .opacity(!isRunning && !canStartTimer ? 0.55 : 1)
+
+                                    Button {
+                                        resetTimer()
+                                    } label: {
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "arrow.counterclockwise")
+                                            Text("Reset")
+                                                .font(.system(size: 14, weight: .semibold))
+                                        }
+                                        .foregroundStyle(LColors.textPrimary)
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 10)
+                                        .background(Color.white.opacity(0.08))
+                                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .stroke(LColors.glassBorder, lineWidth: 1)
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+
+                                    Spacer()
+                                }
+                            }
+                        }
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        isCustomMinutesFocused = false
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 24)
+                }
+            }
+        }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") {
+                    isCustomMinutesFocused = false
+                }
+                .font(.system(size: 16, weight: .semibold))
+            }
+        }
+        .onAppear {
+            if selectedBookPersistentIDString.isEmpty,
+               let firstReadingBook = readingBooks.first {
+                selectedBookPersistentIDString = String(describing: firstReadingBook.persistentModelID)
+            }
+            applySelectedDuration()
+        }
+        .onChange(of: selectedBookPersistentIDString) { _, _ in
+            Task {
+                await updateLiveActivityIfNeeded()
+            }
+        }
+        .onChange(of: selectedPresetMinutes) { _, _ in
+            Task {
+                await updateLiveActivityIfNeeded()
+            }
+        }
+        .onChange(of: customMinutesText) { _, _ in
+            Task {
+                await updateLiveActivityIfNeeded()
+            }
+        }
+        .onChange(of: useCustomTime) { _, _ in
+            Task {
+                await updateLiveActivityIfNeeded()
+            }
+        }
+        .onChange(of: remainingSeconds) { _, _ in
+            Task {
+                await updateLiveActivityIfNeeded()
+            }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active {
+                syncRemainingSecondsFromWallClock()
+            }
+        }
+        .onDisappear {
+            stopTimer()
+            Task {
+                await endLiveActivity()
+            }
+        }
+    }
+
+    private func applySelectedDuration() {
+        guard !isRunning else { return }
+        totalSeconds = resolvedMinutes * 60
+        remainingSeconds = totalSeconds
+        didFinalizeCurrentSession = false
+    }
+    
+    private func elapsedSeconds() -> Int {
+        max(totalSeconds - remainingSeconds, 0)
+    }
+
+    private func elapsedMinutesRoundedUp() -> Int {
+        let seconds = elapsedSeconds()
+        guard seconds > 0 else { return 0 }
+        return max(Int(ceil(Double(seconds) / 60.0)), 1)
+    }
+
+    private func finalizeCurrentSessionIfNeeded() {
+        guard !didFinalizeCurrentSession else { return }
+        guard let currentUserId,
+              let selectedBook else { return }
+
+        let minutesRead = elapsedMinutesRoundedUp()
+        guard minutesRead > 0 else { return }
+
+        didFinalizeCurrentSession = true
+
+        let sessionDate = Date()
+
+        let session = ReadingSession(
+            book: selectedBook,
+            startPage: nil,
+            endPage: nil,
+            minutesRead: minutesRead,
+            pagesRead: 0,
+            sessionDate: sessionDate
+        )
+        session.isTimerSession = true
+        modelContext.insert(session)
+
+        let entry = ReadingPointsEntry(
+            userId: currentUserId,
+            bookId: String(describing: selectedBook.persistentModelID),
+            bookTitle: selectedBook.title,
+            minutesRead: minutesRead,
+            pointsEarned: minutesRead,
+            date: sessionDate
+        )
+        modelContext.insert(entry)
+
+        try? modelContext.save()
+    }
+    
+    private func liveActivityEndDate() -> Date {
+        Date().addingTimeInterval(TimeInterval(remainingSeconds))
+    }
+
+    private func makeLiveActivityState() -> ReadingTimerActivityAttributes.ContentState? {
+        guard let selectedBook else { return nil }
+        return ReadingTimerActivityAttributes.ContentState(
+            endDate: liveActivityEndDate(),
+            bookTitle: selectedBook.title,
+            minutesTotal: resolvedMinutes
+        )
+    }
+
+    private func startLiveActivityIfPossible() async {
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+        guard let selectedBook, let state = makeLiveActivityState() else { return }
+
+        if let existingActivity = liveActivity {
+            await updateLiveActivity(existingActivity, with: state)
+            return
+        }
+
+        let attributes = ReadingTimerActivityAttributes(bookTitle: selectedBook.title)
+
+        do {
+            let activity = try Activity<ReadingTimerActivityAttributes>.request(
+                attributes: attributes,
+                content: .init(state: state, staleDate: state.endDate),
+                pushType: nil
+            )
+            await MainActor.run {
+                liveActivity = activity
+            }
+        } catch {
+            print("[ReadingTimerSheet] Failed to start live activity: \(error)")
+        }
+    }
+
+    private func updateLiveActivity(_ activity: Activity<ReadingTimerActivityAttributes>, with state: ReadingTimerActivityAttributes.ContentState) async {
+        await activity.update(.init(state: state, staleDate: state.endDate))
+    }
+
+    private func updateLiveActivityIfNeeded() async {
+        guard isRunning, let activity = liveActivity, let state = makeLiveActivityState() else { return }
+        await updateLiveActivity(activity, with: state)
+    }
+
+    private func endLiveActivity() async {
+        guard let activity = liveActivity else { return }
+        let finalState = makeLiveActivityState() ?? ReadingTimerActivityAttributes.ContentState(
+            endDate: Date(),
+            bookTitle: selectedBook?.title ?? "Reading Timer",
+            minutesTotal: resolvedMinutes
+        )
+        await activity.end(.init(state: finalState, staleDate: Date()), dismissalPolicy: .immediate)
+        await MainActor.run {
+            liveActivity = nil
+        }
+    }
+
+    private func startTimer() {
+        if remainingSeconds <= 0 {
+            applySelectedDuration()
+        }
+
+        guard !isRunning else { return }
+        guard canStartTimer else { return }
+
+        isRunning = true
+        timerStartedAt = Date().addingTimeInterval(-TimeInterval(totalSeconds - remainingSeconds))
+
+        Task {
+            await startLiveActivityIfPossible()
+        }
+
+        timerCancellable?.cancel()
+        timerCancellable = Timer.publish(every: 1, on: .main, in: .common)
+            .autoconnect()
+            .sink { _ in
+                if remainingSeconds > 0 {
+                    remainingSeconds -= 1
+                } else {
+                    finalizeCurrentSessionIfNeeded()
+                    stopTimer()
+                    Task {
+                        await endLiveActivity()
+                    }
+                }
+            }
+    }
+
+    private func syncRemainingSecondsFromWallClock() {
+        guard isRunning, let startedAt = timerStartedAt else { return }
+        let elapsed = Int(Date().timeIntervalSince(startedAt))
+        let computed = totalSeconds - elapsed
+        remainingSeconds = max(computed, 0)
+    }
+    
+    private func pauseTimer() {
+        isRunning = false
+        timerCancellable?.cancel()
+        timerCancellable = nil
+        timerStartedAt = nil
+    }
+
+    private func stopTimer() {
+        isRunning = false
+        timerCancellable?.cancel()
+        timerCancellable = nil
+    }
+
+    private func resetTimer() {
+        finalizeCurrentSessionIfNeeded()
+        stopTimer()
+        Task {
+            await endLiveActivity()
+        }
+        applySelectedDuration()
     }
 }
 
@@ -3132,6 +3823,7 @@ struct LogReadingSessionSheet: View {
             startPage: start,
             endPage: end,
             minutesRead: minutes,
+            pagesRead: pagesRead,   // ← ADD THIS
             sessionDate: sessionDate
         )
 
@@ -3249,6 +3941,7 @@ struct BookDetailSheet: View {
     var onShowSessionHistory: (() -> Void)? = nil
     var onShowNotes: (() -> Void)? = nil
     var onShowSeries: (() -> Void)? = nil
+    var onShowPoints: (() -> Void)? = nil
 
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var appState: AppState
@@ -3284,16 +3977,44 @@ struct BookDetailSheet: View {
     }
 
     private var notesButton: some View {
+            Button {
+                onShowNotes?()
+            } label: {
+                HStack(spacing: 8) {
+                    Image("pencilcircle")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 14, height: 14)
+                    Text("Notes")
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                .foregroundStyle(LColors.textPrimary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(Color.white.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(LColors.glassBorder, lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+        }
+    
+    private var pointsButton: some View {
         Button {
-            onShowNotes?()
+            onShowPoints?()
         } label: {
             HStack(spacing: 8) {
-                Image("pencilcircle")
+                Image("sparklefill")
                     .renderingMode(.template)
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 14, height: 14)
-                Text("Notes")
+                    .frame(width: 22, height: 22)
+                    .foregroundStyle(.white)
+                    .padding(.top, 1)
+                Text("Points")
                     .font(.system(size: 13, weight: .semibold))
             }
             .foregroundStyle(LColors.textPrimary)
@@ -3611,15 +4332,32 @@ struct BookDetailSheet: View {
             },
             footer: {
                 VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 10) {
-                        sessionHistoryButton
-                        notesButton
-                        Spacer()
+                    ViewThatFits(in: .vertical) {
+                        HStack(spacing: 10) {
+                            sessionHistoryButton
+                            notesButton
+                            pointsButton
+                            Spacer(minLength: 0)
+                        }
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(spacing: 10) {
+                                sessionHistoryButton
+                                notesButton
+                                Spacer(minLength: 0)
+                            }
+
+                            HStack(spacing: 10) {
+                                pointsButton
+                                Spacer(minLength: 0)
+                            }
+                        }
                     }
+
                     if book.series != nil {
                         HStack(spacing: 10) {
                             seriesButton
-                            Spacer()
+                            Spacer(minLength: 0)
                         }
                     }
                 }
@@ -3683,6 +4421,221 @@ struct BookDetailSheet: View {
                     )
             }
             .buttonStyle(.plain)
+        }
+    }
+}
+
+// MARK: - Book Points Popup
+struct BookPointsPopup: View {
+    let book: Book
+    var onClose: (() -> Void)? = nil
+
+    @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var appState: AppState
+    @Query(sort: \ReadingPointsEntry.date, order: .reverse) private var readingPointsEntries: [ReadingPointsEntry]
+
+    @State private var visibleEntryCount: Int = 6
+    @State private var pointsEntryPendingDeletion: ReadingPointsEntry? = nil
+    @State private var showDeletePointsConfirm: Bool = false
+
+    private var closeAction: () -> Void { onClose ?? {} }
+
+    private var currentUserId: String? {
+        appState.currentAppleUserId
+    }
+
+    private var bookIdString: String {
+        String(describing: book.persistentModelID)
+    }
+
+    private var filteredEntries: [ReadingPointsEntry] {
+        guard let currentUserId else { return [] }
+        return readingPointsEntries.filter { entry in
+            guard entry.userId == currentUserId else { return false }
+
+            let matchesBookId = entry.bookId == bookIdString
+            let matchesBookTitle = entry.bookTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                .caseInsensitiveCompare(book.title.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
+
+            return matchesBookId || matchesBookTitle
+        }
+    }
+
+    private var totalPoints: Int {
+        filteredEntries.reduce(0) { $0 + max($1.pointsEarned, 0) }
+    }
+
+    private var totalMinutes: Int {
+        filteredEntries.reduce(0) { $0 + max($1.minutesRead, 0) }
+    }
+
+    private var sessionCount: Int {
+        filteredEntries.count
+    }
+
+    private var visibleEntries: [ReadingPointsEntry] {
+        Array(filteredEntries.prefix(visibleEntryCount))
+    }
+
+    var body: some View {
+        LystariaOverlayPopup(
+            onClose: {
+                closeAction()
+            },
+            width: 700,
+            heightRatio: 0.76,
+            header: {
+                HStack {
+                    GradientTitle(text: "Book Points", font: .title2.bold())
+                    Spacer()
+                    Button { closeAction() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(LColors.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            },
+            content: {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(book.title)
+                        .font(.headline)
+                        .foregroundStyle(LColors.textPrimary)
+
+                    if !book.author.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(book.author)
+                            .font(.subheadline)
+                            .foregroundStyle(LColors.textSecondary)
+                    }
+                }
+
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("TOTAL POINTS")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(LColors.textSecondary)
+                            .tracking(0.8)
+
+                        Text("\(totalPoints)")
+                            .font(.system(size: 28, weight: .black))
+                            .foregroundStyle(LColors.textPrimary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .background(LColors.glassSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(LColors.glassBorder, lineWidth: 1)
+                    )
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("MINUTES READ")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(LColors.textSecondary)
+                            .tracking(0.8)
+
+                        Text("\(totalMinutes)")
+                            .font(.system(size: 28, weight: .black))
+                            .foregroundStyle(LColors.textPrimary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .background(LColors.glassSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(LColors.glassBorder, lineWidth: 1)
+                    )
+                }
+
+                HStack(spacing: 10) {
+                    Text("Sessions logged: \(sessionCount)")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                    Spacer()
+                }
+
+                if filteredEntries.isEmpty {
+                    GlassCard {
+                        Text("No points earned for this book yet.")
+                            .foregroundStyle(LColors.textSecondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 10)
+                    }
+                } else {
+                    ForEach(visibleEntries) { entry in
+                        GlassCard {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(entry.date.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundStyle(LColors.textPrimary)
+
+                                HStack(spacing: 12) {
+                                    Text("Minutes: \(entry.minutesRead)")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(LColors.textSecondary)
+
+                                    Text("Points: \(entry.pointsEarned)")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(LColors.textSecondary)
+                                }
+                            }
+                        }
+                        .contentShape(Rectangle())
+                        .onLongPressGesture(minimumDuration: 0.6) {
+                            pointsEntryPendingDeletion = entry
+                            showDeletePointsConfirm = true
+                        }
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                pointsEntryPendingDeletion = entry
+                                showDeletePointsConfirm = true
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image("trashfill")
+                                        .renderingMode(.template)
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: 14, height: 14)
+                                    Text("Delete Points Entry")
+                                }
+                            }
+                        }
+                    }
+
+                    if filteredEntries.count > visibleEntries.count {
+                        HStack {
+                            Spacer()
+                            LoadMoreButton {
+                                visibleEntryCount += 6
+                            }
+                            Spacer()
+                        }
+                        .padding(.top, 6)
+                    }
+                }
+            },
+            footer: {
+                EmptyView()
+            }
+        )
+        .onAppear {
+            visibleEntryCount = 6
+        }
+        .alert("Delete points entry?", isPresented: $showDeletePointsConfirm) {
+            Button("Delete", role: .destructive) {
+                if let entry = pointsEntryPendingDeletion {
+                    modelContext.delete(entry)
+                    try? modelContext.save()
+                }
+                pointsEntryPendingDeletion = nil
+            }
+            Button("Cancel", role: .cancel) {
+                pointsEntryPendingDeletion = nil
+            }
+        } message: {
+            Text("This will remove this stored points entry from the book points history.")
         }
     }
 }
@@ -4088,13 +5041,15 @@ struct EditBookNotePopup: View {
 // MARK: - Book Session History Sheet
 struct BookSessionHistorySheet: View {
     let book: Book
+    var onClose: (() -> Void)? = nil
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var appState: AppState
-    @Query(sort: \ReadingGoal.updatedAt, order: .reverse) private var readingGoals: [ReadingGoal]
-    var onClose: (() -> Void)? = nil
     @State private var visibleSessionCount: Int = 4
     @State private var showDeleteSessionConfirm: Bool = false
     @State private var sessionPendingDeletion: ReadingSession? = nil
+    
+    @Query(sort: \ReadingGoal.updatedAt, order: .reverse) private var readingGoals: [ReadingGoal]
+    @Query(sort: \ReadingPointsEntry.date, order: .reverse) private var readingPointsEntries: [ReadingPointsEntry]
 
     private var closeAction: () -> Void { onClose ?? {} }
 
@@ -4108,7 +5063,33 @@ struct BookSessionHistorySheet: View {
     }
 
     private var sessionsSorted: [ReadingSession] {
-        (book.sessions ?? []).sorted { $0.sessionDate > $1.sessionDate }
+        (book.sessions ?? [])
+            .filter { !$0.isTimerSession }
+            .sorted { $0.sessionDate > $1.sessionDate }
+    }
+
+    private var bookIdString: String {
+        String(describing: book.persistentModelID)
+    }
+
+    private func deleteMatchingPointsEntries(for session: ReadingSession) {
+        let matchingEntries = readingPointsEntries.filter { entry in
+            guard entry.userId == currentUserId else { return false }
+
+            let sameBook = entry.bookId == bookIdString ||
+                entry.bookTitle.caseInsensitiveCompare(book.title) == .orderedSame
+            guard sameBook else { return false }
+
+            let sameMinutes = entry.minutesRead == session.minutesRead && entry.pointsEarned == session.minutesRead
+            guard sameMinutes else { return false }
+
+            let timeDelta = abs(entry.date.timeIntervalSince(session.sessionDate))
+            return timeDelta <= 120
+        }
+
+        for entry in matchingEntries {
+            modelContext.delete(entry)
+        }
     }
 
     var body: some View {
@@ -4184,9 +5165,24 @@ struct BookSessionHistorySheet: View {
                             }
                         }
                         .contentShape(Rectangle())
-                        .onLongPressGesture {
+                        .onLongPressGesture(minimumDuration: 0.6) {
                             sessionPendingDeletion = session
                             showDeleteSessionConfirm = true
+                        }
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                sessionPendingDeletion = session
+                                showDeleteSessionConfirm = true
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image("trashfill")
+                                        .renderingMode(.template)
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: 14, height: 14)
+                                    Text("Delete Session")
+                                }
+                            }
                         }
                     }
 
@@ -4266,6 +5262,7 @@ struct BookSessionHistorySheet: View {
             }
         }
 
+        deleteMatchingPointsEntries(for: session)
         book.updatedAt = Date()
         modelContext.delete(session)
         try? modelContext.save()

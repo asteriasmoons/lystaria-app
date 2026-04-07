@@ -3,6 +3,7 @@
 
 import SwiftUI
 import SwiftData
+import UIKit
 #if os(iOS)
 import UserNotifications
 #endif
@@ -35,6 +36,9 @@ struct CalendarTabView: View {
     // Onboarding for hidden header icons
     @StateObject private var onboarding = OnboardingManager()
     @StateObject private var limits = LimitManager.shared
+
+    @State private var showingDayView = false
+    @State private var dayViewDate: Date = Date()
 
     // FIX 1: Pre-compute event instances once per render into a State dict,
     // instead of calling eventsFor() inside @ViewBuilder (which touches
@@ -97,6 +101,7 @@ struct CalendarTabView: View {
         var map: [String: [EventInstance]] = [:]
         for date in days {
             let key = isoDayString(tzCalendar.startOfDay(for: date))
+            print("[CalendarTabView] BUILD DAY:", key)
             // Snapshot each event's recurrence value safely before any UI access
             map[key] = computeEventsFor(date)
         }
@@ -113,12 +118,20 @@ struct CalendarTabView: View {
             }
         }()
 
+        let dayAnchor = tzCalendar.startOfDay(for: date)
+
+        print("[CalendarTabView] INPUT DATE:", date)
+        print("[CalendarTabView] DAY ANCHOR:", dayAnchor)
+        print("[CalendarTabView] TZ:", displayTimeZone.identifier)
+
         let resolved = CalendarEventResolver.occurrences(
-            on: date,
+            on: dayAnchor,
             from: filtered,
             timeZone: displayTimeZone
         )
-        
+
+        print("[CalendarTabView] RESOLVED COUNT:", resolved.count)
+
         let ostaraResolved = resolved.filter {
             $0.title.localizedCaseInsensitiveContains("Ostara")
         }
@@ -136,6 +149,11 @@ struct CalendarTabView: View {
         } // End of ostaraResolved
 
         let eventById = Dictionary(allEvents.map { ($0.localEventId, $0) }, uniquingKeysWith: { _, last in last })
+
+        print("[CalendarTabView] ALL EVENTS COUNT:", allEvents.count)
+        for e in allEvents {
+            print("  -> EVENT:", e.title, "| start:", e.startDate, "| rrule:", e.recurrenceRRule ?? "none")
+        }
 
         return resolved.compactMap { occ -> EventInstance? in
             guard let event = eventById[occ.sourceEventId] else { return nil }
@@ -156,6 +174,16 @@ struct CalendarTabView: View {
         let m = c.month ?? 1
         let d = c.day ?? 1
         return String(format: "%04d-%02d-%02d", y, m, d)
+    }
+    
+    private var createCalendarButtonBackground: AnyShapeStyle {
+        let isEmpty = newCalendarName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return isEmpty ? AnyShapeStyle(Color.gray.opacity(0.3)) : AnyShapeStyle(LGradients.blue)
+    }
+    
+    @ViewBuilder
+    private var deleteRecurringDialogMessage: some View {
+        Text("Choose how this recurring event should be deleted.")
     }
 
 
@@ -278,6 +306,10 @@ struct CalendarTabView: View {
             .onChange(of: calendars.count) { _, _ in
                 rebuildEventsByDay()
             }
+            .navigationDestination(isPresented: $showingDayView) {
+                CalendarDayView(selectedDate: dayViewDate, onBack: { showingDayView = false })
+                    .navigationBarHidden(true)
+            }
             .overlay {
                 if let config = sheetConfig {
                     EventSheet(
@@ -347,7 +379,7 @@ struct CalendarTabView: View {
                                     .foregroundStyle(.white)
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 14)
-                                    .background(newCalendarName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? AnyShapeStyle(Color.gray.opacity(0.3)) : AnyShapeStyle(LGradients.blue))
+                                    .background(createCalendarButtonBackground)
                                     .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
                             }
                             .buttonStyle(.plain)
@@ -391,26 +423,26 @@ struct CalendarTabView: View {
                 }
             }
             .confirmationDialog(
-                "Delete recurring event",
-                isPresented: $showDeleteRecurringDialog,
-                titleVisibility: .visible
-            ) {
-                Button("This Event Only", role: .destructive) {
-                    inlineDeleteRecurring(scope: .thisEventOnly)
-                }
-                Button("This and Future", role: .destructive) {
-                    inlineDeleteRecurring(scope: .thisAndFuture)
-                }
-                Button("All Events", role: .destructive) {
-                    inlineDeleteRecurring(scope: .allEvents)
-                }
-                Button("Cancel", role: .cancel) {
-                    pendingDeleteEvent = nil
-                    pendingDeleteOccurrenceDate = nil
-                }
-            } message: {
-                Text("Choose how this recurring event should be deleted.")
-            }
+                            "Delete recurring event",
+                            isPresented: $showDeleteRecurringDialog,
+                            titleVisibility: .visible
+                        ) {
+                            Button("This Event Only", role: .destructive) {
+                                inlineDeleteRecurring(scope: .thisEventOnly)
+                            }
+                            Button("This and Future", role: .destructive) {
+                                inlineDeleteRecurring(scope: .thisAndFuture)
+                            }
+                            Button("All Events", role: .destructive) {
+                                inlineDeleteRecurring(scope: .allEvents)
+                            }
+                            Button("Cancel", role: .cancel) {
+                                pendingDeleteEvent = nil
+                                pendingDeleteOccurrenceDate = nil
+                            }
+                        } message: {
+                            deleteRecurringDialogMessage
+                        }
            }
         }
 
@@ -436,6 +468,10 @@ struct CalendarTabView: View {
                     .buttonStyle(.plain)
                     
                     GradientTitle(text: monthName, font: .system(size: 24, weight: .bold))
+                        .onTapGesture {
+                            dayViewDate = Date()
+                            showingDayView = true
+                        }
                     
                     Button { nextMonth() } label: {
                         Image("chevright")
@@ -1599,6 +1635,10 @@ struct EventSheet: View {
                     )
                     .padding(.top, 4)
                 }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            dismissKeyboard()
         }
     }
 
@@ -3214,4 +3254,8 @@ struct ExceptionPills: View {
             }
         }
     }
+}
+
+private func dismissKeyboard() {
+    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
 }

@@ -1354,21 +1354,29 @@ struct DashboardView: View {
             }
         } content: {
             VStack(alignment: .leading, spacing: 16) {
-                moonPhaseDetailSection(title: "VIBE") {
+                moonPhaseDetailSection(title: "Vibe") {
                     Text(detail.vibe)
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(.white)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                moonPhaseDetailSection(title: "DESCRIPTION") {
+                Rectangle()
+                    .fill(LColors.glassBorder)
+                    .frame(height: 1)
+
+                moonPhaseDetailSection(title: "Description") {
                     Text(detail.description)
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(LColors.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                moonPhaseDetailSection(title: "RITUALS") {
+                Rectangle()
+                    .fill(LColors.glassBorder)
+                    .frame(height: 1)
+
+                moonPhaseDetailSection(title: "Rituals") {
                     VStack(alignment: .leading, spacing: 10) {
                         ForEach(detail.rituals, id: \.self) { ritual in
                             HStack(alignment: .top, spacing: 10) {
@@ -1386,8 +1394,12 @@ struct DashboardView: View {
                     }
                 }
 
-                moonPhaseDetailSection(title: "BEST FOR") {
-                    FlexibleKeywordWrap(keywords: detail.bestFor)
+                Rectangle()
+                    .fill(LColors.glassBorder)
+                    .frame(height: 1)
+
+                moonPhaseDetailSection(title: "Best For") {
+                    MoonBestForKeywordList(keywords: detail.bestFor)
                 }
             }
         } footer: {
@@ -1415,22 +1427,10 @@ struct DashboardView: View {
     @ViewBuilder
     private func moonPhaseDetailSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(LColors.textSecondary)
-                .tracking(0.5)
-
+            GradientTitle(text: title, size: 20)
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 14)
-        .background(Color.white.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(LColors.glassBorder, lineWidth: 1)
-        )
     }
 }
 
@@ -1872,39 +1872,17 @@ private struct FlexibleKeywordWrap: View {
             ForEach(chunkedKeywords, id: \.self) { row in
                 HStack(spacing: 8) {
                     ForEach(row, id: \.self) { keyword in
-                        ZStack {
-                            Text(keyword)
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(LGradients.blue)
-                                .offset(x: 0.6, y: 0)
-
-                            Text(keyword)
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(LGradients.blue)
-                                .offset(x: -0.6, y: 0)
-
-                            Text(keyword)
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(LGradients.blue)
-                                .offset(x: 0, y: 0.6)
-
-                            Text(keyword)
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(LGradients.blue)
-                                .offset(x: 0, y: -0.6)
-
-                            Text(keyword)
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(.white)
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Color.white.opacity(0.08))
-                        .clipShape(Capsule())
-                        .overlay(
-                            Capsule()
-                                .stroke(LGradients.blue, lineWidth: 1)
-                        )
+                        Text(keyword)
+                            .font(.system(size: 12, weight: .regular))
+                            .foregroundStyle(LGradients.blue)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(Capsule())
+                            .overlay(
+                                Capsule()
+                                    .stroke(LGradients.blue, lineWidth: 1)
+                            )
                     }
                     Spacer(minLength: 0)
                 }
@@ -1915,6 +1893,29 @@ private struct FlexibleKeywordWrap: View {
     private var chunkedKeywords: [[String]] {
         stride(from: 0, to: keywords.count, by: 3).map {
             Array(keywords[$0..<min($0 + 3, keywords.count)])
+        }
+    }
+}
+
+private struct MoonBestForKeywordList: View {
+    let keywords: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(keywords, id: \.self) { keyword in
+                Text(keyword)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(LGradients.blue)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.white.opacity(0.06))
+                    .clipShape(Capsule())
+                    .overlay(
+                        Capsule()
+                            .stroke(LGradients.blue, lineWidth: 1)
+                    )
+            }
         }
     }
 }

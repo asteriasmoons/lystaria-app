@@ -5,15 +5,9 @@
 //  Created by Asteria Moon on 3/19/26.
 //
 
-//
-//  BookmarkDetailView.swift
-//  Lystaria
-//
-//  Created by Asteria Moon on 3/19/26.
-//
-
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct BookmarkDetailView: View {
     @Environment(\.modelContext) private var modelContext
@@ -41,6 +35,10 @@ struct BookmarkDetailView: View {
                     case .preview:
                         previewCard
                     }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    dismissKeyboard()
                 }
                 .padding(.horizontal, LSpacing.pageHorizontal)
                 .padding(.top, 16)
@@ -396,5 +394,9 @@ enum BookmarkDetailTab: String, CaseIterable, Identifiable {
         case .preview: return "Preview"
         }
     }
+}
+
+private func dismissKeyboard() {
+    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
 }
 

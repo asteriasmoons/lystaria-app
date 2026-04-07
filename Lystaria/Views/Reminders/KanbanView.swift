@@ -860,7 +860,7 @@ struct KanbanCard: View {
         case "medication":
             return Color(red: 0.86, green: 0.28, blue: 0.58).opacity(0.82)
         default:
-            return Color.white.opacity(0.9)
+            return Color.black
         }
     }
     

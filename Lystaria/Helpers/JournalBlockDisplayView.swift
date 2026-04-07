@@ -228,20 +228,29 @@ struct JournalBlockDisplayView: View {
                 .frame(height: 3)
 
         case .dotted:
+            let dotSize: CGFloat = 4
+            let gap: CGFloat = 8
             GeometryReader { geo in
-                let dotWidth: CGFloat = 6
-                let gap: CGFloat = 8
-                let count = max(1, Int(geo.size.width / (dotWidth + gap)))
+                let count = max(1, Int(geo.size.width / (dotSize + gap)))
                 HStack(spacing: gap) {
                     ForEach(0..<count, id: \.self) { _ in
-                        Capsule()
+                        Circle()
                             .fill(LGradients.blue)
-                            .frame(width: dotWidth, height: 3)
+                            .frame(width: dotSize, height: dotSize)
                     }
                 }
+                .frame(maxHeight: .infinity, alignment: .center)
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 3)
+            .frame(height: dotSize)
+
+        case .dash:
+            Capsule()
+                .fill(LGradients.blue)
+                .frame(width: nil)
+                .frame(maxWidth: .infinity)
+                .scaleEffect(x: 0.5)
+                .frame(height: 2)
 
         case .dots:
             HStack(spacing: 12) {

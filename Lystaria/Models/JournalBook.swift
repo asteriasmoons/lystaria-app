@@ -15,6 +15,7 @@ final class JournalBook {
     // MARK: - Fields
     var title: String = ""
     var coverHex: String = "#6A5CFF"
+    var pinOrder: Int = 0
 
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
@@ -32,6 +33,7 @@ final class JournalBook {
     ) {
         self.title = title
         self.coverHex = coverHex
+        self.pinOrder = 0
         self.deletedAt = deletedAt
         self.createdAt = Date()
         self.updatedAt = Date()

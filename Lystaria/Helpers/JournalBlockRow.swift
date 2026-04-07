@@ -20,7 +20,7 @@ struct JournalBlockRow: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var block: JournalBlock
 
-    var onAddBelow: (JournalBlock, JournalBlockType) -> Void
+    var onAddBelow: (JournalBlock, JournalBlockType, String) -> Void
     var onDelete: (JournalBlock) -> Void
     var onMoveUp: (JournalBlock) -> Void
     var onMoveDown: (JournalBlock) -> Void
@@ -308,7 +308,7 @@ struct JournalBlockRow: View {
                         textColor: uiColorForBlockType(block.type),
                         placeholder: placeholderText,
                         isCodeBlock: false,
-                        onCreateParagraphBelow: { onAddBelow(block, .paragraph) },
+                        onCreateParagraphBelow: { suffix in onAddBelow(block, .paragraph, suffix) },
                         onDeleteEmptyBlock: { onDelete(block) },
                         onExitList: nil
                     )
@@ -342,9 +342,9 @@ struct JournalBlockRow: View {
                         textColor: uiColorForBlockType(block.type),
                         placeholder: placeholderText,
                         isCodeBlock: false,
-                        onCreateParagraphBelow: { onAddBelow(block, nextBlockTypeOnReturn(for: block.type)) },
+                        onCreateParagraphBelow: { suffix in onAddBelow(block, nextBlockTypeOnReturn(for: block.type), suffix) },
                         onDeleteEmptyBlock: { onDelete(block) },
-                        onExitList: { onAddBelow(block, .paragraph); onDelete(block) }
+                        onExitList: { onAddBelow(block, .paragraph, ""); onDelete(block) }
                     )
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -358,7 +358,7 @@ struct JournalBlockRow: View {
                     textColor: uiColorForBlockType(block.type),
                     placeholder: placeholderText,
                     isCodeBlock: false,
-                    onCreateParagraphBelow: { onAddBelow(block, .paragraph) },
+                    onCreateParagraphBelow: { suffix in onAddBelow(block, .paragraph, suffix) },
                     onDeleteEmptyBlock: { onDelete(block) },
                             onExitList: nil
                     )
@@ -386,7 +386,7 @@ struct JournalBlockRow: View {
                 textColor: UIColor(LColors.textPrimary),
                 placeholder: "Write callout...",
                 isCodeBlock: false,
-                onCreateParagraphBelow: { onAddBelow(block, .paragraph) },
+                onCreateParagraphBelow: { suffix in onAddBelow(block, .paragraph, suffix) },
                 onDeleteEmptyBlock: { onDelete(block) },
                 onExitList: nil
             )
@@ -426,20 +426,29 @@ struct JournalBlockRow: View {
                 .frame(height: 3)
 
         case .dotted:
+            let dotSize: CGFloat = 4
+            let gap: CGFloat = 8
             GeometryReader { geo in
-                let dotWidth: CGFloat = 6
-                let gap: CGFloat = 8
-                let count = max(1, Int(geo.size.width / (dotWidth + gap)))
+                let count = max(1, Int(geo.size.width / (dotSize + gap)))
                 HStack(spacing: gap) {
                     ForEach(0..<count, id: \.self) { _ in
-                        Capsule()
+                        Circle()
                             .fill(LGradients.blue)
-                            .frame(width: dotWidth, height: 3)
+                            .frame(width: dotSize, height: dotSize)
                     }
                 }
+                .frame(maxHeight: .infinity, alignment: .center)
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 3)
+            .frame(height: dotSize)
+
+        case .dash:
+            Capsule()
+                .fill(LGradients.blue)
+                .frame(width: nil)
+                .frame(maxWidth: .infinity)
+                .scaleEffect(x: 0.5)
+                .frame(height: 2)
 
         case .dots:
             HStack(spacing: 12) {
@@ -470,7 +479,7 @@ struct JournalBlockRow: View {
                 textColor: UIColor(LColors.textPrimary),
                 placeholder: "Write code...",
                 isCodeBlock: true,
-                onCreateParagraphBelow: { onAddBelow(block, .paragraph) },
+                onCreateParagraphBelow: { suffix in onAddBelow(block, .paragraph, suffix) },
                 onDeleteEmptyBlock: { onDelete(block) },
                 onExitList: nil
             )
@@ -622,7 +631,7 @@ struct JournalBlockRow: View {
         if isCurrentBlockEffectivelyEmpty {
             onTransform(block, type)
         } else {
-            onAddBelow(block, type)
+            onAddBelow(block, type, "")
         }
     }
 
@@ -679,7 +688,7 @@ struct JournalBlockRow: View {
         let textColor: UIColor
         let placeholder: String
         let isCodeBlock: Bool
-        let onCreateParagraphBelow: (() -> Void)?
+        let onCreateParagraphBelow: ((String) -> Void)?
         let onDeleteEmptyBlock: (() -> Void)?
         let onExitList: (() -> Void)?
 
@@ -887,13 +896,14 @@ struct JournalBlockRow: View {
 
             // Stored separately so they always reflect the current block,
             // not the block captured when makeUIView was called.
-            var onCreateParagraphBelow: (() -> Void)?
+            var onCreateParagraphBelow: ((String) -> Void)?
             var onDeleteEmptyBlock: (() -> Void)?
             var onExitList: (() -> Void)?
 
             init(parent: RichEditableBlockTextView) {
                 self.parent = parent
                 self.onCreateParagraphBelow = parent.onCreateParagraphBelow
+
                 self.onDeleteEmptyBlock = parent.onDeleteEmptyBlock
                 self.onExitList = parent.onExitList
             }
@@ -928,11 +938,42 @@ struct JournalBlockRow: View {
                     return false
                 }
 
-                NotificationCenter.default.post(
-                    name: .journalBlockRequestFocusNextParagraph,
-                    object: parent.block.id
+                // Split the block at the cursor: text before cursor stays in the
+                // current block, text after cursor moves into the new block.
+                let fullText = textView.text ?? ""
+                let nsText = fullText as NSString
+                let cursorLocation = range.location
+                let prefixText = nsText.substring(to: cursorLocation)
+                let suffixText = nsText.substring(from: cursorLocation)
+
+                // Update the model and the text view under the programmatic guard
+                // so textViewDidChange does not re-save stale text or trigger
+                // a spurious block insertion.
+                isApplyingProgrammaticChange = true
+                parent.block.text = prefixText
+                parent.block.touch()
+                // Use attributedText so the existing guard in textViewDidChange
+                // stays effective (setting .text can still fire the delegate).
+                let prefixAttributed = NSAttributedString(
+                    string: prefixText,
+                    attributes: parent.baseAttributes()
                 )
-                onCreateParagraphBelow?()
+                textView.attributedText = prefixAttributed
+                textView.invalidateIntrinsicContentSize()
+                isApplyingProgrammaticChange = false
+
+                // Remove or trim any inline styles that now fall outside the
+                // shortened prefix text.
+                let newLength = (prefixText as NSString).length
+                if var styles = parent.block.inlineStyles {
+                    styles = styles.filter { $0.rangeLocation < newLength }
+                    for style in styles where style.rangeLocation + style.rangeLength > newLength {
+                        style.rangeLength = newLength - style.rangeLocation
+                    }
+                    parent.block.inlineStyles = styles
+                }
+
+                onCreateParagraphBelow?(suffixText)
                 return false
             }
 

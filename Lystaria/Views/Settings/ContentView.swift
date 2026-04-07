@@ -148,6 +148,11 @@ struct ContentView: View {
             if case .signedIn = appState.status {
                 openPendingJournalBookRoute()
             }
+        case "reading-timer":
+            print("📖⏱️ Deep link to Reading Timer")
+            withAnimation(.easeInOut(duration: 0.2)) {
+                selectedTab = .reading
+            }
         default:
             break
         }

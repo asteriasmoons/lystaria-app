@@ -144,6 +144,64 @@ final class WaterHealthKitManager: ObservableObject {
         healthStore.execute(query)
     }
 
+    func clearCustomAmount(flOz: Double) async {
+        guard flOz > 0 else { return }
+
+        let startOfDay = Calendar.current.startOfDay(for: Date())
+
+        let datePredicate = HKQuery.predicateForSamples(
+            withStart: startOfDay,
+            end: Date(),
+            options: .strictStartDate
+        )
+
+        let metadataPredicate = HKQuery.predicateForObjects(
+            withMetadataKey: appSourceKey,
+            operatorType: .equalTo,
+            value: true as NSNumber
+        )
+
+        let predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [datePredicate, metadataPredicate])
+
+        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+
+        let query = HKSampleQuery(
+            sampleType: waterType,
+            predicate: predicate,
+            limit: HKObjectQueryNoLimit,
+            sortDescriptors: [sortDescriptor]
+        ) { [weak self] _, samples, error in
+            guard let self else { return }
+
+            if let error {
+                print("Failed to fetch water samples for clear custom:", error)
+                return
+            }
+
+            guard let samples = samples as? [HKQuantitySample], !samples.isEmpty else { return }
+
+            // Walk newest-first, collecting samples until we've covered the requested amount
+            var remaining = flOz
+            var toDelete: [HKSample] = []
+
+            for sample in samples {
+                guard remaining > 0 else { break }
+                let sampleFlOz = sample.quantity.doubleValue(for: .fluidOunceUS())
+                toDelete.append(sample)
+                remaining -= sampleFlOz
+            }
+
+            self.healthStore.delete(toDelete) { _, deleteError in
+                if let deleteError {
+                    print("Failed to delete custom water samples:", deleteError)
+                }
+                Task { await self.fetchTodayWater() }
+            }
+        }
+
+        healthStore.execute(query)
+    }
+
     func totalWaterFlOz(from startDate: Date, to endDate: Date) async -> Double {
         await withCheckedContinuation { continuation in
             let predicate = HKQuery.predicateForSamples(

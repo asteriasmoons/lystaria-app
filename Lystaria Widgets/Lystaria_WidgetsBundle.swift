@@ -15,5 +15,6 @@ struct Lystaria_WidgetsBundle: WidgetBundle {
         Lystaria_SmallWidget()
         Lystaria_JournalEntriesWidget()
         Lystaria_HealthWidget()
+        ReadingTimerLiveActivity()
     }
 }

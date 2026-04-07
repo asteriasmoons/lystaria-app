@@ -80,6 +80,8 @@ struct WaterTrackingView: View {
 
     @State private var showCustomAmountPopup = false
     @State private var customAmountText = ""
+    @State private var showClearCustomPopup = false
+    @State private var clearCustomAmountText = ""
     @State private var showGoalPopup = false
     @State private var goalText = ""
     @State private var showPlanPopup = false
@@ -99,6 +101,7 @@ struct WaterTrackingView: View {
 
     private enum PopupField {
         case customAmount
+        case clearCustomAmount
         case goal
         case plannedBottles
         case extraBottles
@@ -405,32 +408,33 @@ struct WaterTrackingView: View {
                             }
                             .padding(.vertical, 4)
 
-                            HStack(spacing: 10) {
+                            // Row 1: Add buttons
+                            HStack(spacing: 8) {
                                 Button {
                                     Task { await water.addWater(flOz: 8) }
                                 } label: {
-                                    Text("8 FL OZ")
-                                        .font(.system(size: 13, weight: .semibold))
+                                    Text("+ 8 FL OZ")
+                                        .font(.system(size: 11, weight: .semibold))
                                         .foregroundStyle(.white)
                                         .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 12)
+                                        .padding(.vertical, 8)
                                         .background(Color.white.opacity(0.10))
-                                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
+                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(LColors.glassBorder, lineWidth: 1))
                                 }
                                 .buttonStyle(.plain)
 
                                 Button {
                                     Task { await water.addWater(flOz: 20) }
                                 } label: {
-                                    Text("20 FL OZ")
-                                        .font(.system(size: 13, weight: .semibold))
+                                    Text("+ 20 FL OZ")
+                                        .font(.system(size: 11, weight: .semibold))
                                         .foregroundStyle(.white)
                                         .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 12)
+                                        .padding(.vertical, 8)
                                         .background(Color.white.opacity(0.10))
-                                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
+                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(LColors.glassBorder, lineWidth: 1))
                                 }
                                 .buttonStyle(.plain)
 
@@ -438,72 +442,93 @@ struct WaterTrackingView: View {
                                     customAmountText = ""
                                     showCustomAmountPopup = true
                                 } label: {
-                                    Text("Other FL OZ")
-                                        .font(.system(size: 13, weight: .semibold))
+                                    Text("+ Other")
+                                        .font(.system(size: 11, weight: .semibold))
                                         .foregroundStyle(.white)
                                         .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 12)
+                                        .padding(.vertical, 8)
                                         .background(Color.white.opacity(0.10))
-                                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
+                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(LColors.glassBorder, lineWidth: 1))
                                 }
                                 .buttonStyle(.plain)
                             }
 
-                            Button {
-                                Task { await water.fetchTodayWater() }
-                            } label: {
-                                Text("Refresh")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundStyle(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 14)
-                                    .background(LGradients.blue)
-                                    .clipShape(RoundedRectangle(cornerRadius: 14))
-                            }
-                            .buttonStyle(.plain)
+                            // Row 2: Utility buttons
+                            HStack(spacing: 8) {
+                                Button {
+                                    Task { await water.fetchTodayWater() }
+                                } label: {
+                                    Text("Refresh")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(.white)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 8)
+                                        .background(LGradients.blue)
+                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                }
+                                .buttonStyle(.plain)
 
-                            Button {
-                                selectedDate = Date()
-                                selectedDayWater = water.todayWaterFlOz
-                            } label: {
-                                Text("Back to Today")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundStyle(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 14)
-                                    .background(Color.white.opacity(0.10))
-                                    .clipShape(RoundedRectangle(cornerRadius: 14))
-                                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
-                            }
-                            .buttonStyle(.plain)
+                                Button {
+                                    selectedDate = Date()
+                                    selectedDayWater = water.todayWaterFlOz
+                                } label: {
+                                    Text("Today")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(.white)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 8)
+                                        .background(Color.white.opacity(0.10))
+                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(LColors.glassBorder, lineWidth: 1))
+                                }
+                                .buttonStyle(.plain)
 
-                            Button {
-                                goalText = amountGoal == 0 ? "" : String(Int(amountGoal))
-                                showGoalPopup = true
-                            } label: {
-                                Text("+ Goal")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundStyle(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 14)
-                                    .background(LGradients.blue)
-                                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                                Button {
+                                    goalText = amountGoal == 0 ? "" : String(Int(amountGoal))
+                                    showGoalPopup = true
+                                } label: {
+                                    Text("+ Goal")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(.white)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 8)
+                                        .background(LGradients.blue)
+                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
 
-                            Button {
-                                Task { await water.clearTodayWater() }
-                            } label: {
-                                Text("Clear")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundStyle(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 14)
-                                    .background(LGradients.blue)
-                                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                            // Row 3: Clear buttons
+                            HStack(spacing: 8) {
+                                Button {
+                                    Task { await water.clearTodayWater() }
+                                } label: {
+                                    Text("Clear All")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(.white)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 8)
+                                        .background(LGradients.blue)
+                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                }
+                                .buttonStyle(.plain)
+
+                                Button {
+                                    clearCustomAmountText = ""
+                                    showClearCustomPopup = true
+                                } label: {
+                                    Text("Clear Custom")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(.white)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 8)
+                                        .background(Color.white.opacity(0.10))
+                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(LColors.glassBorder, lineWidth: 1))
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
                         }
                     }
 
@@ -664,6 +689,60 @@ struct WaterTrackingView: View {
                 .padding(.horizontal, 24)
                 .transition(.scale.combined(with: .opacity))
                 .zIndex(20)
+            }
+
+            if showClearCustomPopup {
+                Color.black.opacity(0.35)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        focusedField = nil
+                        showClearCustomPopup = false
+                    }
+
+                VStack {
+                    Spacer()
+                    VStack(spacing: 18) {
+                        GradientTitle(text: "Clear FL OZ", font: .title2.bold())
+
+                        TextField("Amount to clear", text: $clearCustomAmountText)
+#if os(iOS) || os(visionOS)
+                            .keyboardType(.decimalPad)
+#endif
+                            .focused($focusedField, equals: .clearCustomAmount)
+                            .textFieldStyle(.plain)
+                            .foregroundStyle(LColors.textPrimary)
+                            .padding(12)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
+
+                        LButton(title: "Clear", style: .secondary) {
+                            let cleaned = clearCustomAmountText.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if let value = Double(cleaned), value > 0 {
+                                focusedField = nil
+                                showClearCustomPopup = false
+                                Task { await water.clearCustomAmount(flOz: value) }
+                            }
+                        }
+                    }
+                    .padding(20)
+                    .frame(maxWidth: 320)
+                    .background {
+                        ZStack {
+                            LGradients.blue
+                            GradientOverlayBackground().clipShape(RoundedRectangle(cornerRadius: 24))
+                        }
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 24))
+                    .overlay(RoundedRectangle(cornerRadius: 24).stroke(Color.white.opacity(0.14), lineWidth: 1))
+                    .shadow(color: .black.opacity(0.25), radius: 16, y: 8)
+                    .contentShape(RoundedRectangle(cornerRadius: 24))
+                    .onTapGesture { }
+                    Spacer()
+                }
+                .padding(.horizontal, 24)
+                .transition(.scale.combined(with: .opacity))
+                .zIndex(21)
             }
 
             if showPlanPopup {
@@ -951,6 +1030,13 @@ struct WaterTrackingView: View {
                 focusedField = nil
             }
         }
+        .onChange(of: showClearCustomPopup) { _, isShowing in
+            if isShowing {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { focusedField = .clearCustomAmount }
+            } else if focusedField == .clearCustomAmount {
+                focusedField = nil
+            }
+        }
         .onChange(of: showGoalPopup) { _, isShowing in
             if isShowing {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { focusedField = .goal }
@@ -979,6 +1065,7 @@ struct WaterTrackingView: View {
             }
         }
         .animation(.spring(response: 0.32, dampingFraction: 0.82), value: showCustomAmountPopup)
+        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: showClearCustomPopup)
         .animation(.spring(response: 0.32, dampingFraction: 0.82), value: showGoalPopup)
         .animation(.spring(response: 0.32, dampingFraction: 0.82), value: showPlanPopup)
         .animation(.spring(response: 0.32, dampingFraction: 0.82), value: showExtraPopup)

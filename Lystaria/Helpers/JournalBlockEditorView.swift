@@ -7,28 +7,81 @@
 
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 struct JournalBlockEditorView: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var entry: JournalEntry
     @State private var isMutatingBlocks = false
+    @State private var draggingBlock: JournalBlock? = nil
+    @State private var dragOverIndex: Int? = nil
 
     var body: some View {
         ScrollView {
-            // Block to Block Spacing is 12 
-            VStack(alignment: .leading, spacing: 12) {
-                ForEach(visibleBlocks) { block in
+            VStack(alignment: .leading, spacing: 0) {
+                // Drop zone before first block
+                if draggingBlock != nil {
+                    BlockDropZone(index: 0, dragOverIndex: $dragOverIndex)
+                        .onDrop(of: [.plainText], delegate: IndexedDropDelegate(
+                            index: 0,
+                            draggingBlock: $draggingBlock,
+                            dragOverIndex: $dragOverIndex,
+                            visibleBlocks: visibleBlocks,
+                            onMove: reorderBlockToIndex
+                        ))
+                }
+
+                ForEach(Array(visibleBlocks.enumerated()), id: \.element.id) { i, block in
                     JournalBlockRow(
                         block: block,
-                        onAddBelow: insertBlockBelow,
+                        onAddBelow: { b, type, initialText in insertBlockBelow(b, type, initialText) },
                         onDelete: deleteBlock,
                         onMoveUp: moveBlockUp,
                         onMoveDown: moveBlockDown,
                         onTransform: transformBlock
                     )
+                    .opacity(draggingBlock?.id == block.id ? 0.4 : 1)
+                    .contextMenu {
+                        Button(role: .destructive) {
+                            deleteBlock(block)
+                        } label: {
+                            Label("Delete Block", systemImage: "trash")
+                        }
+
+                        Button {
+                            moveBlockUp(block)
+                        } label: {
+                            Label("Move Up", systemImage: "arrow.up")
+                        }
+
+                        Button {
+                            moveBlockDown(block)
+                        } label: {
+                            Label("Move Down", systemImage: "arrow.down")
+                        }
+                    }
+                    .onDrag {
+                        draggingBlock = block
+                        dragOverIndex = nil
+                        return NSItemProvider(object: block.id.uuidString as NSString)
+                    }
+                    .padding(.vertical, 6)
+
+                    // Drop zone after each block
+                    if draggingBlock != nil {
+                        BlockDropZone(index: i + 1, dragOverIndex: $dragOverIndex)
+                            .onDrop(of: [.plainText], delegate: IndexedDropDelegate(
+                                index: i + 1,
+                                draggingBlock: $draggingBlock,
+                                dragOverIndex: $dragOverIndex,
+                                visibleBlocks: visibleBlocks,
+                                onMove: reorderBlockToIndex
+                            ))
+                    }
                 }
             }
-            .padding()
+            .padding(.horizontal)
+            .padding(.top)
             .padding(.bottom, 140)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -127,7 +180,7 @@ struct JournalBlockEditorView: View {
         save()
     }
 
-    private func insertBlockBelow(_ block: JournalBlock, _ type: JournalBlockType) {
+    private func insertBlockBelow(_ block: JournalBlock, _ type: JournalBlockType, _ initialText: String = "") {
         guard !isMutatingBlocks else { return }
         isMutatingBlocks = true
         defer { isMutatingBlocks = false }
@@ -168,7 +221,7 @@ struct JournalBlockEditorView: View {
 
         let newBlock = JournalBlock(
             type: type,
-            text: "",
+            text: initialText,
             sortOrder: insertAfterOrder + 1,
             parentBlockID: inheritedParentBlockID,
             listGroupID: inheritedListGroupID,
@@ -378,11 +431,88 @@ struct JournalBlockEditorView: View {
         }
     }
 
+    private func reorderBlockToIndex(source: JournalBlock, toIndex: Int) {
+        guard !isMutatingBlocks else { return }
+        isMutatingBlocks = true
+        defer { isMutatingBlocks = false }
+
+        let sorted = entry.sortedBlocks
+        guard let fromIndex = sorted.firstIndex(where: { $0.id == source.id }) else { return }
+
+        var reordered = sorted
+        let clampedTo = min(toIndex, reordered.count)
+        reordered.move(fromOffsets: IndexSet(integer: fromIndex), toOffset: clampedTo > fromIndex ? clampedTo : clampedTo)
+
+        for (i, block) in reordered.enumerated() {
+            block.sortOrder = i
+            block.touch()
+        }
+
+        entry.normalizeBlockSortOrders()
+        save()
+    }
+
     private func save() {
         do {
             try modelContext.save()
         } catch {
             print("Failed to save journal blocks: \(error)")
         }
+    }
+}
+
+struct BlockDropZone: View {
+    let index: Int
+    @Binding var dragOverIndex: Int?
+
+    var body: some View {
+        ZStack {
+            if dragOverIndex == index {
+                Capsule()
+                    .fill(LGradients.blue)
+                    .frame(height: 3)
+                    .padding(.horizontal, 8)
+            } else {
+                Color.clear.frame(height: 16)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 16)
+        .contentShape(Rectangle())
+    }
+}
+
+struct IndexedDropDelegate: DropDelegate {
+    let index: Int
+    @Binding var draggingBlock: JournalBlock?
+    @Binding var dragOverIndex: Int?
+    let visibleBlocks: [JournalBlock]
+    let onMove: (JournalBlock, Int) -> Void
+
+    func dropEntered(info: DropInfo) {
+        dragOverIndex = index
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        dragOverIndex = index
+        return DropProposal(operation: .move)
+    }
+
+    func dropExited(info: DropInfo) {
+        if dragOverIndex == index {
+            dragOverIndex = nil
+        }
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard let source = draggingBlock else {
+            draggingBlock = nil
+            dragOverIndex = nil
+            return false
+        }
+        onMove(source, index)
+        draggingBlock = nil
+        dragOverIndex = nil
+        return true
     }
 }

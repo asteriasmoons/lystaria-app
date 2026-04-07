@@ -21,11 +21,11 @@ final class MoodLog {
     /// Optional note (mini-app max 1500, enforce in UI)
     var note: String?
 
+    /// Stored emotional tone (-3 to +3) at creation time
+    var valence: Double = 1.0
+
     /// Stored computed average mood score (1–5) at creation time
     var score: Double = 3.0
-
-    /// Stored emotional valence (-3 to +3) at creation time
-    var valence: Double = 0.0
 
     /// Stored emotional intensity (1 to 5) at creation time
     var intensity: Double = 1.0
@@ -159,14 +159,14 @@ final class MoodLog {
         "playful": .init(valence: 2, intensity: 2),
         "satisfied": .init(valence: 2, intensity: 1),
 
-        "okay": .init(valence: 0, intensity: 1),
-        "neutral": .init(valence: 0, intensity: 1),
-        "reflective": .init(valence: 0, intensity: 2),
+        "okay": .init(valence: 1, intensity: 1),
+        "neutral": .init(valence: 1, intensity: 1),
+        "reflective": .init(valence: 1, intensity: 2),
         "calm": .init(valence: 1, intensity: 1),
-        "thoughtful": .init(valence: 0, intensity: 2),
+        "thoughtful": .init(valence: 1, intensity: 2),
         "mellow": .init(valence: 1, intensity: 1),
         "settled": .init(valence: 1, intensity: 1),
-        "reserved": .init(valence: 0, intensity: 1),
+        "reserved": .init(valence: 1, intensity: 1),
         "composed": .init(valence: 1, intensity: 2),
 
         "distracted": .init(valence: -1, intensity: 2),
@@ -230,7 +230,7 @@ final class MoodLog {
         activities: [String] = [],
         note: String? = nil,
         score: Double,
-        valence: Double = 0.0,
+        valence: Double = 1.0,
         intensity: Double = 1.0,
         createdAt: Date,
         updatedAt: Date,
@@ -241,7 +241,7 @@ final class MoodLog {
         self.note = note
         self.deletedAt = deletedAt
         self.score = MoodLog.clampScore(score)
-        self.valence = MoodLog.clampValence(valence)
+        self.valence = MoodLog.normalizeEmotionalTone(valence, fallbackPositive: score >= 3.0)
         self.intensity = MoodLog.clampIntensity(intensity)
 
         self.createdAt = createdAt
@@ -284,7 +284,7 @@ final class MoodLog {
         let scoreValues = normalized.compactMap { moodScores[$0] }
 
         guard !defs.isEmpty else {
-            return ScoringResult(score: 3.0, valence: 0.3, intensity: 1.0)
+            return ScoringResult(score: 3.0, valence: 1.0, intensity: 1.0)
         }
 
         let avgScore: Double = {
@@ -305,20 +305,21 @@ final class MoodLog {
             ? totalWeightedValence / totalIntensityWeight
             : 0.0
 
-        if abs(emotionalTone) < 0.15 {
+        if emotionalTone == 0 {
             if let strongestNonZero = defs
                 .filter({ $0.valence != 0 })
                 .max(by: { abs($0.valence * $0.intensity) < abs($1.valence * $1.intensity) }) {
-                emotionalTone = strongestNonZero.valence > 0 ? 0.5 : -0.5
+                emotionalTone = strongestNonZero.valence > 0 ? 1.0 : -1.0
             } else {
-                let fallbackTone = ((avgScore - 1.0) / 4.0) * 6.0 - 3.0
-                emotionalTone = fallbackTone >= 0 ? max(fallbackTone, 0.3) : min(fallbackTone, -0.3)
+                emotionalTone = avgScore >= 3.0 ? 1.0 : -1.0
             }
         }
 
+        emotionalTone = normalizeEmotionalTone(emotionalTone, fallbackPositive: avgScore >= 3.0)
+
         return ScoringResult(
             score: clampScore(avgScore),
-            valence: clampValence(emotionalTone),
+            valence: emotionalTone,
             intensity: clampIntensity(avgIntensity)
         )
     }
@@ -346,6 +347,20 @@ final class MoodLog {
     /// Keep valence in -3...3
     private static func clampValence(_ value: Double) -> Double {
         min(3.0, max(-3.0, value))
+    }
+
+    /// Emotional tone must always lean positive or negative and never sit at zero or below 1.0 magnitude.
+    private static func normalizeEmotionalTone(_ value: Double, fallbackPositive: Bool) -> Double {
+        let clamped = clampValence(value)
+
+        if clamped > 0 {
+            return max(clamped, 1.0)
+        } else if clamped < 0 {
+            return min(clamped, -1.0)
+        } else {
+            // Exact zero — use score-based fallback, never allow zero to persist
+            return fallbackPositive ? 1.0 : -1.0
+        }
     }
 
     /// Keep intensity in 1...5

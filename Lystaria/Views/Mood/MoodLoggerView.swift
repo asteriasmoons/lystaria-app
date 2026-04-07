@@ -33,6 +33,7 @@ struct MoodLoggerView: View {
     
     @State private var selectedTab: MoodLogTab = .today
     @State private var historyVisibleCount: Int = 4
+    @State private var showScoringInfoPopup: Bool = false
     @State private var logPendingDelete: MoodLog?
     @State private var showDeleteConfirmation: Bool = false
     
@@ -68,25 +69,19 @@ struct MoodLoggerView: View {
         return total / Double(logs.count)
     }
 
+    private func clampedValence(_ raw: Double) -> Double {
+        if raw >= 0 {
+            return max(raw, 1.0)
+        } else {
+            return min(raw, -1.0)
+        }
+    }
+
     private var averageValence: Double {
-        guard !logs.isEmpty else { return 0.3 }
-
-        let total = logs.reduce(0.0) { $0 + $1.valence }
-        let rawAverage = total / Double(logs.count)
-
-        if abs(rawAverage) >= 0.15 {
-            return rawAverage
-        }
-
-        if let strongestNonZero = logs
-            .map(\.valence)
-            .filter({ abs($0) >= 0.15 })
-            .max(by: { abs($0) < abs($1) }) {
-            return strongestNonZero > 0 ? 0.3 : -0.3
-        }
-
-        let fallbackTone = averageMoodScore >= 3.0 ? 0.3 : -0.3
-        return fallbackTone
+        guard !logs.isEmpty else { return 1.0 }
+        let total = logs.reduce(0.0) { $0 + clampedValence($1.valence) }
+        let avg = total / Double(logs.count)
+        return clampedValence(avg)
     }
 
     private var averageIntensity: Double {
@@ -229,6 +224,10 @@ struct MoodLoggerView: View {
                             averageValence: averageValence,
                             averageIntensity: averageIntensity
                         )
+                        .contentShape(RoundedRectangle(cornerRadius: 18))
+                        .onTapGesture {
+                            showScoringInfoPopup = true
+                        }
                     }
 
                     MoodStreakCard(
@@ -364,6 +363,65 @@ struct MoodLoggerView: View {
             LystariaBackground()
                 .ignoresSafeArea()
         )
+        .overlay {
+            if showScoringInfoPopup {
+                LystariaOverlayPopup(
+                    onClose: { showScoringInfoPopup = false },
+                    width: 560,
+                    heightRatio: 0.72
+                ) {
+                    HStack {
+                        GradientTitle(text: "How Scores Work", size: 24)
+                        Spacer()
+                    }
+                } content: {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("When you log a mood, Lystaria calculates three numbers behind the scenes. Here's what they actually mean.")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(LColors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .lineSpacing(3)
+                            .padding(.bottom, 4)
+
+                        scoringExplainerRow(
+                            icon: "starfill",
+                            title: "Mood Score",
+                            range: "1.0 – 5.0",
+                            description: "Every mood in the list has a score assigned to it — something like 4.3 for \"happy\" or 1.6 for \"overwhelmed\". When you select multiple moods, those scores get averaged into one number. Think of it as a simple snapshot of how good or hard your day felt emotionally. A score around 3 is neutral. Above 4 is a genuinely good day. Below 2 usually means something heavy was going on."
+                        )
+
+                        Rectangle()
+                            .fill(LColors.glassBorder)
+                            .frame(height: 1)
+
+                        scoringExplainerRow(
+                            icon: "wavyheart",
+                            title: "Emotional Tone",
+                            range: "-3.0 to +3.0",
+                            description: "Emotional tone goes a step further than the score — it looks at whether your feelings were leaning positive or negative, and how strongly. It runs from -3 (deeply negative, like feeling scared or defeated) to +3 (deeply positive, like feeling loved or grateful). The calculation also considers intensity, so a mild negative feeling won't drag your tone down as much as an intense one would. It never lands at exactly zero — it always leans one way, even slightly."
+                        )
+
+                        Rectangle()
+                            .fill(LColors.glassBorder)
+                            .frame(height: 1)
+
+                        scoringExplainerRow(
+                            icon: "boltfill",
+                            title: "Intensity",
+                            range: "1.0 – 5.0",
+                            description: "Intensity has nothing to do with whether you felt good or bad. It's about how much emotional energy was behind your feelings. Calm, mellow, composed — those are low intensity, around 1 or 2. Energized, angry, overwhelmed, inspired — those are high intensity, around 4 or 5. You can have a great day with high intensity (energized, motivated) or a rough day with low intensity (apathetic, detached). Tracking this over time helps you notice patterns in your emotional energy, separate from whether things were going well."
+                        )
+                    }
+                } footer: {
+                    LButton(title: "Got It", style: .gradient) {
+                        showScoringInfoPopup = false
+                    }
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.97)))
+                .zIndex(50)
+            }
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showScoringInfoPopup)
         .alert("Delete Mood Log?", isPresented: $showDeleteConfirmation, presenting: logPendingDelete) { log in
             Button("Cancel", role: .cancel) {
                 logPendingDelete = nil
@@ -483,6 +541,19 @@ struct MoodLoggerView: View {
             activitiesExpanded = false
         } catch {
             print("Failed to save mood log: \(error)")
+        }
+    }
+
+    @ViewBuilder
+    private func scoringExplainerRow(icon: String, title: String, range: String, description: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            GradientTitle(text: title, size: 20)
+
+            Text(description)
+                .font(.system(size: 14, weight: .regular))
+                .foregroundStyle(LColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .lineSpacing(3)
         }
     }
 
@@ -847,14 +918,10 @@ private struct MoodLogCard: View {
     }
 
     private var displayValence: Double {
-        if abs(log.valence) >= 0.15 {
-            return log.valence
-        }
-
-        if log.score >= 3.0 {
-            return 0.3
+        if log.valence >= 0 {
+            return max(log.valence, 1.0)
         } else {
-            return -0.3
+            return min(log.valence, -1.0)
         }
     }
 

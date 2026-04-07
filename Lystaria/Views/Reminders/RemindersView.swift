@@ -47,6 +47,49 @@ struct RemindersView: View {
     private var visibleReminders: [LystariaReminder] {
         Array(filtered.prefix(visibleCount))
     }
+    
+    // MARK: - Overview Counts
+
+    private var totalRemindersCount: Int {
+        allReminders.count
+    }
+
+    private var upcomingTodayCount: Int {
+        let now = Date()
+        let cal = Calendar.current
+        let startOfDay = cal.startOfDay(for: now)
+        let endOfDay = cal.date(byAdding: .day, value: 1, to: startOfDay)!
+
+        return allReminders.filter { reminder in
+            reminder.nextRunAt >= now &&
+            reminder.nextRunAt < endOfDay
+        }.count
+    }
+    
+    private var todoTodayCount: Int {
+        let now = Date()
+        let cal = Calendar.current
+        let startOfDay = cal.startOfDay(for: now)
+        let endOfDay = cal.date(byAdding: .day, value: 1, to: startOfDay)!
+
+        return allReminders.filter { reminder in
+            reminder.nextRunAt >= startOfDay &&
+            reminder.nextRunAt < endOfDay &&
+            !isCompletedToday(reminder)
+        }.count
+    }
+
+    private var doneTodayCount: Int {
+        allReminders.filter { reminder in
+            isCompletedToday(reminder)
+        }.count
+    }
+
+    private func isCompletedToday(_ reminder: LystariaReminder) -> Bool {
+        guard let completedAt = reminder.lastCompletedAt else { return false }
+        return Calendar.current.isDateInToday(completedAt)
+    }
+
 
     var body: some View {
         NavigationStack {
@@ -126,6 +169,7 @@ struct RemindersView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     headerSection
                     filtersSection
+                    overviewSection
                     remindersSection
                     Spacer(minLength: 96)
                 }
@@ -261,6 +305,53 @@ struct RemindersView: View {
             }
         }
     }
+    
+private var encouragingOverviewText: String {
+    if doneTodayCount > 0 {
+        return "You’ve completed \(doneTodayCount) reminder\(doneTodayCount == 1 ? "" : "s") today. Keep going."
+    }
+    if todoTodayCount > 0 {
+        return "You have \(todoTodayCount) reminder\(todoTodayCount == 1 ? "" : "s") to get through today."
+    }
+    return "You’re all caught up for now."
+}
+
+    private var overviewSection: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Image("notiffill")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 24, height: 24)
+                        .foregroundStyle(.white)
+
+                    GradientTitle(text: "Overview", font: .title3.bold())
+
+                    Spacer()
+                }
+
+                Text(encouragingOverviewText)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(LColors.textSecondary)
+                    .padding(.top, -2)
+
+                LazyVGrid(
+                    columns: [
+                        GridItem(.flexible(), spacing: 8),
+                        GridItem(.flexible(), spacing: 8)
+                    ],
+                    spacing: 8
+                ) {
+                    OverviewStatCard(value: upcomingTodayCount, label: "Upcoming Today")
+                    OverviewStatCard(value: doneTodayCount, label: "Done Today")
+                    OverviewStatCard(value: todoTodayCount, label: "To-Do Today")
+                    OverviewStatCard(value: totalRemindersCount, label: "Total Reminders")
+            }
+        }
+    }
+}
 
     private var remindersSection: some View {
         VStack(spacing: 14) {
@@ -330,9 +421,9 @@ struct RemindersView: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 14)
-                .background(.ultraThinMaterial)
+                .background(LColors.accentGradient)
                 .clipShape(Capsule())
-                .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
+                .shadow(color: Color(hex: "#7d19f7").opacity(0.5), radius: 16, y: 4)
                 .padding(.bottom, 110)
             }
             .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -507,6 +598,7 @@ struct RemindersView: View {
                 reminder.resetRoutineChecklist(for: "\(reminder.nextRunAt.timeIntervalSince1970)")
             }
 
+            reminder.lastCompletedAt = Date()
             reminder.updatedAt = Date()
 
             // If this is a habit-linked reminder and another same-day reminder is still due later,
@@ -526,6 +618,7 @@ struct RemindersView: View {
             showToast("\(reminder.title) done · Next: \(nextText)")
         } else {
             // One-time reminders stay checked for today.
+            reminder.lastCompletedAt = Date()
             reminder.acknowledgedAt = Date()
             reminder.status = .sent
 
@@ -571,6 +664,33 @@ struct RemindersView: View {
         try? modelContext.save()
         print("[RemindersView] deleted status=\(reminder.status.rawValue)")
         NotificationManager.shared.cancelReminder(reminder)
+    }
+}
+
+struct OverviewStatCard: View {
+    let value: Int
+    let label: String
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Text("\(value)")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundStyle(.white)
+
+            Text(label)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(LColors.textSecondary)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+        }
+        .frame(maxWidth: .infinity, minHeight: 76)
+        .padding(.horizontal, 8)
+        .background(Color.white.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(LColors.glassBorder, lineWidth: 1)
+        )
     }
 }
 
@@ -652,9 +772,19 @@ struct ReminderCard: View {
     }
     
     private var isDone: Bool {
-        guard let ack = reminder.acknowledgedAt else { return false }
-        // Consider "done" if acknowledged today.
-        return Calendar.current.isDateInToday(ack)
+        guard !reminder.isRecurring else { return false }
+
+        if let completedAt = reminder.lastCompletedAt,
+           Calendar.current.isDateInToday(completedAt) {
+            return true
+        }
+
+        if let ack = reminder.acknowledgedAt,
+           Calendar.current.isDateInToday(ack) {
+            return true
+        }
+
+        return false
     }
     
     private var displayTimeZone: TimeZone {
@@ -948,7 +1078,13 @@ struct ReminderCard: View {
         
         return now >= reminder.nextRunAt
     }
-    
+
+    private func isOverdue(now: Date) -> Bool {
+        if isDone { return false }
+        let startOfToday = Calendar.current.startOfDay(for: now)
+        return reminder.nextRunAt < startOfToday
+    }
+
     private func isUpcoming(now: Date) -> Bool {
         // Upcoming is within the next 24 hours (but not yet due), and not completed.
         if isDone { return false }
@@ -959,11 +1095,13 @@ struct ReminderCard: View {
     // Transparent status badge colors
     private var upcomingBadgeColor: Color { Color.teal.opacity(0.42) }
     private var dueNowBadgeColor: Color { Color.yellow.opacity(0.48) }
+    private var overdueBadgeColor: Color { Color.red.opacity(0.42) }
     
     var body: some View {
         // Recompute status badges periodically so they flip at the correct time.
         TimelineView(.periodic(from: .now, by: 30)) { context in
             let now = context.date
+            let overdue = isOverdue(now: now)
             let dueNow = isDueNow(now: now)
             let upcoming = isUpcoming(now: now)
             
@@ -982,9 +1120,11 @@ struct ReminderCard: View {
                                 Spacer(minLength: 0)
                             }
 
-                            if dueNow || upcoming {
+                            if overdue || dueNow || upcoming {
                                 HStack(spacing: 6) {
-                                    if dueNow {
+                                    if overdue {
+                                        LBadge(text: "OVERDUE", color: overdueBadgeColor)
+                                    } else if dueNow {
                                         LBadge(text: "DUE NOW", color: dueNowBadgeColor)
                                     } else if upcoming {
                                         LBadge(text: "UPCOMING", color: upcomingBadgeColor)
@@ -1123,6 +1263,15 @@ struct NewReminderSheet: View {
             onSave: { save() }
         ) {
             formContent
+        }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") {
+                    detailsFocused = false
+                    focusedChecklistIndex = nil
+                }
+            }
         }
     }
 
@@ -1684,6 +1833,15 @@ struct EditReminderSheet: View {
             onSave: { apply() }
         ) {
             formContent
+        }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") {
+                    detailsFocused = false
+                    focusedChecklistIndex = nil
+                }
+            }
         }
         .onAppear { loadFromModel() }
     }
@@ -3056,7 +3214,52 @@ private enum ReminderChecklistStore {
     }
 }
 
-// MARK: - ReminderCompute
+// MARK: - Reminder Badge Helpers
+
+// Returns true if the reminder is considered completed for the given occurrence date.
+private func isReminderCompleted(_ reminder: LystariaReminder, occurrenceDate: Date) -> Bool {
+    let cal = ReminderCompute.tzCalendar
+
+    if let completed = reminder.lastCompletedAt,
+       cal.isDate(completed, inSameDayAs: occurrenceDate) {
+        return true
+    }
+
+    if !reminder.isRecurring,
+       let ack = reminder.acknowledgedAt,
+       cal.isDate(ack, inSameDayAs: occurrenceDate) {
+        return true
+    }
+
+    return false
+}
+
+// Returns true when the reminder belongs to a previous calendar day and still is not completed.
+private func isReminderOverdue(_ reminder: LystariaReminder, now: Date) -> Bool {
+    let cal = ReminderCompute.tzCalendar
+    let todayStart = cal.startOfDay(for: now)
+    let dueDate = reminder.nextRunAt
+
+    return dueDate < todayStart && !isReminderCompleted(reminder, occurrenceDate: dueDate)
+}
+
+// Returns true when the reminder is due today right now and is not overdue/completed.
+private func isReminderDueNow(_ reminder: LystariaReminder, now: Date) -> Bool {
+    let cal = ReminderCompute.tzCalendar
+    let todayStart = cal.startOfDay(for: now)
+    let dueDate = reminder.nextRunAt
+
+    return dueDate >= todayStart &&
+           dueDate <= now &&
+           !isReminderCompleted(reminder, occurrenceDate: dueDate) &&
+           !isReminderOverdue(reminder, now: now)
+}
+
+// Returns true when the reminder is still ahead today/in the future and not completed.
+private func isReminderUpcoming(_ reminder: LystariaReminder, now: Date) -> Bool {
+    let dueDate = reminder.nextRunAt
+    return dueDate > now && !isReminderCompleted(reminder, occurrenceDate: dueDate)
+}
 
 enum ReminderCompute {
     static var tzCalendar: Calendar {
@@ -3371,3 +3574,58 @@ enum ReminderCompute {
         }
     }
 }
+
+enum ReminderStatusBadgeStyle {
+    case overdue
+    case dueNow
+    case upcoming
+}
+
+struct ReminderStatusBadge: View {
+    let label: String
+    let style: ReminderStatusBadgeStyle
+    var body: some View {
+        Text(label)
+            .font(.system(size: 12, weight: .bold))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(badgeBackground)
+            .foregroundStyle(badgeForeground)
+            .clipShape(Capsule())
+            .overlay(
+                Capsule().stroke(badgeBorder, lineWidth: 1)
+            )
+    }
+    private var badgeBackground: Color {
+        switch style {
+        case .overdue:
+            return Color.red.opacity(0.17)
+        case .dueNow:
+            return LColors.accent.opacity(0.18)
+        case .upcoming:
+            return Color.white.opacity(0.09)
+        }
+    }
+    private var badgeForeground: Color {
+        switch style {
+        case .overdue:
+            return Color.red
+        case .dueNow:
+            return LColors.accent
+        case .upcoming:
+            return LColors.textPrimary
+        }
+    }
+    private var badgeBorder: Color {
+        switch style {
+        case .overdue:
+            return Color.red.opacity(0.45)
+        case .dueNow:
+            return LColors.accent.opacity(0.44)
+        case .upcoming:
+            return LColors.glassBorder
+        }
+    }
+}
+
+

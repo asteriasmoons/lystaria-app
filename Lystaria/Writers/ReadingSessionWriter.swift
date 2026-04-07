@@ -33,6 +33,7 @@ enum ReadingSessionWriter {
             startPage: safeStart,
             endPage: safeEnd,
             minutesRead: safeMinutes,
+            pagesRead: pagesRead,   // ← ADD THIS
             sessionDate: sessionDate
         )
 

@@ -19,6 +19,7 @@ struct DailyIntentionView: View {
     @State private var isEditing: Bool = true
     @State private var lastSyncedText: String = ""
     @State private var dayChangeChecksEnabled: Bool = false
+    @FocusState private var isTextEditorFocused: Bool
 
     private let dayChangeTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
@@ -46,7 +47,10 @@ struct DailyIntentionView: View {
                     Spacer()
 
                     if isEditing {
-                        Button(action: save) {
+                        Button(action: {
+                            isTextEditorFocused = false
+                            save()
+                        }) {
                             Text("Save")
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(.white)
@@ -71,6 +75,7 @@ struct DailyIntentionView: View {
                         }
 
                         TextEditor(text: $text)
+                            .focused($isTextEditorFocused)
                             .scrollContentBackground(.hidden)
                             .font(.system(size: 14))
                             .foregroundStyle(LColors.textPrimary)
@@ -103,6 +108,9 @@ struct DailyIntentionView: View {
                         HStack(spacing: 10) {
                             LButton(title: "Edit", icon: "pencil", style: .secondary) {
                                 isEditing = true
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                    isTextEditorFocused = true
+                                }
                             }
 
                             GradientCapsuleButton(title: "Clear", icon: "trashfill") {
@@ -112,6 +120,12 @@ struct DailyIntentionView: View {
                             Spacer()
                         }
                     }
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if isTextEditorFocused {
+                    isTextEditorFocused = false
                 }
             }
         }
@@ -165,6 +179,9 @@ struct DailyIntentionView: View {
 
         lastSyncedText = normalized
         isEditing = normalized.isEmpty
+        if !isEditing {
+            isTextEditorFocused = false
+        }
     }
 
     private func refreshForDayChangeIfNeeded(forceReload: Bool = false) {
@@ -194,6 +211,7 @@ struct DailyIntentionView: View {
             text = trimmed
             lastSyncedText = trimmed
             isEditing = false
+            isTextEditorFocused = false
         } catch {
             print("Failed to save daily intention: \(error)")
         }
@@ -205,6 +223,9 @@ struct DailyIntentionView: View {
             text = ""
             lastSyncedText = ""
             isEditing = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                isTextEditorFocused = true
+            }
         } catch {
             print("Failed to clear daily intention: \(error)")
         }

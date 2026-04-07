@@ -3,6 +3,7 @@
 
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct HabitsView: View {
     @Environment(\.modelContext) private var modelContext
@@ -1655,6 +1656,10 @@ struct NewHabitSheet: View {
                                 .foregroundStyle(LColors.textSecondary)
                         }
                     }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        dismissKeyboard()
+                    }
                 }
             },
             footer: {
@@ -1998,6 +2003,10 @@ struct EditHabitSheet: View {
                                 .foregroundStyle(LColors.textSecondary)
                         }
                     }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        dismissKeyboard()
+                    }
                 }
             },
             footer: {
@@ -2132,4 +2141,8 @@ struct EditHabitSheet: View {
 
         closeAction()
     }
+}
+
+private func dismissKeyboard() {
+    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
 }

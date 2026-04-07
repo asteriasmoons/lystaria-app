@@ -16,6 +16,13 @@ final class Note {
     var content: String = ""
     var colorHex: String = "#F8E58C"
 
+    // Original stored label — kept intact so existing data is not lost
+    var label: String = ""
+    // Second label stored as a plain string (empty = not set)
+    var label2: String = ""
+
+    var tabName: String = "All Notes"
+
     // Markers
     var isPinned: Bool = false
     var isFavorite: Bool = false
@@ -28,6 +35,9 @@ final class Note {
         id: UUID = UUID(),
         content: String = "",
         colorHex: String = "#F8E58C",
+        label: String = "",
+        label2: String = "",
+        tabName: String = "All Notes",
         isPinned: Bool = false,
         isFavorite: Bool = false,
         createdAt: Date = Date(),
@@ -36,6 +46,9 @@ final class Note {
         self.id = id
         self.content = content
         self.colorHex = colorHex
+        self.label = label
+        self.label2 = label2
+        self.tabName = tabName
         self.isPinned = isPinned
         self.isFavorite = isFavorite
         self.createdAt = createdAt
@@ -61,5 +74,12 @@ final class Note {
     var previewText: String {
         trimmedContent
             .replacingOccurrences(of: "\n", with: " ")
+    }
+
+    /// Both labels as an array, omitting empty entries.
+    var activeLabels: [String] {
+        [label, label2]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
     }
 }

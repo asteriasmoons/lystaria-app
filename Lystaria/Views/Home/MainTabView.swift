@@ -48,6 +48,8 @@ struct MainTabView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             bottomNav
                 .zIndex(9999)
+                .opacity(appState.isPopupPresented ? 0 : 1)
+                .animation(.easeInOut(duration: 0.2), value: appState.isPopupPresented)
         }
         .sheet(isPresented: $showSignIn) {
             SignInView()

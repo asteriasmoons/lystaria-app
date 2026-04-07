@@ -87,6 +87,16 @@ struct LystariaConfirmDialog: ViewModifier {
     }
 }
 
+// MARK: - Keyboard dismiss helper
+enum LystariaKeyboardHelper {
+    static func dismiss() {
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder),
+            to: nil, from: nil, for: nil
+        )
+    }
+}
+
 // MARK: - Pop Up Container (Reusable)
 
 struct LystariaOverlayPopup<Header: View, Content: View, Footer: View>: View {
@@ -109,25 +119,25 @@ struct LystariaOverlayPopup<Header: View, Content: View, Footer: View>: View {
                     }
 
                 VStack(alignment: .leading, spacing: 18) {
-                    header()
+                        header()
 
-                    ScrollView(.vertical, showsIndicators: true) {
-                        VStack(alignment: .leading, spacing: 14) {
-                            content()
+                        ScrollView(.vertical, showsIndicators: true) {
+                            VStack(alignment: .leading, spacing: 14) {
+                                content()
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    .scrollBounceBehavior(.basedOnSize)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                        .scrollBounceBehavior(.basedOnSize)
 
-                    footer()
-                }
-                .padding(22)
-                .frame(
-                    width: max(0, min(proxy.size.width.isFinite ? proxy.size.width - 40 : width, width)),
-                    alignment: .topLeading
-                )
-                .frame(maxHeight: proxy.size.height * heightRatio, alignment: .topLeading)
+                        footer()
+                    }
+                    .padding(22)
+                    .frame(
+                        width: max(0, min(proxy.size.width.isFinite ? proxy.size.width - 40 : width, width)),
+                        alignment: .topLeading
+                    )
+                    .frame(maxHeight: proxy.size.height * heightRatio, alignment: .topLeading)
                 .background(
                     ZStack {
                         LystariaBackground()

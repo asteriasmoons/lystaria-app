@@ -102,8 +102,11 @@ struct SymptomLoggerView: View {
                             .overlay(Circle().stroke(LColors.glassBorder, lineWidth: 1))
                             .frame(width: 34, height: 34)
 
-                        Image(systemName: "plus")
-                            .font(.system(size: 14, weight: .bold))
+                        Image("wavyplus")
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 16, height: 16)
                             .foregroundStyle(.white)
                     }
                 }
@@ -126,10 +129,11 @@ struct SymptomLoggerView: View {
         GlassCard {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 12) {
-                    Image(systemName: "waveform.path.ecg")
+                    Image("scopefill")
+                        .renderingMode(.template)
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 22, height: 22)
+                        .frame(width: 24, height: 24)
                         .foregroundStyle(.white)
 
                     GradientTitle(text: "Overview", size: 24)
@@ -175,7 +179,8 @@ struct SymptomLoggerView: View {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(spacing: 8) {
-                            Image(systemName: "waveform.path.ecg")
+                            Image("medcross")
+                                .renderingMode(.template)
                                 .resizable()
                                 .scaledToFit()
                                 .frame(width: 14, height: 14)

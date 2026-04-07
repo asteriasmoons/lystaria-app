@@ -28,6 +28,7 @@ struct LystariaApp: App {
         let schema = Schema([
             AuthUser.self,
             Note.self,
+            NotesTab.self,
             DistractionBubble.self,
             CalendarEvent.self,
             Habit.self,
@@ -50,6 +51,7 @@ struct LystariaApp: App {
             ReadingGoal.self,
             DailyReadingProgress.self,
             WeeklyReadingSnapshot.self,
+            ReadingPointsEntry.self,
             BookmarkFolder.self,
             BookmarkItem.self,
             JournalEntry.self,

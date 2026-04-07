@@ -202,13 +202,13 @@ struct JournalTabView: View {
             } else {
                 LazyVGrid(columns: gridColumns, spacing: 14) {
                     let allowedBookIds = Set(
-                        books
+                        sortedBooks
                             .sorted { $0.createdAt < $1.createdAt }
                             .prefix(1)
                             .map { $0.persistentModelID }
                     )
 
-                    ForEach(books, id: \.persistentModelID) { book in
+                    ForEach(sortedBooks, id: \.persistentModelID) { book in
                         NavigationLink {
                             JournalBookDetailView(book: book)
                         } label: {
@@ -216,12 +216,23 @@ struct JournalTabView: View {
                                 title: book.title,
                                 coverHex: book.coverHex,
                                 entryCount: entryCount(for: book),
-                                lastDate: lastEntryDate(for: book)
+                                lastDate: lastEntryDate(for: book),
+                                isPinned: book.pinOrder > 0
                             )
                         }
                         .buttonStyle(.plain)
                         .premiumLocked(!limits.hasPremiumAccess && !allowedBookIds.contains(book.persistentModelID))
                         .contextMenu {
+                            if book.pinOrder > 0 {
+                                Button("Unpin Book") {
+                                    unpinBook(book)
+                                }
+                            } else {
+                                Button("Pin Book") {
+                                    pinBook(book)
+                                }
+                            }
+
                             Button("Edit Book") {
                                 editingBook = book
                                 showBookEditor = true
@@ -245,6 +256,23 @@ struct JournalTabView: View {
             GridItem(.flexible(), spacing: 14),
             GridItem(.flexible(), spacing: 14)
         ]
+    }
+    
+    private var sortedBooks: [JournalBook] {
+        books.sorted { lhs, rhs in
+            let lhsPinned = lhs.pinOrder > 0
+            let rhsPinned = rhs.pinOrder > 0
+
+            if lhsPinned != rhsPinned {
+                return lhsPinned && !rhsPinned
+            }
+
+            if lhsPinned && rhsPinned, lhs.pinOrder != rhs.pinOrder {
+                return lhs.pinOrder < rhs.pinOrder
+            }
+
+            return lhs.createdAt > rhs.createdAt
+        }
     }
 
     // MARK: - Journal Streaks
@@ -329,6 +357,18 @@ struct JournalTabView: View {
             e.deletedAt = Date()
         }
         book.deletedAt = Date()
+        try? modelContext.save()
+    }
+    
+    private func pinBook(_ book: JournalBook) {
+        let currentPinned = books.filter { $0.pinOrder > 0 }
+        let nextPinOrder = (currentPinned.map(\.pinOrder).max() ?? 0) + 1
+        book.pinOrder = nextPinOrder
+        try? modelContext.save()
+    }
+
+    private func unpinBook(_ book: JournalBook) {
+        book.pinOrder = 0
         try? modelContext.save()
     }
 
@@ -492,39 +532,15 @@ struct JournalBookCard: View {
     let coverHex: String
     let entryCount: Int
     let lastDate: Date?
+    let isPinned: Bool
 
     private var coverColor: Color { Color(hex: coverHex) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            bookGraphic
-                .frame(height: 138)
-
-            // Meta only (title is already on the book cover)
-            HStack(spacing: 8) {
-                Text("\(entryCount) entries")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(LColors.textSecondary)
-
-                Spacer()
-
-                if let lastDate {
-                    Text(lastDate.formatted(.dateTime.month(.abbreviated).day()))
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(LColors.textSecondary)
-                }
-            }
-        }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 18)
-                .fill(LColors.glassSurface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18)
-                        .stroke(LColors.glassBorder, lineWidth: 1)
-                )
-        )
-        .contentShape(RoundedRectangle(cornerRadius: 18))
+        bookGraphic
+            .frame(height: 230)
+            .scaleEffect(0.85)
+            .contentShape(RoundedRectangle(cornerRadius: 18))
     }
 
     // MARK: - Book Graphic
@@ -622,11 +638,24 @@ struct JournalBookCard: View {
 
                     // Cover content
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(title)
-                            .font(.system(size: 16, weight: .black))
-                            .foregroundStyle(.white)
-                            .shadow(color: .black.opacity(0.35), radius: 4, y: 2)
-                            .lineLimit(2)
+                        HStack(alignment: .top, spacing: 8) {
+                            Text(title)
+                                .font(.system(size: 16, weight: .black))
+                                .foregroundStyle(.white)
+                                .shadow(color: .black.opacity(0.35), radius: 4, y: 2)
+                                .lineLimit(2)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                            if isPinned {
+                                Image("pinfill")
+                                    .renderingMode(.template)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 16, height: 16)
+                                    .foregroundStyle(.white)
+                                    .padding(.top, 2)
+                            }
+                        }
 
                         Text("\(entryCount) entries")
                             .font(.system(size: 12, weight: .bold))

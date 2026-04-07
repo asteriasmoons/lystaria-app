@@ -336,6 +336,11 @@ struct ChecklistsView: View {
                     Button("Rename") {
                         beginRenaming(checklist)
                     }
+                    Button(role: .destructive) {
+                        deleteChecklist(checklist)
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
                 }
             }
         }
@@ -404,6 +409,20 @@ struct ChecklistsView: View {
         try? modelContext.save()
         renamingChecklistID = nil
         renameDraft = ""
+    }
+
+    private func deleteChecklist(_ checklist: Checklist) {
+        // Delete all items inside it first
+        for item in (checklist.items ?? []) {
+            modelContext.delete(item)
+        }
+        modelContext.delete(checklist)
+        try? modelContext.save()
+
+        // If we deleted the selected one, fall back to first available
+        if selectedChecklistID == checklist.persistentModelID {
+            selectedChecklistID = checklists.first(where: { $0.persistentModelID != checklist.persistentModelID })?.persistentModelID
+        }
     }
 
     private func resetDragState() {
@@ -707,6 +726,10 @@ private struct ChecklistItemCard: View {
     }
 
     private func deleteItem() {
+        if let checklist = item.checklist,
+           let idx = checklist.items?.firstIndex(where: { $0.persistentModelID == item.persistentModelID }) {
+            checklist.items?.remove(at: idx)
+        }
         modelContext.delete(item)
         try? modelContext.save()
     }

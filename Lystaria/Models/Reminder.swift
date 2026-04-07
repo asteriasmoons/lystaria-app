@@ -124,6 +124,7 @@ final class LystariaReminder {
     var statusRaw: String = ReminderStatus.scheduled.rawValue
     var nextRunAt: Date = Date()
     var acknowledgedAt: Date?
+    var lastCompletedAt: Date?
     var pendingNextRunAt: Date?
     
     var runDayKey: String?          // "2026-02-05"
@@ -335,6 +336,7 @@ final class LystariaReminder {
         self.statusRaw = status.rawValue
         self.nextRunAt = nextRunAt
         self.acknowledgedAt = nil
+        self.lastCompletedAt = nil
         self.pendingNextRunAt = nil
         self.runDayKey = nil
         self.sentTimesOfDayStorage = "[]"
