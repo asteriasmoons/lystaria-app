@@ -989,6 +989,7 @@ struct WaterTrackingView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await water.requestAuthorization()
+            water.updateWaterGoalForSync(amountGoal)
             selectedDate = Date()
             selectedDayWater = water.todayWaterFlOz
             await recalculateReachedGoalDates()
@@ -1012,6 +1013,9 @@ struct WaterTrackingView: View {
             }
             Task { await recalculateReachedGoalDates() }
             HealthWidgetSync.syncWater(waterToday: newValue, waterGoal: amountGoal)
+        }
+        .onChange(of: amountGoal) { _, newGoal in
+            water.updateWaterGoalForSync(newGoal)
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
             dayRefreshID = UUID()

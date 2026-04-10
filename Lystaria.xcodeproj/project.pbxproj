@@ -225,6 +225,7 @@
 		CFB0B1762F832BCE00B42AB3 /* ReadingTimerActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFB0B1752F832BC000B42AB3 /* ReadingTimerActivityAttributes.swift */; };
 		CFB0B1772F832BF900B42AB3 /* ReadingTimerActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFB0B1752F832BC000B42AB3 /* ReadingTimerActivityAttributes.swift */; };
 		CFB0B17C2F85630D00B42AB3 /* CalendarOverviewSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFB0B17B2F85630500B42AB3 /* CalendarOverviewSheet.swift */; };
+		CFB0B17E2F87163A00B42AB3 /* ReminderTimeBlockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFB0B17D2F87163100B42AB3 /* ReminderTimeBlockView.swift */; };
 		CFDD11AB2F7F22BF0067B262 /* Note.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFDD11AA2F7F22BC0067B262 /* Note.swift */; };
 		CFDD11AE2F7F24040067B262 /* NotesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFDD11AD2F7F24010067B262 /* NotesView.swift */; };
 		CFF7C5AF2F72EA0D00A67EC3 /* Medication.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFF7C5AE2F72EA0800A67EC3 /* Medication.swift */; };
@@ -476,6 +477,7 @@
 		CFB0B1752F832BC000B42AB3 /* ReadingTimerActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingTimerActivityAttributes.swift; sourceTree = "<group>"; };
 		CFB0B17A2F83368100B42AB3 /* Lystaria WidgetsExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Lystaria WidgetsExtension.entitlements"; sourceTree = "<group>"; };
 		CFB0B17B2F85630500B42AB3 /* CalendarOverviewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarOverviewSheet.swift; sourceTree = "<group>"; };
+		CFB0B17D2F87163100B42AB3 /* ReminderTimeBlockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderTimeBlockView.swift; sourceTree = "<group>"; };
 		CFDD11AA2F7F22BC0067B262 /* Note.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Note.swift; sourceTree = "<group>"; };
 		CFDD11AD2F7F24010067B262 /* NotesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesView.swift; sourceTree = "<group>"; };
 		CFF7C5AE2F72EA0800A67EC3 /* Medication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Medication.swift; sourceTree = "<group>"; };
@@ -858,6 +860,7 @@
 		CF8D83122F50A4640092FC98 /* Reminders */ = {
 			isa = PBXGroup;
 			children = (
+				CFB0B17D2F87163100B42AB3 /* ReminderTimeBlockView.swift */,
 				CF8421C82F638EA70069F12F /* KanbanView.swift */,
 				CF8D83892F560F700092FC98 /* RemindersView.swift */,
 			);
@@ -1406,6 +1409,7 @@
 				CF8421C72F636DD00069F12F /* ToolboxView.swift in Sources */,
 				CF29FC992F70905A00EC47F8 /* HealthWidgetSync.swift in Sources */,
 				CF13B6832F6A2DFF008D3CE9 /* JournalPromptUsage.swift in Sources */,
+				CFB0B17E2F87163A00B42AB3 /* ReminderTimeBlockView.swift in Sources */,
 				CF8D834C2F5124EB0092FC98 /* LystariaTheme.swift in Sources */,
 				CF8B7F672F6B34BF006A7D3B /* JournalInlineStyle.swift in Sources */,
 				CF8B7F9C2F6C6A35006A7D3B /* BookmarkIconLibrary.swift in Sources */,
@@ -1587,6 +1591,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Lystaria Widgets/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Lystaria Widgets";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Apple requests to read your health data to update the app and widget";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1623,6 +1628,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Lystaria Widgets/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Lystaria Widgets";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Apple requests to read your health data to update the app and widget";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1802,9 +1808,11 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Lystaria;
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Lystaria uses your calendar to sync your reminders and events with Apple Calendar.";
+				INFOPLIST_KEY_NSHealthClinicalHealthRecordsShareUsageDescription = "Lystaria reads water and steps to display in your widget";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Lystaria saves water intake you log so it appears in Apple Health.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Lystaria reads your step count to display your daily movement progress.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Lystaria uses your location to quickly add places to your events.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -1878,9 +1886,11 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Lystaria;
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Lystaria uses your calendar to sync your reminders and events with Apple Calendar.";
+				INFOPLIST_KEY_NSHealthClinicalHealthRecordsShareUsageDescription = "Lystaria reads water and steps to display in your widget";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Lystaria saves water intake you log so it appears in Apple Health.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Lystaria reads your step count to display your daily movement progress.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Lystaria uses your location to quickly add places to your events.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;

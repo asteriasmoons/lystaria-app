@@ -1,8 +1,8 @@
 // RemindersView.swift
 // Lystaria
 
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 struct RemindersView: View {
     @Environment(\.modelContext) private var modelContext
@@ -17,17 +17,18 @@ struct RemindersView: View {
     @State private var filter = "all"
     @State private var visibleCount: Int = 5
     @State private var showKanban = false
-    
-    // Onboarding
+    @State private var showTimeBlock = false
+
+    /// Onboarding
     @StateObject private var onboarding = OnboardingManager()
 
-    // Editing
+    /// Editing
     @State private var editingReminder: LystariaReminder? = nil
 
-    // Completion toast
+    /// Completion toast
     @State private var toastMessage: String? = nil
 
-    private let filterOptions = ["all","once","daily","weekly","monthly","yearly","interval"]
+    private let filterOptions = ["all", "once", "daily", "weekly", "monthly", "yearly", "interval"]
 
     private var greeting: String {
         let name = (authUsers.first?.displayName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -47,7 +48,37 @@ struct RemindersView: View {
     private var visibleReminders: [LystariaReminder] {
         Array(filtered.prefix(visibleCount))
     }
-    
+
+    /// Returns the number of fire times this reminder has scheduled on `date`,
+    /// based on its schedule kind and timesOfDay list.
+    /// For once / interval reminders, returns 1 if nextRunAt falls on that date, else 0.
+    private func fireTimesToday(_ reminder: LystariaReminder, on date: Date = Date()) -> Int {
+        let cal = ReminderCompute.tzCalendar
+        guard let schedule = reminder.schedule, reminder.status != .deleted else { return 0 }
+
+        switch schedule.kind {
+        case .once:
+            return cal.isDate(reminder.nextRunAt, inSameDayAs: date) ? 1 : 0
+
+        case .interval:
+            // Interval reminders are continuous — count 1 if nextRunAt is today or it was completed today.
+            let isToday = cal.isDate(reminder.nextRunAt, inSameDayAs: date)
+            let completedToday = isCompletedToday(reminder)
+            return (isToday || completedToday) ? 1 : 0
+
+        case .daily, .weekly, .monthly, .yearly:
+            // Only count if nextRunAt is today OR the reminder was completed today
+            // (meaning it fired today and nextRunAt has since advanced).
+            let firesOrFiredToday = cal.isDate(reminder.nextRunAt, inSameDayAs: date) || isCompletedToday(reminder)
+            guard firesOrFiredToday else { return 0 }
+
+            let times = (schedule.timesOfDay?.isEmpty == false)
+                ? (schedule.timesOfDay ?? [])
+                : (schedule.timeOfDay != nil ? [schedule.timeOfDay!] : [])
+            return times.isEmpty ? 0 : times.count
+        }
+    }
+
     // MARK: - Overview Counts
 
     private var totalRemindersCount: Int {
@@ -56,33 +87,67 @@ struct RemindersView: View {
 
     private var upcomingTodayCount: Int {
         let now = Date()
-        let cal = Calendar.current
-        let startOfDay = cal.startOfDay(for: now)
-        let endOfDay = cal.date(byAdding: .day, value: 1, to: startOfDay)!
+        let endOfDay = Calendar.current.date(
+            byAdding: .day, value: 1,
+            to: Calendar.current.startOfDay(for: now),
+        )!
+        return allReminders
+            .filter { $0.status != .deleted }
+            .filter { $0.nextRunAt >= now && $0.nextRunAt < endOfDay }
+            .reduce(0) { sum, reminder in
+                // nextRunAt points to the next pending fire time — count remaining times today.
+                // Count how many timesOfDay are >= nextRunAt's time within today.
+                guard let schedule = reminder.schedule else { return sum + 1 }
+                if schedule.kind == .once || schedule.kind == .interval {
+                    return sum + 1
+                }
+                let times = (schedule.timesOfDay?.isEmpty == false)
+                    ? (schedule.timesOfDay ?? [])
+                    : (schedule.timeOfDay != nil ? [schedule.timeOfDay!] : [])
+                if times.isEmpty { return sum + 1 }
+                // Count times that are >= nextRunAt's HH:mm
+                let cal = ReminderCompute.tzCalendar
+                let nextHH = cal.component(.hour, from: reminder.nextRunAt)
+                let nextMM = cal.component(.minute, from: reminder.nextRunAt)
+                let remaining = times.compactMap { ReminderCompute.parseHHMM($0) }
+                    .count(where: { $0.0 > nextHH || ($0.0 == nextHH && $0.1 >= nextMM) })
 
-        return allReminders.filter { reminder in
-            reminder.nextRunAt >= now &&
-            reminder.nextRunAt < endOfDay
-        }.count
+                return sum + max(1, remaining)
+            }
     }
-    
-    private var todoTodayCount: Int {
-        let now = Date()
-        let cal = Calendar.current
-        let startOfDay = cal.startOfDay(for: now)
-        let endOfDay = cal.date(byAdding: .day, value: 1, to: startOfDay)!
 
-        return allReminders.filter { reminder in
-            reminder.nextRunAt >= startOfDay &&
-            reminder.nextRunAt < endOfDay &&
-            !isCompletedToday(reminder)
-        }.count
+    private var totalTodayCount: Int {
+        allReminders
+            .filter { $0.status != .deleted }
+            .reduce(0) { $0 + fireTimesToday($1) }
     }
 
     private var doneTodayCount: Int {
-        allReminders.filter { reminder in
-            isCompletedToday(reminder)
-        }.count
+        let cal = Calendar.current
+        return allReminders
+            .filter { $0.status != .deleted }
+            .reduce(0) { sum, reminder in
+                // Primary: timestamp array populated by incrementCompletionsToday
+                let timestamps = decodeCompletionTimestamps(reminder)
+                let todayCount = timestamps.filter { cal.isDateInToday($0) }.count
+                if todayCount > 0 { return sum + todayCount }
+
+                // Fallback: completed before new tracking existed.
+                // Only count if lastCompletedAt is today AND nextRunAt is also today
+                // (or reminder is one-time and was just completed).
+                // This prevents overdue-from-yesterday completions from counting.
+                guard let completedAt = reminder.lastCompletedAt,
+                      cal.isDateInToday(completedAt) else { return sum }
+
+                // For recurring reminders: nextRunAt has advanced past today's occurrence.
+                // We can't recover the original occurrence date, so skip the fallback
+                // for recurring reminders entirely — the new timestamp system handles
+                // these going forward.
+                if reminder.isRecurring { return sum }
+
+                // One-time reminders: safe to count via lastCompletedAt
+                return sum + 1
+            }
     }
 
     private func isCompletedToday(_ reminder: LystariaReminder) -> Bool {
@@ -90,13 +155,40 @@ struct RemindersView: View {
         return Calendar.current.isDateInToday(completedAt)
     }
 
-
     var body: some View {
         NavigationStack {
             ZStack {
                 LystariaBackground()
                 mainContent
                 toastOverlay
+
+                // Floating action button
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Button {
+                            let decision = limits.canCreate(.remindersTotal, currentCount: allReminders.count)
+                            guard decision.allowed else { return }
+                            showNewReminder = true
+                        } label: {
+                            ZStack {
+                                Circle()
+                                    .fill(LGradients.blue)
+                                    .frame(width: 56, height: 56)
+                                    .shadow(color: LColors.accent.opacity(0.4), radius: 12, y: 4)
+                                Image(systemName: "plus")
+                                    .font(.system(size: 22, weight: .bold))
+                                    .foregroundStyle(.white)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.trailing, 24)
+                        .padding(.bottom, 90)
+                    }
+                }
+                .zIndex(50)
+                .ignoresSafeArea(edges: .bottom)
             }
             .animation(.spring(response: 0.4, dampingFraction: 0.8), value: toastMessage)
             .overlayPreferenceValue(OnboardingTargetKey.self) { anchors in
@@ -119,13 +211,19 @@ struct RemindersView: View {
             .fullScreenCover(item: $editingReminder) { r in
                 EditReminderSheet(
                     onClose: { editingReminder = nil },
-                    reminder: r
+                    reminder: r,
                 )
                 .preferredColorScheme(.dark)
             }
             .navigationDestination(isPresented: $showKanban) {
                 KanbanView()
                     .preferredColorScheme(.dark)
+            }
+            .navigationDestination(isPresented: $showTimeBlock) {
+                ReminderTimeBlockView(allReminders: allReminders, onMarkDone: { reminder in
+                    markDone(reminder)
+                })
+                .preferredColorScheme(.dark)
             }
             .onReceive(NotificationCenter.default.publisher(for: .lystariaNotificationAction)) { note in
                 guard let info = note.userInfo,
@@ -188,21 +286,22 @@ struct RemindersView: View {
 
                 HStack(spacing: 8) {
                     Button {
-                        let decision = limits.canCreate(.remindersTotal, currentCount: allReminders.count)
-                        guard decision.allowed else { return }
-                        showNewReminder = true
+                        showTimeBlock = true
                     } label: {
                         ZStack {
                             Circle()
                                 .fill(Color.white.opacity(0.08))
                                 .overlay(
-                                    Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                                    Circle().stroke(LColors.glassBorder, lineWidth: 1),
                                 )
                                 .frame(width: 34, height: 34)
 
-                            Image(systemName: "plus")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(.white)
+                            Image("timerfill")
+                                .renderingMode(.template)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 16, height: 16)
+                                .foregroundColor(.white)
                         }
                     }
                     .buttonStyle(.plain)
@@ -215,7 +314,7 @@ struct RemindersView: View {
                             Circle()
                                 .fill(Color.white.opacity(0.08))
                                 .overlay(
-                                    Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                                    Circle().stroke(LColors.glassBorder, lineWidth: 1),
                                 )
                                 .frame(width: 34, height: 34)
 
@@ -238,7 +337,7 @@ struct RemindersView: View {
                             Circle()
                                 .fill(Color.white.opacity(0.08))
                                 .overlay(
-                                    Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                                    Circle().stroke(LColors.glassBorder, lineWidth: 1),
                                 )
                                 .frame(width: 34, height: 34)
 
@@ -260,7 +359,7 @@ struct RemindersView: View {
                             Circle()
                                 .fill(Color.white.opacity(0.08))
                                 .overlay(
-                                    Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                                    Circle().stroke(LColors.glassBorder, lineWidth: 1),
                                 )
                                 .frame(width: 34, height: 34)
 
@@ -305,16 +404,16 @@ struct RemindersView: View {
             }
         }
     }
-    
-private var encouragingOverviewText: String {
-    if doneTodayCount > 0 {
-        return "You’ve completed \(doneTodayCount) reminder\(doneTodayCount == 1 ? "" : "s") today. Keep going."
+
+    private var encouragingOverviewText: String {
+        if doneTodayCount > 0 {
+            return "You've completed \(doneTodayCount) reminder\(doneTodayCount == 1 ? "" : "s") today. Keep going."
+        }
+        if totalTodayCount > 0 {
+            return "You have \(totalTodayCount) reminder\(totalTodayCount == 1 ? "" : "s") scheduled for today."
+        }
+        return "You're all caught up for now."
     }
-    if todoTodayCount > 0 {
-        return "You have \(todoTodayCount) reminder\(todoTodayCount == 1 ? "" : "s") to get through today."
-    }
-    return "You’re all caught up for now."
-}
 
     private var overviewSection: some View {
         GlassCard {
@@ -340,18 +439,18 @@ private var encouragingOverviewText: String {
                 LazyVGrid(
                     columns: [
                         GridItem(.flexible(), spacing: 8),
-                        GridItem(.flexible(), spacing: 8)
+                        GridItem(.flexible(), spacing: 8),
                     ],
-                    spacing: 8
+                    spacing: 8,
                 ) {
                     OverviewStatCard(value: upcomingTodayCount, label: "Upcoming Today")
                     OverviewStatCard(value: doneTodayCount, label: "Done Today")
-                    OverviewStatCard(value: todoTodayCount, label: "To-Do Today")
+                    OverviewStatCard(value: totalTodayCount, label: "Total Today")
                     OverviewStatCard(value: totalRemindersCount, label: "Total Reminders")
+                }
             }
         }
     }
-}
 
     private var remindersSection: some View {
         VStack(spacing: 14) {
@@ -382,7 +481,7 @@ private var encouragingOverviewText: String {
                             if let live = modelContext.model(for: id) as? LystariaReminder {
                                 delete(live)
                             }
-                        }
+                        },
                     )
                     .premiumLocked(!limits.hasPremiumAccess && index >= 5)
                 }
@@ -457,7 +556,8 @@ private var encouragingOverviewText: String {
         if reminder.reminderType == .routine {
             for link in reminder.sortedMedicationLinks {
                 guard let medicationId = link.medicationId,
-                      let medication = medications.first(where: { $0.id == medicationId }) else {
+                      let medication = medications.first(where: { $0.id == medicationId })
+                else {
                     continue
                 }
 
@@ -476,7 +576,7 @@ private var encouragingOverviewText: String {
                     amountText: "\(previousAmount) → \(medication.currentAmount)",
                     details: "\(reminder.title) • Qty \(quantity)",
                     createdAt: Date(),
-                    medication: medication
+                    medication: medication,
                 )
                 modelContext.insert(historyEntry)
             }
@@ -502,11 +602,10 @@ private var encouragingOverviewText: String {
             amountText: "\(previousAmount) → \(medication.currentAmount)",
             details: "\(reminder.title) • Qty \(quantity)",
             createdAt: Date(),
-            medication: medication
+            medication: medication,
         )
         modelContext.insert(historyEntry)
     }
-
 
     private func awardPointsForReminderCompletion(_ reminder: LystariaReminder, occurrenceDate: Date) {
         let reminderId = "\(reminder.persistentModelID)"
@@ -518,21 +617,21 @@ private var encouragingOverviewText: String {
                 in: modelContext,
                 reminderId: reminderId,
                 occurrenceDayKey: occurrenceDayKey,
-                title: reminder.title
+                title: reminder.title,
             )
         } else if isEventReminder {
             _ = try? SelfCarePointsManager.awardEventReminderCompletion(
                 in: modelContext,
                 eventId: reminderId,
                 occurrenceDayKey: occurrenceDayKey,
-                title: reminder.title
+                title: reminder.title,
             )
         } else {
             _ = try? SelfCarePointsManager.awardReminderCompletion(
                 in: modelContext,
                 reminderId: reminderId,
                 occurrenceDayKey: occurrenceDayKey,
-                title: reminder.title
+                title: reminder.title,
             )
         }
     }
@@ -569,12 +668,36 @@ private var encouragingOverviewText: String {
         habit.updatedAt = now
     }
 
+    private func incrementCompletionsToday(_ reminder: LystariaReminder, occurrenceDate: Date) {
+        let cal = Calendar.current
+        var timestamps = decodeCompletionTimestamps(reminder)
+        // Drop entries not from today
+        timestamps = timestamps.filter { cal.isDateInToday($0) }
+        // Only count this completion if the occurrence itself was scheduled for today
+        guard cal.isDateInToday(occurrenceDate) else { return }
+        timestamps.append(occurrenceDate)
+        reminder.completionTimestampsStorage = encodeCompletionTimestamps(timestamps)
+    }
+
+    private func decodeCompletionTimestamps(_ reminder: LystariaReminder) -> [Date] {
+        guard let data = reminder.completionTimestampsStorage.data(using: .utf8),
+              let intervals = try? JSONDecoder().decode([Double].self, from: data) else { return [] }
+        return intervals.map { Date(timeIntervalSince1970: $0) }
+    }
+
+    private func encodeCompletionTimestamps(_ dates: [Date]) -> String {
+        let intervals = dates.map(\.timeIntervalSince1970)
+        let data = try? JSONEncoder().encode(intervals)
+        return data.flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+    }
+
     private func markDone(_ reminder: LystariaReminder) {
         print("[RemindersView] markDone id=\(reminder.id) title=\(reminder.title)")
 
         if reminder.reminderType == .routine,
            reminder.totalRoutineItemCount > 0,
-           !reminder.isRoutineChecklistComplete {
+           !reminder.isRoutineChecklistComplete
+        {
             showToast("Complete all routine items first")
             return
         }
@@ -599,6 +722,7 @@ private var encouragingOverviewText: String {
             }
 
             reminder.lastCompletedAt = Date()
+            incrementCompletionsToday(reminder, occurrenceDate: completedOccurrenceDate)
             reminder.updatedAt = Date()
 
             // If this is a habit-linked reminder and another same-day reminder is still due later,
@@ -619,6 +743,7 @@ private var encouragingOverviewText: String {
         } else {
             // One-time reminders stay checked for today.
             reminder.lastCompletedAt = Date()
+            incrementCompletionsToday(reminder, occurrenceDate: completedOccurrenceDate)
             reminder.acknowledgedAt = Date()
             reminder.status = .sent
 
@@ -689,7 +814,7 @@ struct OverviewStatCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .overlay(
             RoundedRectangle(cornerRadius: 16)
-                .stroke(LColors.glassBorder, lineWidth: 1)
+                .stroke(LColors.glassBorder, lineWidth: 1),
         )
     }
 }
@@ -706,27 +831,29 @@ struct ReminderCard: View {
     let onSnooze: () -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
-    
+
     private var scheduleLabel: String {
         guard let schedule = reminder.schedule else { return "Once" }
-        
+
         if (schedule.interval ?? 1) > 1,
            schedule.kind != .interval,
-           schedule.kind != .once {
+           schedule.kind != .once
+        {
             return "Custom"
         }
-        
+
         return schedule.kind.label
     }
-    
+
     private var badgeColor: Color {
         if let schedule = reminder.schedule,
            (schedule.interval ?? 1) > 1,
            schedule.kind != .interval,
-           schedule.kind != .once {
-            return Color(red: 201/255, green: 44/255, blue: 194/255) // #c92cc2
+           schedule.kind != .once
+        {
+            return Color(red: 201 / 255, green: 44 / 255, blue: 194 / 255) // #c92cc2
         }
-        
+
         switch reminder.schedule?.kind ?? .once {
         case .once: return LColors.badgeOnce
         case .daily: return LColors.badgeDaily
@@ -736,7 +863,7 @@ struct ReminderCard: View {
         case .interval: return LColors.badgeInterval
         }
     }
-    
+
     private var showsRoutineTypeBadge: Bool {
         reminder.reminderType == .routine
     }
@@ -748,102 +875,102 @@ struct ReminderCard: View {
     private var reminderKindLabel: String {
         switch reminder.linkedKindRaw?.lowercased() {
         case "habit":
-            return "Habit"
+            "Habit"
         case "event":
-            return "Event"
+            "Event"
         case "medication":
-            return "Medication"
+            "Medication"
         default:
-            return "General"
+            "General"
         }
     }
 
     private var reminderKindBadgeColor: Color {
         switch reminder.linkedKindRaw?.lowercased() {
         case "habit":
-            return Color(red: 0.14, green: 0.63, blue: 0.56).opacity(0.82)
+            Color(red: 0.14, green: 0.63, blue: 0.56).opacity(0.82)
         case "event":
-            return Color(red: 0.95, green: 0.56, blue: 0.20).opacity(0.82)
+            Color(red: 0.95, green: 0.56, blue: 0.20).opacity(0.82)
         case "medication":
-            return Color(red: 0.86, green: 0.28, blue: 0.58).opacity(0.82)
+            Color(red: 0.86, green: 0.28, blue: 0.58).opacity(0.82)
         default:
-            return Color.white.opacity(0.9)
+            Color.white.opacity(0.9)
         }
     }
-    
+
     private var isDone: Bool {
         guard !reminder.isRecurring else { return false }
 
         if let completedAt = reminder.lastCompletedAt,
-           Calendar.current.isDateInToday(completedAt) {
+           Calendar.current.isDateInToday(completedAt)
+        {
             return true
         }
 
         if let ack = reminder.acknowledgedAt,
-           Calendar.current.isDateInToday(ack) {
+           Calendar.current.isDateInToday(ack)
+        {
             return true
         }
 
         return false
     }
-    
+
     private var displayTimeZone: TimeZone {
         TimeZone(identifier: NotificationManager.shared.effectiveTimezoneID) ?? .current
     }
-    
+
     private var timeText: String {
         let d = reminder.nextRunAt
         let df = DateFormatter()
         df.timeZone = displayTimeZone
         df.locale = .current
         df.setLocalizedDateFormatFromTemplate("EEE, MMM d 'at' h:mm a")
-        let s = df.string(from: d)
-        return s
+        return df.string(from: d)
     }
-    
+
     private var scheduledTimes: [String] {
         guard let schedule = reminder.schedule else { return [] }
         // Interval reminders don't have fixed times-of-day pills.
         if schedule.kind == .interval { return [] }
-        
+
         let raw = (schedule.timesOfDay?.isEmpty == false)
-        ? (schedule.timesOfDay ?? [])
-        : (schedule.timeOfDay != nil ? [schedule.timeOfDay!] : [])
-        
+            ? (schedule.timesOfDay ?? [])
+            : (schedule.timeOfDay != nil ? [schedule.timeOfDay!] : [])
+
         // Normalize + sort by HH:MM
         let parsed: [(hh: Int, mm: Int, raw: String)] = raw.compactMap { s in
             guard let (hh, mm) = ReminderCompute.parseHHMM(s) else { return nil }
             return (hh: hh, mm: mm, raw: s)
         }
-            .sorted { a, b in
-                (a.hh, a.mm) < (b.hh, b.mm)
-            }
-        
+        .sorted { a, b in
+            (a.hh, a.mm) < (b.hh, b.mm)
+        }
+
         guard !parsed.isEmpty else { return [] }
-        
+
         let df = DateFormatter()
         df.timeZone = displayTimeZone
         df.locale = .current
         df.timeStyle = .short
         df.dateStyle = .none
-        
+
         let day = Date()
         return parsed.map { t in
             let d = ReminderCompute.merge(day: day, hour: t.hh, minute: t.mm, in: displayTimeZone)
             return df.string(from: d)
         }
     }
-    
+
     private var checklistItems: [String] {
         reminder.checklistItems
     }
 
-    
     private func openReschedulePopup() {
         rescheduleDateTime = reminder.nextRunAt
         showingReschedulePopup = true
     }
-    
+
     @ViewBuilder
     private func timePillsView() -> some View {
         if !scheduledTimes.isEmpty {
@@ -862,7 +989,7 @@ struct ReminderCard: View {
             }
         }
     }
-    
+
     @ViewBuilder
     private func checklistPreviewView() -> some View {
         let currentReminder = _reminder.wrappedValue
@@ -883,8 +1010,8 @@ struct ReminderCard: View {
 
                                 Text(
                                     currentReminder.totalRoutineItemCount > 0
-                                    ? "\(currentReminder.completedRoutineItemCount) of \(currentReminder.totalRoutineItemCount) Complete"
-                                    : "Routine Items"
+                                        ? "\(currentReminder.completedRoutineItemCount) of \(currentReminder.totalRoutineItemCount) Complete"
+                                        : "Routine Items",
                                 )
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(LColors.textSecondary)
@@ -911,8 +1038,8 @@ struct ReminderCard: View {
                                             .font(.system(size: 12, weight: .semibold))
                                             .foregroundStyle(
                                                 currentReminder.isRoutineItemChecked(item)
-                                                ? LColors.success
-                                                : LColors.textSecondary
+                                                    ? LColors.success
+                                                    : LColors.textSecondary,
                                             )
 
                                         Text(item.title)
@@ -983,8 +1110,7 @@ struct ReminderCard: View {
             }
         }
     }
-    
-    @ViewBuilder
+
     private var reschedulePopup: some View {
         LystariaOverlayPopup(
             onClose: {
@@ -993,12 +1119,12 @@ struct ReminderCard: View {
                 }
             },
             width: 560,
-            heightRatio: 0.82
+            heightRatio: 0.82,
         ) {
             HStack {
                 GradientTitle(text: "Reschedule Reminder", font: .title2.bold())
                 Spacer()
-                
+
                 Button {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                         showingReschedulePopup = false
@@ -1012,25 +1138,25 @@ struct ReminderCard: View {
             }
         } content: {
             VStack(spacing: 16) {
-#if os(macOS)
-                LDateStepperRow(label: "Date", dateTime: $rescheduleDateTime)
-                LTimeEntryRow(label: "Time", dateTime: $rescheduleDateTime)
-#else
-                LystariaControlRow(label: "Date") {
-                    DatePicker("", selection: $rescheduleDateTime, displayedComponents: [.date])
-                        .labelsHidden()
-                        .datePickerStyle(.compact)
-                        .tint(LColors.accent)
-                }
-                
-                LystariaControlRow(label: "Time") {
-                    DatePicker("", selection: $rescheduleDateTime, displayedComponents: [.hourAndMinute])
-                        .labelsHidden()
-                        .datePickerStyle(.compact)
-                        .tint(LColors.accent)
-                }
-#endif
-                
+                #if os(macOS)
+                    LDateStepperRow(label: "Date", dateTime: $rescheduleDateTime)
+                    LTimeEntryRow(label: "Time", dateTime: $rescheduleDateTime)
+                #else
+                    LystariaControlRow(label: "Date") {
+                        DatePicker("", selection: $rescheduleDateTime, displayedComponents: [.date])
+                            .labelsHidden()
+                            .datePickerStyle(.compact)
+                            .tint(LColors.accent)
+                    }
+
+                    LystariaControlRow(label: "Time") {
+                        DatePicker("", selection: $rescheduleDateTime, displayedComponents: [.hourAndMinute])
+                            .labelsHidden()
+                            .datePickerStyle(.compact)
+                            .tint(LColors.accent)
+                    }
+                #endif
+
                 Spacer(minLength: 0)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -1040,9 +1166,9 @@ struct ReminderCard: View {
                     reminder.nextRunAt = rescheduleDateTime
                     reminder.updatedAt = Date()
                     NotificationManager.shared.scheduleReminder(reminder)
-#if DEBUG
-                    NotificationManager.shared.printPendingNotifications()
-#endif
+                    #if DEBUG
+                        NotificationManager.shared.printPendingNotifications()
+                    #endif
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                         showingReschedulePopup = false
                     }
@@ -1059,13 +1185,13 @@ struct ReminderCard: View {
             }
         }
     }
-    
-    // --- STATUS BADGE HELPERS ---
+
+    /// --- STATUS BADGE HELPERS ---
     private func isDueNow(now: Date) -> Bool {
         // Due Now appears at the scheduled time and stays until completed.
         // If it's already marked done for today, it is not due.
         if isDone { return false }
-        
+
         // Recurring reminders that were missed on a prior day should not stay
         // visually stuck on "DUE NOW" forever. If the nextRunAt is before today,
         // consider that occurrence missed and let the next reschedule take over.
@@ -1075,7 +1201,7 @@ struct ReminderCard: View {
                 return false
             }
         }
-        
+
         return now >= reminder.nextRunAt
     }
 
@@ -1091,12 +1217,20 @@ struct ReminderCard: View {
         if now >= reminder.nextRunAt { return false }
         return reminder.nextRunAt <= now.addingTimeInterval(24 * 60 * 60)
     }
-    
-    // Transparent status badge colors
-    private var upcomingBadgeColor: Color { Color.teal.opacity(0.42) }
-    private var dueNowBadgeColor: Color { Color.yellow.opacity(0.48) }
-    private var overdueBadgeColor: Color { Color.red.opacity(0.42) }
-    
+
+    /// Transparent status badge colors
+    private var upcomingBadgeColor: Color {
+        Color.teal.opacity(0.42)
+    }
+
+    private var dueNowBadgeColor: Color {
+        Color.yellow.opacity(0.48)
+    }
+
+    private var overdueBadgeColor: Color {
+        Color.red.opacity(0.42)
+    }
+
     var body: some View {
         // Recompute status badges periodically so they flip at the correct time.
         TimelineView(.periodic(from: .now, by: 30)) { context in
@@ -1104,7 +1238,7 @@ struct ReminderCard: View {
             let overdue = isOverdue(now: now)
             let dueNow = isDueNow(now: now)
             let upcoming = isUpcoming(now: now)
-            
+
             GlassCard {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(alignment: .top, spacing: 10) {
@@ -1143,9 +1277,9 @@ struct ReminderCard: View {
                         }
                         .buttonStyle(.plain)
                     }
-                    
+
                     timePillsView()
-                    
+
                     HStack(alignment: .center, spacing: 8) { // 6 FOR LEFT AND ADJUST UP FOR RIGHT
                         Text(reminder.title)
                             .font(.system(size: 15, weight: .bold))
@@ -1161,7 +1295,7 @@ struct ReminderCard: View {
                             .padding(.leading, -2)
                             .opacity(1)
                     }
-                    
+
                     if let details = reminder.details, !details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Text(details)
                             .font(.system(size: 14))
@@ -1169,7 +1303,7 @@ struct ReminderCard: View {
                             .lineLimit(3)
                     }
                     checklistPreviewView()
-                    
+
                     HStack(spacing: 8) {
                         Image(systemName: "clock")
                             .font(.caption)
@@ -1178,13 +1312,13 @@ struct ReminderCard: View {
                             .font(.subheadline)
                             .foregroundStyle(.white)
                     }
-                    
+
                     VStack(alignment: .leading, spacing: 10) {
                         HStack(spacing: 10) {
                             LButton(title: "Snooze", icon: "clock.arrow.circlepath", style: .secondary) { onSnooze() }
                             LButton(title: "Reschedule", icon: "calendar.badge.clock", style: .secondary) { openReschedulePopup() }
                         }
-                        
+
                         HStack(spacing: 10) {
                             LButton(title: "Edit", icon: "pencil", style: .secondary) { onEdit() }
                             GradientCapsuleButton(title: "Delete", icon: "trashfill") {
@@ -1199,7 +1333,7 @@ struct ReminderCard: View {
                 title: "Delete Reminder?",
                 message: "This reminder will be removed.",
                 confirmTitle: "Delete",
-                confirmRole: .destructive
+                confirmRole: .destructive,
             ) {
                 onDelete()
             }
@@ -1228,9 +1362,10 @@ struct NewReminderSheet: View {
     @State private var reminderType: ReminderType = .regular
     @State private var checklistEntries: [String] = [""]
     @State private var routineItemEntries: [String] = [""]
-    @FocusState private var focusedChecklistIndex: Int?
-
+    @State private var reminderColor: String = "#7d19f7"
     @State private var onceDateTime = Date()
+
+    @FocusState private var focusedChecklistIndex: Int?
     @FocusState private var detailsFocused: Bool
 
     @State private var scheduleKind: ReminderScheduleKind = .once
@@ -1253,14 +1388,17 @@ struct NewReminderSheet: View {
         if scheduleKind == .weekly { return !selectedDays.isEmpty }
         return true
     }
-    private var titleTrimmed: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private var titleTrimmed: String {
+        title.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     var body: some View {
         LystariaFullScreenForm(
             title: "New Reminder",
             onCancel: { onClose() },
             canSave: canSave,
-            onSave: { save() }
+            onSave: { save() },
         ) {
             formContent
         }
@@ -1292,7 +1430,7 @@ struct NewReminderSheet: View {
                                 .background(isSelected ? LColors.accent : Color.white.opacity(0.08))
                                 .clipShape(Capsule())
                                 .overlay(
-                                    Capsule().stroke(isSelected ? LColors.accent : LColors.glassBorder, lineWidth: 1)
+                                    Capsule().stroke(isSelected ? LColors.accent : LColors.glassBorder, lineWidth: 1),
                                 )
                         }
                         .buttonStyle(.plain)
@@ -1306,10 +1444,10 @@ struct NewReminderSheet: View {
                 TextField("Reminder title", text: $title)
                     .textFieldStyle(.plain)
                     .foregroundStyle(LColors.textPrimary)
-#if os(iOS) || os(visionOS)
+                #if os(iOS) || os(visionOS)
                     .textInputAutocapitalization(.sentences)
                     .disableAutocorrection(false)
-#endif
+                #endif
             }
 
             LabeledGlassField(label: "DETAILS") {
@@ -1318,10 +1456,14 @@ struct NewReminderSheet: View {
                     .scrollContentBackground(.hidden)
                     .foregroundStyle(LColors.textPrimary)
                     .focused($detailsFocused)
-#if os(iOS) || os(visionOS)
+                #if os(iOS) || os(visionOS)
                     .textInputAutocapitalization(.sentences)
                     .disableAutocorrection(false)
-#endif
+                #endif
+            }
+
+            LabeledGlassField(label: "COLOR") {
+                ReminderColorPicker(selectedColor: $reminderColor)
             }
 
             if reminderType == .regular {
@@ -1333,8 +1475,8 @@ struct NewReminderSheet: View {
                                     idx == 0 ? "Checklist item" : "Another item",
                                     text: Binding(
                                         get: { checklistEntries[idx] },
-                                        set: { checklistEntries[idx] = $0 }
-                                    )
+                                        set: { checklistEntries[idx] = $0 },
+                                    ),
                                 )
                                 .textFieldStyle(.plain)
                                 .foregroundStyle(LColors.textPrimary)
@@ -1344,31 +1486,31 @@ struct NewReminderSheet: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 12)
-                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                        .stroke(LColors.glassBorder, lineWidth: 1),
                                 )
                                 .focused($focusedChecklistIndex, equals: idx)
-            #if os(iOS) || os(visionOS)
-                                .textInputAutocapitalization(.sentences)
-                                .disableAutocorrection(false)
-            #endif
-                                .onSubmit {
-                                    let trimmed = checklistEntries[idx].trimmingCharacters(in: .whitespacesAndNewlines)
-                                    let isLast = idx == checklistEntries.count - 1
+                                #if os(iOS) || os(visionOS)
+                                    .textInputAutocapitalization(.sentences)
+                                    .disableAutocorrection(false)
+                                #endif
+                                    .onSubmit {
+                                        let trimmed = checklistEntries[idx].trimmingCharacters(in: .whitespacesAndNewlines)
+                                        let isLast = idx == checklistEntries.count - 1
 
-                                    if trimmed.isEmpty {
-                                        if isLast && checklistEntries.count > 1 {
-                                            checklistEntries.removeLast()
+                                        if trimmed.isEmpty {
+                                            if isLast, checklistEntries.count > 1 {
+                                                checklistEntries.removeLast()
+                                            }
+                                            focusedChecklistIndex = nil
+                                        } else if isLast {
+                                            checklistEntries[idx] = trimmed
+                                            checklistEntries.append("")
+                                            focusedChecklistIndex = idx + 1
+                                        } else {
+                                            checklistEntries[idx] = trimmed
+                                            focusedChecklistIndex = min(idx + 1, checklistEntries.count - 1)
                                         }
-                                        focusedChecklistIndex = nil
-                                    } else if isLast {
-                                        checklistEntries[idx] = trimmed
-                                        checklistEntries.append("")
-                                        focusedChecklistIndex = idx + 1
-                                    } else {
-                                        checklistEntries[idx] = trimmed
-                                        focusedChecklistIndex = min(idx + 1, checklistEntries.count - 1)
                                     }
-                                }
                             }
                         }
 
@@ -1386,8 +1528,8 @@ struct NewReminderSheet: View {
                                     idx == 0 ? "Routine item" : "Another routine item",
                                     text: Binding(
                                         get: { routineItemEntries[idx] },
-                                        set: { routineItemEntries[idx] = $0 }
-                                    )
+                                        set: { routineItemEntries[idx] = $0 },
+                                    ),
                                 )
                                 .textFieldStyle(.plain)
                                 .foregroundStyle(LColors.textPrimary)
@@ -1397,31 +1539,31 @@ struct NewReminderSheet: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 12)
-                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                        .stroke(LColors.glassBorder, lineWidth: 1),
                                 )
                                 .focused($focusedChecklistIndex, equals: idx)
-            #if os(iOS) || os(visionOS)
-                                .textInputAutocapitalization(.sentences)
-                                .disableAutocorrection(false)
-            #endif
-                                .onSubmit {
-                                    let trimmed = routineItemEntries[idx].trimmingCharacters(in: .whitespacesAndNewlines)
-                                    let isLast = idx == routineItemEntries.count - 1
+                                #if os(iOS) || os(visionOS)
+                                    .textInputAutocapitalization(.sentences)
+                                    .disableAutocorrection(false)
+                                #endif
+                                    .onSubmit {
+                                        let trimmed = routineItemEntries[idx].trimmingCharacters(in: .whitespacesAndNewlines)
+                                        let isLast = idx == routineItemEntries.count - 1
 
-                                    if trimmed.isEmpty {
-                                        if isLast && routineItemEntries.count > 1 {
-                                            routineItemEntries.removeLast()
+                                        if trimmed.isEmpty {
+                                            if isLast, routineItemEntries.count > 1 {
+                                                routineItemEntries.removeLast()
+                                            }
+                                            focusedChecklistIndex = nil
+                                        } else if isLast {
+                                            routineItemEntries[idx] = trimmed
+                                            routineItemEntries.append("")
+                                            focusedChecklistIndex = idx + 1
+                                        } else {
+                                            routineItemEntries[idx] = trimmed
+                                            focusedChecklistIndex = min(idx + 1, routineItemEntries.count - 1)
                                         }
-                                        focusedChecklistIndex = nil
-                                    } else if isLast {
-                                        routineItemEntries[idx] = trimmed
-                                        routineItemEntries.append("")
-                                        focusedChecklistIndex = idx + 1
-                                    } else {
-                                        routineItemEntries[idx] = trimmed
-                                        focusedChecklistIndex = min(idx + 1, routineItemEntries.count - 1)
                                     }
-                                }
                             }
                         }
 
@@ -1442,7 +1584,7 @@ struct NewReminderSheet: View {
                         } else {
                             Picker(
                                 "Medication",
-                                selection: $selectedMedicationId
+                                selection: $selectedMedicationId,
                             ) {
                                 Text("None")
                                     .tag(nil as UUID?)
@@ -1487,7 +1629,7 @@ struct NewReminderSheet: View {
                                             .clipShape(Capsule())
                                             .overlay(
                                                 Capsule()
-                                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                                    .stroke(LColors.glassBorder, lineWidth: 1),
                                             )
 
                                         Button {
@@ -1503,7 +1645,6 @@ struct NewReminderSheet: View {
                                                 .clipShape(Circle())
                                         }
                                         .buttonStyle(.plain)
-
 
                                         Spacer()
                                     }
@@ -1526,8 +1667,8 @@ struct NewReminderSheet: View {
                                         "Medication",
                                         selection: Binding(
                                             get: { routineMedicationRows[idx].medicationId },
-                                            set: { routineMedicationRows[idx].medicationId = $0 }
-                                        )
+                                            set: { routineMedicationRows[idx].medicationId = $0 },
+                                        ),
                                     ) {
                                         Text("None")
                                             .tag(nil as UUID?)
@@ -1570,7 +1711,7 @@ struct NewReminderSheet: View {
                                             .clipShape(Capsule())
                                             .overlay(
                                                 Capsule()
-                                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                                    .stroke(LColors.glassBorder, lineWidth: 1),
                                             )
 
                                         Button {
@@ -1586,7 +1727,6 @@ struct NewReminderSheet: View {
                                                 .clipShape(Circle())
                                         }
                                         .buttonStyle(.plain)
-
 
                                         Spacer()
 
@@ -1608,7 +1748,7 @@ struct NewReminderSheet: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 12)
-                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                        .stroke(LColors.glassBorder, lineWidth: 1),
                                 )
                             }
 
@@ -1641,7 +1781,7 @@ struct NewReminderSheet: View {
                 dayOfMonth: $dayOfMonth,
                 yearlyMode: $yearlyMode,
                 anchorMonth: $anchorMonth,
-                anchorDay: $anchorDay
+                anchorDay: $anchorDay,
             )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1649,25 +1789,25 @@ struct NewReminderSheet: View {
 
     private func save() {
         #if os(macOS)
-        NSApp.keyWindow?.endEditing(for: nil)
+            NSApp.keyWindow?.endEditing(for: nil)
         #endif
         DispatchQueue.main.async {
             // Enforce reminder limit (5 total for free users)
             let descriptor = FetchDescriptor<LystariaReminder>()
-            let existingReminders = (try? self.modelContext.fetch(descriptor)) ?? []
-            let decision = limits.canCreate(.remindersTotal, currentCount: existingReminders.filter { $0.status != .deleted }.count)
+            let existingReminders = (try? modelContext.fetch(descriptor)) ?? []
+            let decision = limits.canCreate(.remindersTotal, currentCount: existingReminders.count(where: { $0.status != .deleted }))
             guard decision.allowed else { return }
-            guard self.canSave else { return }
+            guard canSave else { return }
 
-            print("[NewReminderSheet] Save tapped. title=\(self.titleTrimmed), kind=\(self.scheduleKind.rawValue))")
+            print("[NewReminderSheet] Save tapped. title=\(titleTrimmed), kind=\(scheduleKind.rawValue))")
             let schedule: ReminderSchedule?
             let runAt: Date
 
-            if self.scheduleKind == .once {
+            if scheduleKind == .once {
                 schedule = .once
-                runAt = self.onceDateTime
+                runAt = onceDateTime
             } else {
-                let timeStrings = self.timesOfDay
+                let timeStrings = timesOfDay
                     .map { d -> String in
                         let (hh, mm) = ReminderCompute.hourMinute(from: d)
                         return String(format: "%02d:%02d", hh, mm)
@@ -1677,58 +1817,58 @@ struct NewReminderSheet: View {
                 let primary = timeStrings.first
 
                 let resolvedDayOfMonth: Int? = {
-                    guard self.scheduleKind == .monthly else { return nil }
-                    if self.monthlyMode == .specificDay { return self.dayOfMonth }
+                    guard scheduleKind == .monthly else { return nil }
+                    if monthlyMode == .specificDay { return dayOfMonth }
                     return nil // sameDay = engine uses start day
                 }()
                 let resolvedAnchorMonth: Int? = {
-                    guard self.scheduleKind == .yearly else { return nil }
-                    if self.yearlyMode == .specificDate { return self.anchorMonth }
+                    guard scheduleKind == .yearly else { return nil }
+                    if yearlyMode == .specificDate { return anchorMonth }
                     return nil
                 }()
                 let resolvedAnchorDay: Int? = {
-                    guard self.scheduleKind == .yearly else { return nil }
-                    if self.yearlyMode == .specificDate { return self.anchorDay }
+                    guard scheduleKind == .yearly else { return nil }
+                    if yearlyMode == .specificDate { return anchorDay }
                     return nil
                 }()
 
                 schedule = ReminderSchedule(
-                    kind: self.scheduleKind,
+                    kind: scheduleKind,
                     timeOfDay: primary,
                     timesOfDay: timeStrings,
-                    interval: self.scheduleKind == .interval ? nil : self.recurrenceInterval,
-                    daysOfWeek: self.scheduleKind == .weekly ? Array(self.selectedDays).sorted() : nil,
+                    interval: scheduleKind == .interval ? nil : recurrenceInterval,
+                    daysOfWeek: scheduleKind == .weekly ? Array(selectedDays).sorted() : nil,
                     dayOfMonth: resolvedDayOfMonth,
                     anchorMonth: resolvedAnchorMonth,
                     anchorDay: resolvedAnchorDay,
-                    intervalMinutes: self.scheduleKind == .interval ? self.intervalMinutes : nil
+                    intervalMinutes: scheduleKind == .interval ? intervalMinutes : nil,
                 )
 
                 runAt = ReminderCompute.firstRun(
-                    kind: self.scheduleKind,
-                    startDay: self.startDay,
+                    kind: scheduleKind,
+                    startDay: startDay,
                     timesOfDay: timeStrings,
-                    daysOfWeek: self.scheduleKind == .weekly ? Array(self.selectedDays) : nil,
-                    intervalMinutes: self.scheduleKind == .interval ? self.intervalMinutes : nil,
-                    recurrenceInterval: self.scheduleKind == .interval ? nil : self.recurrenceInterval,
+                    daysOfWeek: scheduleKind == .weekly ? Array(selectedDays) : nil,
+                    intervalMinutes: scheduleKind == .interval ? intervalMinutes : nil,
+                    recurrenceInterval: scheduleKind == .interval ? nil : recurrenceInterval,
                     dayOfMonth: resolvedDayOfMonth,
                     anchorMonth: resolvedAnchorMonth,
-                    anchorDay: resolvedAnchorDay
+                    anchorDay: resolvedAnchorDay,
                 )
             }
 
             print("[NewReminderSheet] Computed first runAt=\(runAt), schedule=\(String(describing: schedule))")
             let newReminder = LystariaReminder(
-                title: self.titleTrimmed,
+                title: titleTrimmed,
                 nextRunAt: runAt,
                 schedule: schedule,
-                reminderType: self.reminderType
+                reminderType: reminderType,
             )
-            if self.reminderType == .regular {
-                if let selectedMedicationId = self.selectedMedicationId {
+            if reminderType == .regular {
+                if let selectedMedicationId {
                     newReminder.linkedKind = .medication
                     newReminder.linkedMedicationId = selectedMedicationId
-                    newReminder.linkedMedicationQuantity = max(1, self.linkedMedicationQuantity)
+                    newReminder.linkedMedicationQuantity = max(1, linkedMedicationQuantity)
                     newReminder.linkedHabitId = nil
                 } else {
                     newReminder.linkedKindRaw = nil
@@ -1739,35 +1879,35 @@ struct NewReminderSheet: View {
                 newReminder.linkedMedicationId = nil
                 newReminder.linkedMedicationQuantity = 1
             }
-            let detailsTrimmed = self.details.trimmingCharacters(in: .whitespacesAndNewlines)
+            let detailsTrimmed = details.trimmingCharacters(in: .whitespacesAndNewlines)
             newReminder.details = detailsTrimmed.isEmpty ? nil : detailsTrimmed
-            self.modelContext.insert(newReminder)
+            modelContext.insert(newReminder)
 
-            let checklistItems = self.checklistEntries
+            let checklistItems = checklistEntries
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
-            newReminder.checklistItems = self.reminderType == .regular ? checklistItems : []
+            newReminder.checklistItems = reminderType == .regular ? checklistItems : []
 
-            let routineItems = self.routineItemEntries
+            let routineItems = routineItemEntries
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
 
-            if self.reminderType == .routine {
+            if reminderType == .routine {
                 newReminder.routineChecklistItems = routineItems.enumerated().map { idx, title in
                     RoutineChecklistItem(
                         title: title,
                         sortOrder: idx,
-                        reminder: newReminder
+                        reminder: newReminder,
                     )
                 }
 
-                let validRows = self.routineMedicationRows.filter { $0.medicationId != nil }
+                let validRows = routineMedicationRows.filter { $0.medicationId != nil }
                 newReminder.medicationLinks = validRows.enumerated().map { idx, row in
                     ReminderMedicationLink(
                         reminder: newReminder,
                         medicationId: row.medicationId,
                         quantity: max(1, row.quantity),
-                        sortOrder: idx
+                        sortOrder: idx,
                     )
                 }
             } else {
@@ -1775,16 +1915,16 @@ struct NewReminderSheet: View {
                 newReminder.medicationLinks = nil
             }
 
+            newReminder.color = reminderColor
             NotificationManager.shared.scheduleReminder(newReminder)
-        #if DEBUG
-            NotificationManager.shared.printPendingNotifications()
-        #endif
+            #if DEBUG
+                NotificationManager.shared.printPendingNotifications()
+            #endif
             print("[NewReminderSheet] Inserted reminder with nextRunAt=\(runAt)")
-            self.onClose()
+            onClose()
         }
     }
 }
-
 
 // MARK: - Edit Reminder Sheet
 
@@ -1798,11 +1938,12 @@ struct EditReminderSheet: View {
     @State private var reminderType: ReminderType = .regular
     @State private var checklistEntries: [String] = [""]
     @State private var routineItemEntries: [String] = [""]
-    @FocusState private var focusedChecklistIndex: Int?
-
     @State private var scheduleKind: ReminderScheduleKind = .once
     @State private var onceDateTime = Date()
+    @State private var reminderColor: String = "#7d19f7"
+
     @FocusState private var detailsFocused: Bool
+    @FocusState private var focusedChecklistIndex: Int?
 
     @State private var startDay = Date()
     @State private var timesOfDay: [Date] = [Date()]
@@ -1823,14 +1964,17 @@ struct EditReminderSheet: View {
         if scheduleKind == .weekly { return !selectedDays.isEmpty }
         return true
     }
-    private var titleTrimmed: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private var titleTrimmed: String {
+        title.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     var body: some View {
         LystariaFullScreenForm(
             title: "Edit Reminder",
             onCancel: { onClose() },
             canSave: canSave,
-            onSave: { apply() }
+            onSave: { apply() },
         ) {
             formContent
         }
@@ -1863,7 +2007,7 @@ struct EditReminderSheet: View {
                                 .background(isSelected ? LColors.accent : Color.white.opacity(0.08))
                                 .clipShape(Capsule())
                                 .overlay(
-                                    Capsule().stroke(isSelected ? LColors.accent : LColors.glassBorder, lineWidth: 1)
+                                    Capsule().stroke(isSelected ? LColors.accent : LColors.glassBorder, lineWidth: 1),
                                 )
                         }
                         .buttonStyle(.plain)
@@ -1877,12 +2021,12 @@ struct EditReminderSheet: View {
                 TextField("Reminder title", text: $title)
                     .textFieldStyle(.plain)
                     .foregroundStyle(LColors.textPrimary)
-#if os(iOS) || os(visionOS)
+                #if os(iOS) || os(visionOS)
                     .textInputAutocapitalization(.sentences)
                     .disableAutocorrection(false)
-#else
+                #else
                     // macOS: these modifiers are unavailable; rely on default behavior
-#endif
+                #endif
             }
 
             LabeledGlassField(label: "DETAILS") {
@@ -1891,12 +2035,16 @@ struct EditReminderSheet: View {
                     .scrollContentBackground(.hidden)
                     .foregroundStyle(LColors.textPrimary)
                     .focused($detailsFocused)
-#if os(iOS) || os(visionOS)
+                #if os(iOS) || os(visionOS)
                     .textInputAutocapitalization(.sentences)
                     .disableAutocorrection(false)
-#else
+                #else
                     // macOS: unavailable
-#endif
+                #endif
+            }
+
+            LabeledGlassField(label: "COLOR") {
+                ReminderColorPicker(selectedColor: $reminderColor)
             }
 
             if reminderType == .regular {
@@ -1908,8 +2056,8 @@ struct EditReminderSheet: View {
                                     idx == 0 ? "Checklist item" : "Another item",
                                     text: Binding(
                                         get: { checklistEntries[idx] },
-                                        set: { checklistEntries[idx] = $0 }
-                                    )
+                                        set: { checklistEntries[idx] = $0 },
+                                    ),
                                 )
                                 .textFieldStyle(.plain)
                                 .foregroundStyle(LColors.textPrimary)
@@ -1919,21 +2067,21 @@ struct EditReminderSheet: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 12)
-                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                        .stroke(LColors.glassBorder, lineWidth: 1),
                                 )
                                 .focused($focusedChecklistIndex, equals: idx)
-            #if os(iOS) || os(visionOS)
-                                .textInputAutocapitalization(.sentences)
-                                .disableAutocorrection(false)
-            #else
-                                // macOS: unavailable
-            #endif
+                                #if os(iOS) || os(visionOS)
+                                    .textInputAutocapitalization(.sentences)
+                                    .disableAutocorrection(false)
+                                #else
+                                    // macOS: unavailable
+                                #endif
                                 .onSubmit {
                                     let trimmed = checklistEntries[idx].trimmingCharacters(in: .whitespacesAndNewlines)
                                     let isLast = idx == checklistEntries.count - 1
 
                                     if trimmed.isEmpty {
-                                        if isLast && checklistEntries.count > 1 {
+                                        if isLast, checklistEntries.count > 1 {
                                             checklistEntries.removeLast()
                                         }
                                         focusedChecklistIndex = nil
@@ -1963,8 +2111,8 @@ struct EditReminderSheet: View {
                                     idx == 0 ? "Routine item" : "Another routine item",
                                     text: Binding(
                                         get: { routineItemEntries[idx] },
-                                        set: { routineItemEntries[idx] = $0 }
-                                    )
+                                        set: { routineItemEntries[idx] = $0 },
+                                    ),
                                 )
                                 .textFieldStyle(.plain)
                                 .foregroundStyle(LColors.textPrimary)
@@ -1974,21 +2122,21 @@ struct EditReminderSheet: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 12)
-                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                        .stroke(LColors.glassBorder, lineWidth: 1),
                                 )
                                 .focused($focusedChecklistIndex, equals: idx)
-            #if os(iOS) || os(visionOS)
-                                .textInputAutocapitalization(.sentences)
-                                .disableAutocorrection(false)
-            #else
-                                // macOS: unavailable
-            #endif
+                                #if os(iOS) || os(visionOS)
+                                    .textInputAutocapitalization(.sentences)
+                                    .disableAutocorrection(false)
+                                #else
+                                    // macOS: unavailable
+                                #endif
                                 .onSubmit {
                                     let trimmed = routineItemEntries[idx].trimmingCharacters(in: .whitespacesAndNewlines)
                                     let isLast = idx == routineItemEntries.count - 1
 
                                     if trimmed.isEmpty {
-                                        if isLast && routineItemEntries.count > 1 {
+                                        if isLast, routineItemEntries.count > 1 {
                                             routineItemEntries.removeLast()
                                         }
                                         focusedChecklistIndex = nil
@@ -2021,7 +2169,7 @@ struct EditReminderSheet: View {
                         } else {
                             Picker(
                                 "Medication",
-                                selection: $selectedMedicationId
+                                selection: $selectedMedicationId,
                             ) {
                                 Text("None")
                                     .tag(nil as UUID?)
@@ -2066,7 +2214,7 @@ struct EditReminderSheet: View {
                                             .clipShape(Capsule())
                                             .overlay(
                                                 Capsule()
-                                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                                    .stroke(LColors.glassBorder, lineWidth: 1),
                                             )
 
                                         Button {
@@ -2082,7 +2230,6 @@ struct EditReminderSheet: View {
                                                 .clipShape(Circle())
                                         }
                                         .buttonStyle(.plain)
-
 
                                         Spacer()
                                     }
@@ -2105,8 +2252,8 @@ struct EditReminderSheet: View {
                                         "Medication",
                                         selection: Binding(
                                             get: { routineMedicationRows[idx].medicationId },
-                                            set: { routineMedicationRows[idx].medicationId = $0 }
-                                        )
+                                            set: { routineMedicationRows[idx].medicationId = $0 },
+                                        ),
                                     ) {
                                         Text("None")
                                             .tag(nil as UUID?)
@@ -2149,7 +2296,7 @@ struct EditReminderSheet: View {
                                             .clipShape(Capsule())
                                             .overlay(
                                                 Capsule()
-                                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                                    .stroke(LColors.glassBorder, lineWidth: 1),
                                             )
 
                                         Button {
@@ -2165,7 +2312,6 @@ struct EditReminderSheet: View {
                                                 .clipShape(Circle())
                                         }
                                         .buttonStyle(.plain)
-
 
                                         Spacer()
 
@@ -2187,7 +2333,7 @@ struct EditReminderSheet: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 12)
-                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                        .stroke(LColors.glassBorder, lineWidth: 1),
                                 )
                             }
 
@@ -2220,7 +2366,7 @@ struct EditReminderSheet: View {
                 dayOfMonth: $dayOfMonth,
                 yearlyMode: $yearlyMode,
                 anchorMonth: $anchorMonth,
-                anchorDay: $anchorDay
+                anchorDay: $anchorDay,
             )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -2233,16 +2379,16 @@ struct EditReminderSheet: View {
         reminderType = reminder.reminderType
         let storedChecklist = reminder.checklistItems
         checklistEntries = storedChecklist.isEmpty ? [""] : storedChecklist
-        let storedRoutineItems = _reminder.wrappedValue.sortedRoutineChecklistItems.map { $0.title }
+        let storedRoutineItems = _reminder.wrappedValue.sortedRoutineChecklistItems.map(\.title)
         routineItemEntries = storedRoutineItems.isEmpty ? [""] : storedRoutineItems
         selectedMedicationId = reminder.linkedMedicationId
         linkedMedicationQuantity = max(1, reminder.linkedMedicationQuantity)
         let storedMedicationLinks = _reminder.wrappedValue.sortedMedicationLinks
         routineMedicationRows = storedMedicationLinks.map { link in
-            return (
+            (
                 id: link.id,
                 medicationId: link.medicationId,
-                quantity: max(1, link.quantity)
+                quantity: max(1, link.quantity),
             )
         }
 
@@ -2271,16 +2417,16 @@ struct EditReminderSheet: View {
                 .sorted { a, b in (a.h, a.m) < (b.h, b.m) }
 
                 if !parsed.isEmpty {
-                    self.timesOfDay = parsed.map { ReminderCompute.merge(day: Date(), hour: $0.h, minute: $0.m) }
+                    timesOfDay = parsed.map { ReminderCompute.merge(day: Date(), hour: $0.h, minute: $0.m) }
                 } else {
-                    self.timesOfDay = [reminder.nextRunAt]
+                    timesOfDay = [reminder.nextRunAt]
                 }
             } else {
-                self.timesOfDay = [reminder.nextRunAt]
+                timesOfDay = [reminder.nextRunAt]
             }
 
-            if self.timesOfDay.isEmpty {
-                self.timesOfDay = [reminder.nextRunAt]
+            if timesOfDay.isEmpty {
+                timesOfDay = [reminder.nextRunAt]
             }
 
             selectedDays = Set(reminder.schedule?.daysOfWeek ?? [])
@@ -2298,7 +2444,8 @@ struct EditReminderSheet: View {
 
             // Yearly: restore mode from stored anchorMonth/anchorDay
             if let storedMonth = reminder.schedule?.anchorMonth,
-               let storedDay = reminder.schedule?.anchorDay {
+               let storedDay = reminder.schedule?.anchorDay
+            {
                 anchorMonth = storedMonth
                 anchorDay = storedDay
                 yearlyMode = .specificDate
@@ -2307,50 +2454,51 @@ struct EditReminderSheet: View {
                 anchorDay = Calendar.current.component(.day, from: reminder.nextRunAt)
                 yearlyMode = .sameDay
             }
-            print("[EditReminderSheet] Recurring: startDay=\(startDay), timesOfDay=\(self.timesOfDay), days=\(selectedDays.sorted()), intervalMinutes=\(intervalMinutes)")
+            print("[EditReminderSheet] Recurring: startDay=\(startDay), timesOfDay=\(timesOfDay), days=\(selectedDays.sorted()), intervalMinutes=\(intervalMinutes)")
         }
+        reminderColor = reminder.color
     }
 
     private func apply() {
-#if os(macOS)
-        NSApp.keyWindow?.endEditing(for: nil)
-#endif
+        #if os(macOS)
+            NSApp.keyWindow?.endEditing(for: nil)
+        #endif
         DispatchQueue.main.async {
-            guard self.canSave else { return }
+            guard canSave else { return }
             let currentReminder = _reminder.wrappedValue
 
-            print("[EditReminderSheet] Apply tapped. title=\(self.titleTrimmed), kind=\(self.scheduleKind.rawValue))")
-            currentReminder.title = self.titleTrimmed
-            currentReminder.reminderType = self.reminderType
+            print("[EditReminderSheet] Apply tapped. title=\(titleTrimmed), kind=\(scheduleKind.rawValue))")
+            currentReminder.title = titleTrimmed
+            currentReminder.reminderType = reminderType
 
-            let detailsTrimmed = self.details.trimmingCharacters(in: .whitespacesAndNewlines)
+            let detailsTrimmed = details.trimmingCharacters(in: .whitespacesAndNewlines)
             currentReminder.details = detailsTrimmed.isEmpty ? nil : detailsTrimmed
 
-            let checklistItems = self.checklistEntries
+            let checklistItems = checklistEntries
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
-            currentReminder.checklistItems = self.reminderType == .regular ? checklistItems : []
+            currentReminder.checklistItems = reminderType == .regular ? checklistItems : []
 
-            let routineItems = self.routineItemEntries
+            let routineItems = routineItemEntries
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
 
-            if self.reminderType == .routine {
+            if reminderType == .routine {
                 currentReminder.routineChecklistItems = routineItems.enumerated().map { idx, title in
                     RoutineChecklistItem(
                         title: title,
                         sortOrder: idx,
-                        reminder: currentReminder
+                        reminder: currentReminder,
                     )
                 }
 
-                let validRows = self.routineMedicationRows.filter { $0.medicationId != nil }
+                let validRows = routineMedicationRows.filter { $0.medicationId != nil }
                 currentReminder.medicationLinks = validRows.enumerated().map { idx, row in
                     ReminderMedicationLink(
                         reminder: currentReminder,
                         medicationId: row.medicationId,
                         quantity: max(1, row.quantity),
-                        sortOrder: idx
+                        sortOrder: idx,
                     )
                 }
             } else {
@@ -2358,11 +2506,11 @@ struct EditReminderSheet: View {
                 currentReminder.medicationLinks = nil
             }
 
-            if self.reminderType == .regular {
-                if let selectedMedicationId = self.selectedMedicationId {
+            if reminderType == .regular {
+                if let selectedMedicationId {
                     currentReminder.linkedKind = .medication
                     currentReminder.linkedMedicationId = selectedMedicationId
-                    currentReminder.linkedMedicationQuantity = max(1, self.linkedMedicationQuantity)
+                    currentReminder.linkedMedicationQuantity = max(1, linkedMedicationQuantity)
                     currentReminder.linkedHabitId = nil
                 } else {
                     currentReminder.linkedKindRaw = nil
@@ -2377,11 +2525,11 @@ struct EditReminderSheet: View {
             let schedule: ReminderSchedule?
             let runAt: Date
 
-            if self.scheduleKind == .once {
+            if scheduleKind == .once {
                 schedule = .once
-                runAt = self.onceDateTime
+                runAt = onceDateTime
             } else {
-                let timeStrings = self.timesOfDay
+                let timeStrings = timesOfDay
                     .map { d -> String in
                         let (hh, mm) = ReminderCompute.hourMinute(from: d)
                         return String(format: "%02d:%02d", hh, mm)
@@ -2391,48 +2539,49 @@ struct EditReminderSheet: View {
                 let primary = timeStrings.first
 
                 let resolvedDayOfMonth: Int? = {
-                    guard self.scheduleKind == .monthly else { return nil }
-                    if self.monthlyMode == .specificDay { return self.dayOfMonth }
+                    guard scheduleKind == .monthly else { return nil }
+                    if monthlyMode == .specificDay { return dayOfMonth }
                     return nil // sameDay = engine uses start day
                 }()
                 let resolvedAnchorMonth: Int? = {
-                    guard self.scheduleKind == .yearly else { return nil }
-                    if self.yearlyMode == .specificDate { return self.anchorMonth }
+                    guard scheduleKind == .yearly else { return nil }
+                    if yearlyMode == .specificDate { return anchorMonth }
                     return nil
                 }()
                 let resolvedAnchorDay: Int? = {
-                    guard self.scheduleKind == .yearly else { return nil }
-                    if self.yearlyMode == .specificDate { return self.anchorDay }
+                    guard scheduleKind == .yearly else { return nil }
+                    if yearlyMode == .specificDate { return anchorDay }
                     return nil
                 }()
 
                 schedule = ReminderSchedule(
-                    kind: self.scheduleKind,
+                    kind: scheduleKind,
                     timeOfDay: primary,
                     timesOfDay: timeStrings,
-                    interval: self.scheduleKind == .interval ? nil : self.recurrenceInterval,
-                    daysOfWeek: self.scheduleKind == .weekly ? Array(self.selectedDays).sorted() : nil,
+                    interval: scheduleKind == .interval ? nil : recurrenceInterval,
+                    daysOfWeek: scheduleKind == .weekly ? Array(selectedDays).sorted() : nil,
                     dayOfMonth: resolvedDayOfMonth,
                     anchorMonth: resolvedAnchorMonth,
                     anchorDay: resolvedAnchorDay,
-                    intervalMinutes: self.scheduleKind == .interval ? self.intervalMinutes : nil
+                    intervalMinutes: scheduleKind == .interval ? intervalMinutes : nil,
                 )
 
                 runAt = ReminderCompute.firstRun(
-                    kind: self.scheduleKind,
-                    startDay: self.startDay,
+                    kind: scheduleKind,
+                    startDay: startDay,
                     timesOfDay: timeStrings,
-                    daysOfWeek: self.scheduleKind == .weekly ? Array(self.selectedDays) : nil,
-                    intervalMinutes: self.scheduleKind == .interval ? self.intervalMinutes : nil,
-                    recurrenceInterval: self.scheduleKind == .interval ? nil : self.recurrenceInterval,
+                    daysOfWeek: scheduleKind == .weekly ? Array(selectedDays) : nil,
+                    intervalMinutes: scheduleKind == .interval ? intervalMinutes : nil,
+                    recurrenceInterval: scheduleKind == .interval ? nil : recurrenceInterval,
                     dayOfMonth: resolvedDayOfMonth,
                     anchorMonth: resolvedAnchorMonth,
-                    anchorDay: resolvedAnchorDay
+                    anchorDay: resolvedAnchorDay,
                 )
             }
 
             print("[EditReminderSheet] Computed runAt=\(runAt), schedule=\(String(describing: schedule))")
 
+            reminder.color = reminderColor
             reminder.schedule = schedule
             reminder.nextRunAt = runAt
             reminder.updatedAt = Date()
@@ -2440,68 +2589,71 @@ struct EditReminderSheet: View {
             print("[EditReminderSheet] Updated reminder id=\(reminder.id) nextRunAt=\(reminder.nextRunAt) updatedAt=\(String(describing: reminder.updatedAt))")
 
             NotificationManager.shared.scheduleReminder(reminder)
-#if DEBUG
-            NotificationManager.shared.printPendingNotifications()
-#endif
+            #if DEBUG
+                NotificationManager.shared.printPendingNotifications()
+            #endif
 
-            self.onClose()
+            onClose()
         }
     }
 }
-
 
 // MARK: - Shared Schedule Form
 
 /// Drop-in schedule configuration UI used by both NewReminderSheet and EditReminderSheet.
 /// Covers every schedule kind the engine supports with proper pickers instead of steppers.
 struct ReminderScheduleForm: View {
-
     // MARK: Bindings
+
     @Binding var scheduleKind: ReminderScheduleKind
     @Binding var startDay: Date
     @Binding var onceDateTime: Date
-    @Binding var timesOfDay: [Date]           // recurring times
-    @Binding var selectedDays: Set<Int>       // weekly days (0=Sun … 6=Sat)
-    @Binding var recurrenceInterval: Int      // every N days/weeks/months/years
-    @Binding var intervalMinutes: Int         // for .interval kind
-    @Binding var monthlyMode: MonthlyMode     // .sameDay | .specificDay
-    @Binding var dayOfMonth: Int              // 1-31 for .specificDay
-    @Binding var yearlyMode: YearlyMode       // .sameDay | .specificDate
+    @Binding var timesOfDay: [Date] // recurring times
+    @Binding var selectedDays: Set<Int> // weekly days (0=Sun … 6=Sat)
+    @Binding var recurrenceInterval: Int // every N days/weeks/months/years
+    @Binding var intervalMinutes: Int // for .interval kind
+    @Binding var monthlyMode: MonthlyMode // .sameDay | .specificDay
+    @Binding var dayOfMonth: Int // 1-31 for .specificDay
+    @Binding var yearlyMode: YearlyMode // .sameDay | .specificDate
     @Binding var anchorMonth: Int
     @Binding var anchorDay: Int
 
     // MARK: Supporting types
+
     enum MonthlyMode: String, CaseIterable {
-        case sameDay    = "Same day as start"
+        case sameDay = "Same day as start"
         case specificDay = "Specific day"
     }
 
     enum YearlyMode: String, CaseIterable {
-        case sameDay     = "Same day as start"
+        case sameDay = "Same day as start"
         case specificDate = "Specific date"
     }
 
     // MARK: Private helpers
-    private let weekdays = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]
-    private var monthSymbols: [String] { Calendar.current.monthSymbols }
+
+    private let weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+    private var monthSymbols: [String] {
+        Calendar.current.monthSymbols
+    }
 
     private var intervalUnit: String {
         let plural = recurrenceInterval != 1
         switch scheduleKind {
-        case .daily:   return plural ? "days"   : "day"
-        case .weekly:  return plural ? "weeks"  : "week"
+        case .daily: return plural ? "days" : "day"
+        case .weekly: return plural ? "weeks" : "week"
         case .monthly: return plural ? "months" : "month"
-        case .yearly:  return plural ? "years"  : "year"
-        default:       return ""
+        case .yearly: return plural ? "years" : "year"
+        default: return ""
         }
     }
 
     private var maxAnchorDay: Int {
         var comps = DateComponents()
-        comps.year  = 2024
+        comps.year = 2024
         comps.month = anchorMonth
         return Calendar.current.range(of: .day, in: .month,
-            for: Calendar.current.date(from: comps) ?? Date())?.count ?? 31
+                                      for: Calendar.current.date(from: comps) ?? Date())?.count ?? 31
     }
 
     private func intervalLabel(for minutes: Int) -> String {
@@ -2513,9 +2665,9 @@ struct ReminderScheduleForm: View {
     }
 
     // MARK: Body
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-
             // ── Kind picker ──────────────────────────────────────────────
             VStack(alignment: .leading, spacing: 8) {
                 Text("REPEAT")
@@ -2546,23 +2698,22 @@ struct ReminderScheduleForm: View {
             // ── Schedule details card ────────────────────────────────────
             GlassCard(padding: 16) {
                 VStack(spacing: 14) {
-
                     // ── Once ────────────────────────────────────────────
                     if scheduleKind == .once {
-#if os(macOS)
-                        LDateStepperRow(label: "Date & Time", dateTime: $onceDateTime)
-                        LTimeEntryRow(label: "Time", dateTime: $onceDateTime)
-#else
-                        LystariaControlRow(label: "Date & Time") {
-                            DatePicker("", selection: $onceDateTime,
-                                       displayedComponents: [.date, .hourAndMinute])
-                                .labelsHidden()
-                                .datePickerStyle(.compact)
-                                .tint(LColors.accent)
-                        }
-#endif
+                        #if os(macOS)
+                            LDateStepperRow(label: "Date & Time", dateTime: $onceDateTime)
+                            LTimeEntryRow(label: "Time", dateTime: $onceDateTime)
+                        #else
+                            LystariaControlRow(label: "Date & Time") {
+                                DatePicker("", selection: $onceDateTime,
+                                           displayedComponents: [.date, .hourAndMinute])
+                                    .labelsHidden()
+                                    .datePickerStyle(.compact)
+                                    .tint(LColors.accent)
+                            }
+                        #endif
 
-                    // ── Interval ─────────────────────────────────────────
+                        // ── Interval ─────────────────────────────────────────
                     } else if scheduleKind == .interval {
                         LystariaControlRow(label: "Repeat every") {
                             Picker("", selection: $intervalMinutes) {
@@ -2579,20 +2730,20 @@ struct ReminderScheduleForm: View {
                             .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
                         }
 
-                    // ── Daily / Weekly / Monthly / Yearly ─────────────────
+                        // ── Daily / Weekly / Monthly / Yearly ─────────────────
                     } else {
                         // Start day
-#if os(macOS)
-                        LDateStepperRow(label: "Start Day", dateTime: $startDay)
-#else
-                        LystariaControlRow(label: "Start Day") {
-                            DatePicker("", selection: $startDay,
-                                       in: Date()..., displayedComponents: [.date])
-                                .labelsHidden()
-                                .datePickerStyle(.compact)
-                                .tint(LColors.accent)
-                        }
-#endif
+                        #if os(macOS)
+                            LDateStepperRow(label: "Start Day", dateTime: $startDay)
+                        #else
+                            LystariaControlRow(label: "Start Day") {
+                                DatePicker("", selection: $startDay,
+                                           in: Date()..., displayedComponents: [.date])
+                                    .labelsHidden()
+                                    .datePickerStyle(.compact)
+                                    .tint(LColors.accent)
+                            }
+                        #endif
 
                         // Times of day
                         timeOfDaySection
@@ -2628,7 +2779,7 @@ struct ReminderScheduleForm: View {
                                     .clipShape(Capsule())
                                     .overlay(
                                         Capsule()
-                                            .stroke(LColors.glassBorder, lineWidth: 1)
+                                            .stroke(LColors.glassBorder, lineWidth: 1),
                                     )
 
                                 Button {
@@ -2662,11 +2813,11 @@ struct ReminderScheduleForm: View {
                                     .tracking(0.5)
 
                                 HStack(spacing: 6) {
-                                    ForEach(0..<7, id: \.self) { d in
+                                    ForEach(0 ..< 7, id: \.self) { d in
                                         let on = selectedDays.contains(d)
                                         Button {
                                             if on { selectedDays.remove(d) }
-                                            else  { selectedDays.insert(d) }
+                                            else { selectedDays.insert(d) }
                                         } label: {
                                             Text(weekdays[d])
                                                 .font(.system(size: 12, weight: .semibold))
@@ -2712,7 +2863,7 @@ struct ReminderScheduleForm: View {
                                 if monthlyMode == .specificDay {
                                     LystariaControlRow(label: "Day of month") {
                                         Picker("", selection: $dayOfMonth) {
-                                            ForEach(1...31, id: \.self) { d in
+                                            ForEach(1 ... 31, id: \.self) { d in
                                                 Text("\(ordinal(d))").tag(d)
                                             }
                                         }
@@ -2758,7 +2909,7 @@ struct ReminderScheduleForm: View {
                                 if yearlyMode == .specificDate {
                                     LystariaControlRow(label: "Month") {
                                         Picker("", selection: $anchorMonth) {
-                                            ForEach(1...12, id: \.self) { m in
+                                            ForEach(1 ... 12, id: \.self) { m in
                                                 Text(monthSymbols[m - 1]).tag(m)
                                             }
                                         }
@@ -2776,7 +2927,7 @@ struct ReminderScheduleForm: View {
 
                                     LystariaControlRow(label: "Day") {
                                         Picker("", selection: $anchorDay) {
-                                            ForEach(1...maxAnchorDay, id: \.self) { d in
+                                            ForEach(1 ... maxAnchorDay, id: \.self) { d in
                                                 Text("\(ordinal(d))").tag(d)
                                             }
                                         }
@@ -2811,32 +2962,31 @@ struct ReminderScheduleForm: View {
     }
 
     // MARK: Time-of-day sub-section
-    @ViewBuilder
+
     private var timeOfDaySection: some View {
         VStack(alignment: .leading, spacing: 10) {
             ForEach(Array(timesOfDay.indices), id: \.self) { idx in
-#if os(macOS)
-                LTimeEntryRow(
-                    label: idx == 0 ? "Time" : "Time \(idx + 1)",
-                    dateTime: Binding(
-                        get: { timesOfDay[idx] },
-                        set: { timesOfDay[idx] = $0 }
-                    )
-                )
-#else
-                LystariaControlRow(label: idx == 0 ? "Time" : "Time \(idx + 1)") {
-                    DatePicker("",
-                        selection: Binding(
+                #if os(macOS)
+                    LTimeEntryRow(
+                        label: idx == 0 ? "Time" : "Time \(idx + 1)",
+                        dateTime: Binding(
                             get: { timesOfDay[idx] },
-                            set: { timesOfDay[idx] = $0 }
+                            set: { timesOfDay[idx] = $0 },
                         ),
-                        displayedComponents: .hourAndMinute
                     )
-                    .labelsHidden()
-                    .datePickerStyle(.compact)
-                    .tint(LColors.accent)
-                }
-#endif
+                #else
+                    LystariaControlRow(label: idx == 0 ? "Time" : "Time \(idx + 1)") {
+                        DatePicker("",
+                                   selection: Binding(
+                                       get: { timesOfDay[idx] },
+                                       set: { timesOfDay[idx] = $0 },
+                                   ),
+                                   displayedComponents: .hourAndMinute)
+                            .labelsHidden()
+                            .datePickerStyle(.compact)
+                            .tint(LColors.accent)
+                    }
+                #endif
             }
 
             HStack(spacing: 8) {
@@ -2876,6 +3026,7 @@ struct ReminderScheduleForm: View {
     }
 
     // MARK: Ordinal helper
+
     private func ordinal(_ n: Int) -> String {
         let suffix: String
         let ones = n % 10
@@ -2921,7 +3072,7 @@ struct LabeledGlassField<Content: View>: View {
                 .clipShape(RoundedRectangle(cornerRadius: 14))
                 .overlay(
                     RoundedRectangle(cornerRadius: 14)
-                        .stroke(LColors.glassBorder, lineWidth: 1)
+                        .stroke(LColors.glassBorder, lineWidth: 1),
                 )
         }
     }
@@ -2948,177 +3099,177 @@ struct LystariaControlRow<Content: View>: View {
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay(
             RoundedRectangle(cornerRadius: 14)
-                .stroke(LColors.glassBorder, lineWidth: 1)
+                .stroke(LColors.glassBorder, lineWidth: 1),
         )
     }
 }
 
 #if os(macOS)
-// Date row without the grey DatePicker field
-struct LDateStepperRow: View {
-    let label: String
-    @Binding var dateTime: Date
+    /// Date row without the grey DatePicker field
+    struct LDateStepperRow: View {
+        let label: String
+        @Binding var dateTime: Date
 
-    var body: some View {
-        let formatted = dateTime.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().year())
+        var body: some View {
+            let formatted = dateTime.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().year())
 
-        HStack(spacing: 12) {
-            Text(label)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(LColors.textPrimary)
-            Spacer()
+            HStack(spacing: 12) {
+                Text(label)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(LColors.textPrimary)
+                Spacer()
 
-            Text(formatted)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(LColors.textPrimary)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Color.white.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(LColors.glassBorder, lineWidth: 1))
+                Text(formatted)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(LColors.textPrimary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.white.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(LColors.glassBorder, lineWidth: 1))
 
-            Stepper("") { bump(days: 1) } onDecrement: { bump(days: -1) }
-                .labelsHidden()
+                Stepper("") { bump(days: 1) } onDecrement: { bump(days: -1) }
+                    .labelsHidden()
+            }
+            .padding(12)
+            .background(Color.white.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
         }
-        .padding(12)
-        .background(Color.white.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
+
+        private func bump(days: Int) {
+            let cal = Calendar.current
+            let (h, m) = ReminderCompute.hourMinute(from: dateTime)
+            var d = cal.date(byAdding: .day, value: days, to: dateTime) ?? dateTime
+            d = ReminderCompute.merge(day: d, hour: h, minute: m)
+            dateTime = d
+        }
     }
 
-    private func bump(days: Int) {
-        let cal = Calendar.current
-        let (h, m) = ReminderCompute.hourMinute(from: dateTime)
-        var d = cal.date(byAdding: .day, value: days, to: dateTime) ?? dateTime
-        d = ReminderCompute.merge(day: d, hour: h, minute: m)
-        dateTime = d
-    }
-}
+    /// 12-hour typed time + steppers that NEVER change the date
+    struct LTimeEntryRow: View {
+        let label: String
+        @Binding var dateTime: Date
 
-// 12-hour typed time + steppers that NEVER change the date
-struct LTimeEntryRow: View {
-    let label: String
-    @Binding var dateTime: Date
+        @FocusState private var focused: Bool
+        @State private var text: String = ""
 
-    @FocusState private var focused: Bool
-    @State private var text: String = ""
-
-    private static let displayFormatter: DateFormatter = {
-        let df = DateFormatter()
-        df.locale = .current
-        df.timeStyle = .short
-        df.dateStyle = .none
-        return df
-    }()
-
-    private static let parseFormatters: [DateFormatter] = {
-        func make(_ fmt: String) -> DateFormatter {
+        private static let displayFormatter: DateFormatter = {
             let df = DateFormatter()
             df.locale = .current
-            df.dateFormat = fmt
+            df.timeStyle = .short
+            df.dateStyle = .none
             return df
-        }
-        return [
-            make("h:mm a"), make("h:mma"),
-            make("hh:mm a"), make("hh:mma"),
-            make("h a"), make("ha")
-        ]
-    }()
+        }()
 
-    var body: some View {
-        HStack(spacing: 12) {
-            Text(label)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(LColors.textPrimary)
-            Spacer()
+        private static let parseFormatters: [DateFormatter] = {
+            func make(_ fmt: String) -> DateFormatter {
+                let df = DateFormatter()
+                df.locale = .current
+                df.dateFormat = fmt
+                return df
+            }
+            return [
+                make("h:mm a"), make("h:mma"),
+                make("hh:mm a"), make("hh:mma"),
+                make("h a"), make("ha"),
+            ]
+        }()
 
-            TextField("4:35 PM", text: $text)
-                .textFieldStyle(.plain)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(LColors.textPrimary)
-                .frame(width: 120)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Color.white.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(LColors.glassBorder, lineWidth: 1))
-                .focused($focused)
-                .onSubmit { applyTypedTime() }
-                .onChange(of: text) { oldValue, newValue in
-                    let raw = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !raw.isEmpty else { return }
-                    for df in Self.parseFormatters {
-                        if let parsed = df.date(from: raw.uppercased()) {
-                            let cal = Calendar.current
-                            let c = cal.dateComponents([.hour, .minute], from: parsed)
-                            let hh = c.hour ?? 0
-                            let mm = c.minute ?? 0
-                            dateTime = ReminderCompute.merge(day: dateTime, hour: hh, minute: mm)
-                            break
+        var body: some View {
+            HStack(spacing: 12) {
+                Text(label)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(LColors.textPrimary)
+                Spacer()
+
+                TextField("4:35 PM", text: $text)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(LColors.textPrimary)
+                    .frame(width: 120)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.white.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(LColors.glassBorder, lineWidth: 1))
+                    .focused($focused)
+                    .onSubmit { applyTypedTime() }
+                    .onChange(of: text) { _, newValue in
+                        let raw = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !raw.isEmpty else { return }
+                        for df in Self.parseFormatters {
+                            if let parsed = df.date(from: raw.uppercased()) {
+                                let cal = Calendar.current
+                                let c = cal.dateComponents([.hour, .minute], from: parsed)
+                                let hh = c.hour ?? 0
+                                let mm = c.minute ?? 0
+                                dateTime = ReminderCompute.merge(day: dateTime, hour: hh, minute: mm)
+                                break
+                            }
                         }
                     }
-                }
-                .onChange(of: focused) { oldValue, newValue in
-                    if !newValue { applyTypedTime() }
-                }
-                .onChange(of: dateTime) { oldValue, newValue in
-                    if !focused { syncFromDate() }
-                }
-                .onDisappear { applyTypedTime() }
+                    .onChange(of: focused) { _, newValue in
+                        if !newValue { applyTypedTime() }
+                    }
+                    .onChange(of: dateTime) { _, _ in
+                        if !focused { syncFromDate() }
+                    }
+                    .onDisappear { applyTypedTime() }
 
-            HStack(spacing: 8) {
-                Stepper("") { bump(minutes: 1) } onDecrement: { bump(minutes: -1) }
-                    .labelsHidden()
-                Stepper("") { bump(minutes: 5) } onDecrement: { bump(minutes: -5) }
-                    .labelsHidden()
+                HStack(spacing: 8) {
+                    Stepper("") { bump(minutes: 1) } onDecrement: { bump(minutes: -1) }
+                        .labelsHidden()
+                    Stepper("") { bump(minutes: 5) } onDecrement: { bump(minutes: -5) }
+                        .labelsHidden()
+                }
             }
-        }
-        .padding(12)
-        .background(Color.white.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
-    }
-
-    private func syncFromDate() {
-        text = Self.displayFormatter.string(from: dateTime)
-    }
-
-    private func applyTypedTime() {
-        let raw = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty else { syncFromDate(); return }
-
-        for df in Self.parseFormatters {
-            if let parsed = df.date(from: raw.uppercased()) {
-                let cal = Calendar.current
-                let c = cal.dateComponents([.hour, .minute], from: parsed)
-                let hh = c.hour ?? 0
-                let mm = c.minute ?? 0
-                dateTime = ReminderCompute.merge(day: dateTime, hour: hh, minute: mm)
-                syncFromDate()
-                return
-            }
+            .padding(12)
+            .background(Color.white.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
         }
 
-        // invalid -> revert
-        syncFromDate()
+        private func syncFromDate() {
+            text = Self.displayFormatter.string(from: dateTime)
+        }
+
+        private func applyTypedTime() {
+            let raw = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !raw.isEmpty else { syncFromDate(); return }
+
+            for df in Self.parseFormatters {
+                if let parsed = df.date(from: raw.uppercased()) {
+                    let cal = Calendar.current
+                    let c = cal.dateComponents([.hour, .minute], from: parsed)
+                    let hh = c.hour ?? 0
+                    let mm = c.minute ?? 0
+                    dateTime = ReminderCompute.merge(day: dateTime, hour: hh, minute: mm)
+                    syncFromDate()
+                    return
+                }
+            }
+
+            // invalid -> revert
+            syncFromDate()
+        }
+
+        private func bump(minutes delta: Int) {
+            let cal = Calendar.current
+            let c = cal.dateComponents([.hour, .minute], from: dateTime)
+            let baseHour = c.hour ?? 0
+            let baseMin = c.minute ?? 0
+
+            let total = (baseHour * 60 + baseMin + delta) % (24 * 60)
+            let wrapped = total < 0 ? total + (24 * 60) : total
+
+            let newHour = wrapped / 60
+            let newMin = wrapped % 60
+
+            dateTime = ReminderCompute.merge(day: dateTime, hour: newHour, minute: newMin)
+            syncFromDate()
+        }
     }
-
-    private func bump(minutes delta: Int) {
-        let cal = Calendar.current
-        let c = cal.dateComponents([.hour, .minute], from: dateTime)
-        let baseHour = c.hour ?? 0
-        let baseMin = c.minute ?? 0
-
-        let total = (baseHour * 60 + baseMin + delta) % (24 * 60)
-        let wrapped = total < 0 ? total + (24 * 60) : total
-
-        let newHour = wrapped / 60
-        let newMin = wrapped % 60
-
-        dateTime = ReminderCompute.merge(day: dateTime, hour: newHour, minute: newMin)
-        syncFromDate()
-    }
-}
 #endif
 
 // MARK: - Reminder Checklist Store
@@ -3155,7 +3306,7 @@ private enum ReminderChecklistStore {
             anchorMonth,
             anchorDay,
             interval,
-            intervalMinutes
+            intervalMinutes,
         ].joined(separator: "|")
     }
 
@@ -3216,25 +3367,27 @@ private enum ReminderChecklistStore {
 
 // MARK: - Reminder Badge Helpers
 
-// Returns true if the reminder is considered completed for the given occurrence date.
+/// Returns true if the reminder is considered completed for the given occurrence date.
 private func isReminderCompleted(_ reminder: LystariaReminder, occurrenceDate: Date) -> Bool {
     let cal = ReminderCompute.tzCalendar
 
     if let completed = reminder.lastCompletedAt,
-       cal.isDate(completed, inSameDayAs: occurrenceDate) {
+       cal.isDate(completed, inSameDayAs: occurrenceDate)
+    {
         return true
     }
 
     if !reminder.isRecurring,
        let ack = reminder.acknowledgedAt,
-       cal.isDate(ack, inSameDayAs: occurrenceDate) {
+       cal.isDate(ack, inSameDayAs: occurrenceDate)
+    {
         return true
     }
 
     return false
 }
 
-// Returns true when the reminder belongs to a previous calendar day and still is not completed.
+/// Returns true when the reminder belongs to a previous calendar day and still is not completed.
 private func isReminderOverdue(_ reminder: LystariaReminder, now: Date) -> Bool {
     let cal = ReminderCompute.tzCalendar
     let todayStart = cal.startOfDay(for: now)
@@ -3243,19 +3396,19 @@ private func isReminderOverdue(_ reminder: LystariaReminder, now: Date) -> Bool 
     return dueDate < todayStart && !isReminderCompleted(reminder, occurrenceDate: dueDate)
 }
 
-// Returns true when the reminder is due today right now and is not overdue/completed.
+/// Returns true when the reminder is due today right now and is not overdue/completed.
 private func isReminderDueNow(_ reminder: LystariaReminder, now: Date) -> Bool {
     let cal = ReminderCompute.tzCalendar
     let todayStart = cal.startOfDay(for: now)
     let dueDate = reminder.nextRunAt
 
     return dueDate >= todayStart &&
-           dueDate <= now &&
-           !isReminderCompleted(reminder, occurrenceDate: dueDate) &&
-           !isReminderOverdue(reminder, now: now)
+        dueDate <= now &&
+        !isReminderCompleted(reminder, occurrenceDate: dueDate) &&
+        !isReminderOverdue(reminder, now: now)
 }
 
-// Returns true when the reminder is still ahead today/in the future and not completed.
+/// Returns true when the reminder is still ahead today/in the future and not completed.
 private func isReminderUpcoming(_ reminder: LystariaReminder, now: Date) -> Bool {
     let dueDate = reminder.nextRunAt
     return dueDate > now && !isReminderCompleted(reminder, occurrenceDate: dueDate)
@@ -3280,8 +3433,8 @@ enum ReminderCompute {
         guard parts.count == 2,
               let hh = Int(parts[0]),
               let mm = Int(parts[1]),
-              (0...23).contains(hh),
-              (0...59).contains(mm) else { return nil }
+              (0 ... 23).contains(hh),
+              (0 ... 59).contains(mm) else { return nil }
         return (hh, mm)
     }
 
@@ -3312,7 +3465,7 @@ enum ReminderCompute {
         recurrenceInterval: Int?,
         dayOfMonth: Int?,
         anchorMonth: Int?,
-        anchorDay: Int?
+        anchorDay: Int?,
     ) -> Date {
         let cal = tzCalendar
         let now = Date()
@@ -3593,39 +3746,68 @@ struct ReminderStatusBadge: View {
             .foregroundStyle(badgeForeground)
             .clipShape(Capsule())
             .overlay(
-                Capsule().stroke(badgeBorder, lineWidth: 1)
+                Capsule().stroke(badgeBorder, lineWidth: 1),
             )
     }
+
     private var badgeBackground: Color {
         switch style {
         case .overdue:
-            return Color.red.opacity(0.17)
+            LColors.danger.opacity(0.17)
         case .dueNow:
-            return LColors.accent.opacity(0.18)
+            LColors.accent.opacity(0.18)
         case .upcoming:
-            return Color.white.opacity(0.09)
+            Color.white.opacity(0.09)
         }
     }
+
     private var badgeForeground: Color {
         switch style {
         case .overdue:
-            return Color.red
+            LColors.danger
         case .dueNow:
-            return LColors.accent
+            LColors.accent
         case .upcoming:
-            return LColors.textPrimary
+            LColors.textPrimary
         }
     }
+
     private var badgeBorder: Color {
         switch style {
         case .overdue:
-            return Color.red.opacity(0.45)
+            LColors.danger.opacity(0.45)
         case .dueNow:
-            return LColors.accent.opacity(0.44)
+            LColors.accent.opacity(0.44)
         case .upcoming:
-            return LColors.glassBorder
+            LColors.glassBorder
         }
     }
 }
 
+// MARK: - Reminder Color Picker
 
+struct ReminderColorPicker: View {
+    @Binding var selectedColor: String
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ColorPicker("", selection: Binding(
+                get: { Color(ly_hex: selectedColor) },
+                set: { selectedColor = $0.toHexString() }
+            ), supportsOpacity: false)
+            .labelsHidden()
+            .frame(width: 36, height: 36)
+
+            Circle()
+                .fill(Color(ly_hex: selectedColor))
+                .frame(width: 28, height: 28)
+                .overlay(Circle().stroke(LColors.glassBorder, lineWidth: 1))
+
+            Text("Tap to choose a color")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(LColors.textSecondary)
+
+            Spacer()
+        }
+    }
+}

@@ -94,12 +94,6 @@ private extension BookmarkDetailView {
                             if let folderName = folderName, !folderName.isEmpty {
                                 LBadge(text: folderName, color: LColors.accent)
                             }
-
-                            if !bookmark.hostDisplay.isEmpty {
-                                Text(bookmark.hostDisplay)
-                                    .font(.caption)
-                                    .foregroundStyle(LColors.textSecondary)
-                            }
                         }
                     }
 
@@ -108,14 +102,17 @@ private extension BookmarkDetailView {
                     Button {
                         toggleFavorite()
                     } label: {
-                        Image(systemName: bookmark.isFavorite ? "star.fill" : "star")
-                            .font(.title3)
-                            .foregroundStyle(bookmark.isFavorite ? .white : Color.gray.opacity(0.95))
-                            .frame(width: 36, height: 36)
+                        Image("starfill")
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 20, height: 20)
+                            .foregroundStyle(bookmark.isFavorite ? .white : Color.gray.opacity(0.89))
+                            .frame(width: 38, height: 38)
                             .background(Color.white.opacity(0.08), in: Circle())
                             .overlay(
                                 Circle()
-                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                    .stroke(bookmark.isFavorite ? LColors.glassBorder : Color.white.opacity(0.28), lineWidth: 1)
                             )
                     }
                     .buttonStyle(.plain)
@@ -190,7 +187,7 @@ private extension BookmarkDetailView {
                     Spacer()
 
                     if validPreviewURL != nil {
-                        LButton(title: "Open in Browser", icon: "safari", style: .secondary) {
+                        LButton(title: "Open", icon: "safari", style: .secondary) {
                             openInSystemBrowser()
                         }
                     }
@@ -238,18 +235,55 @@ private extension BookmarkDetailView {
 
     var actionRow: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 moveMenu
 
-                LButton(title: "Open in Browser", icon: "safari", style: .secondary) {
+                Button {
                     openInSystemBrowser()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "safari")
+                            .font(.system(size: 14, weight: .semibold))
+
+                        Text("Open")
+                            .font(.subheadline.weight(.semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(Color.white.opacity(0.10), in: RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: LSpacing.buttonRadius)
+                            .stroke(LColors.glassBorder, lineWidth: 1)
+                    )
                 }
+                .buttonStyle(.plain)
 
-                Spacer()
-
-                LButton(title: "Delete", icon: "trash", style: .danger) {
+                Button {
                     showDeleteDialog = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image("trashfill")
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 14, height: 14)
+
+                        Text("Delete")
+                            .font(.subheadline.weight(.semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(LGradients.blue, in: RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: LSpacing.buttonRadius)
+                            .stroke(LColors.glassBorder, lineWidth: 1)
+                    )
                 }
+                .buttonStyle(.plain)
+
+                Spacer(minLength: 0)
             }
         }
     }
@@ -264,9 +298,9 @@ private extension BookmarkDetailView {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "folder")
-                    .font(.caption)
+                    .font(.system(size: 14, weight: .semibold))
 
-                Text("Move to Folder")
+                Text("Move")
                     .font(.subheadline.weight(.semibold))
             }
             .foregroundStyle(.white)
@@ -356,9 +390,10 @@ private extension BookmarkDetailView {
     }
 
     func labelText(_ text: String) -> some View {
-        Text(text)
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.white)
+        Text(text.uppercased())
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(LColors.textSecondary)
+            .tracking(0.5)
     }
 }
 
@@ -399,4 +434,3 @@ enum BookmarkDetailTab: String, CaseIterable, Identifiable {
 private func dismissKeyboard() {
     UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
 }
-

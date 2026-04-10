@@ -587,19 +587,14 @@ struct HabitCard: View {
     }
 
     private func resolvedNextRunAt(for reminder: LystariaReminder, now: Date) -> Date? {
-        if reminder.nextRunAt >= now {
-            return reminder.nextRunAt
-        }
-
         guard reminder.status != .deleted else { return nil }
-        return ReminderCompute.nextRun(after: now.addingTimeInterval(1), reminder: reminder)
+        return reminder.nextRunAt
     }
 
     private var nextReminderRunAt: Date? {
         let now = Date()
         return linkedHabitReminders
             .compactMap { resolvedNextRunAt(for: $0, now: now) }
-            .filter { $0 >= now }
             .sorted()
             .first
     }

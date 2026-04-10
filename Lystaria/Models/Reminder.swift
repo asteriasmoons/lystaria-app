@@ -121,10 +121,14 @@ final class LystariaReminder {
     // MARK: - Fields
     var title: String = ""
     var details: String?
+    var color: String = "#7d19f7"
     var statusRaw: String = ReminderStatus.scheduled.rawValue
     var nextRunAt: Date = Date()
     var acknowledgedAt: Date?
     var lastCompletedAt: Date?
+    // JSON array of ISO8601 timestamps for each completion today.
+    // Cleared automatically when the date rolls over.
+    var completionTimestampsStorage: String = "[]"
     var pendingNextRunAt: Date?
     
     var runDayKey: String?          // "2026-02-05"

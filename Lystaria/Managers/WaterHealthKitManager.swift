@@ -21,6 +21,14 @@ final class WaterHealthKitManager: ObservableObject {
     private let appSourceKey = "com.lystaria.waterEntry"
 
     @Published var todayWaterFlOz: Double = 0
+    private var waterGoalForSync: Double = {
+        // Seed from shared UserDefaults so the observer never overwrites
+        // the widget with the hardcoded default before WaterTrackingView appears.
+        let stored = UserDefaults(suiteName: HealthWidgetSync.appGroupID)
+            .flatMap { $0.object(forKey: "healthWidget.waterGoal") as? Double }
+        return stored ?? 80
+    }()
+    private var waterObserverQuery: HKObserverQuery?
 
     private init() {
         NotificationCenter.default.addObserver(
@@ -50,9 +58,37 @@ final class WaterHealthKitManager: ObservableObject {
             )
 
             await fetchTodayWater()
+            enableWaterBackgroundDelivery()
+            startObservingWater()
         } catch {
             print("Water HealthKit auth error:", error)
         }
+    }
+
+    func updateWaterGoalForSync(_ goal: Double) {
+        waterGoalForSync = goal
+    }
+
+    private func enableWaterBackgroundDelivery() {
+        healthStore.enableBackgroundDelivery(for: waterType, frequency: .immediate) { _, error in
+            if let error {
+                print("HealthKit water background delivery error:", error)
+            }
+        }
+    }
+
+    private func startObservingWater() {
+        guard waterObserverQuery == nil else { return }
+
+        let query = HKObserverQuery(sampleType: waterType, predicate: nil) { [weak self] _, _, error in
+            if let error {
+                print("HealthKit water observer error:", error)
+            }
+            Task { await self?.fetchTodayWater() }
+        }
+
+        waterObserverQuery = query
+        healthStore.execute(query)
     }
 
     func fetchTodayWater() async {
@@ -75,6 +111,10 @@ final class WaterHealthKitManager: ObservableObject {
                     .doubleValue(for: .fluidOunceUS()) ?? 0
 
                 self.todayWaterFlOz = flOz
+                HealthWidgetSync.syncWater(
+                    waterToday: flOz,
+                    waterGoal: self.waterGoalForSync
+                )
             }
         }
 

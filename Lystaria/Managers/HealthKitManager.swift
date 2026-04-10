@@ -20,6 +20,13 @@ final class HealthKitManager: ObservableObject {
     private var stepObserverQuery: HKObserverQuery?
     
     @Published var todaySteps: Double = 0
+    private var stepGoalForSync: Double = {
+        // Seed from shared UserDefaults so the observer never overwrites
+        // the widget with the hardcoded default before StepCountView appears.
+        let stored = UserDefaults(suiteName: HealthWidgetSync.appGroupID)
+            .flatMap { $0.object(forKey: "healthWidget.stepGoal") as? Double }
+        return stored ?? 5000
+    }()
     
     private init() {
         NotificationCenter.default.addObserver(
@@ -51,12 +58,19 @@ final class HealthKitManager: ObservableObject {
             )
             
             await fetchTodaySteps()
+            enableStepBackgroundDelivery()
             startObservingSteps()
         } catch {
             print("HealthKit auth error:", error)
         }
     }
     
+    /// Called by StepCountView whenever the goal changes so the observer
+    /// can push the correct goal value to the widget without needing a view reference.
+    func updateStepGoalForSync(_ goal: Double) {
+        stepGoalForSync = goal
+    }
+
     func fetchTodaySteps() async {
         let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount)!
         let startOfDay = Calendar.current.startOfDay(for: Date())
@@ -84,10 +98,23 @@ final class HealthKitManager: ObservableObject {
 
             DispatchQueue.main.async {
                 self.todaySteps = steps
+                HealthWidgetSync.syncSteps(
+                    stepsToday: steps,
+                    stepGoal: self.stepGoalForSync
+                )
             }
         }
 
         healthStore.execute(query)
+    }
+
+    private func enableStepBackgroundDelivery() {
+        let stepType = HKObjectType.quantityType(forIdentifier: .stepCount)!
+        healthStore.enableBackgroundDelivery(for: stepType, frequency: .immediate) { success, error in
+            if let error {
+                print("HealthKit step background delivery error:", error)
+            }
+        }
     }
 
     private func startObservingSteps() {

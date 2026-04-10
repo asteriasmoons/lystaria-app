@@ -1,0 +1,377 @@
+// ReminderTimeBlockView.swift
+// Lystaria
+
+import SwiftData
+import SwiftUI
+
+struct ReminderTimeBlockView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+
+    let allReminders: [LystariaReminder]
+    let onMarkDone: (LystariaReminder) -> Void
+
+    @State private var selectedDate: Date = Date()
+    @State private var editingReminder: LystariaReminder? = nil
+    /// Optimistic local tracking: IDs marked done this session so the circle
+    /// flips immediately without waiting for SwiftData to propagate.
+    @State private var locallyDoneIDs: Set<PersistentIdentifier> = []
+
+    private var tzCalendar: Calendar { ReminderCompute.tzCalendar }
+
+    private var headerTitle: String {
+        let df = DateFormatter()
+        df.locale = .current
+        df.setLocalizedDateFormatFromTemplate("EEEE, MMMM d")
+        return df.string(from: selectedDate)
+    }
+
+    private var visibleHours: [Int] { Array(5...23) }
+
+    // MARK: - Done state
+
+    private func reminderIsDone(_ reminder: LystariaReminder) -> Bool {
+        if locallyDoneIDs.contains(reminder.persistentModelID) { return true }
+        // Non-recurring: check acknowledged or completed today
+        if !reminder.isRecurring {
+            if let completedAt = reminder.lastCompletedAt, Calendar.current.isDateInToday(completedAt) { return true }
+            if let ack = reminder.acknowledgedAt, Calendar.current.isDateInToday(ack) { return true }
+        }
+        return false
+    }
+
+    // MARK: - Slot resolution
+
+    private func remindersForHour(_ hour: Int) -> [(LystariaReminder, Date)] {
+        let cal = tzCalendar
+        let dayAnchor = cal.startOfDay(for: selectedDate)
+        var result: [(LystariaReminder, Date)] = []
+
+        for reminder in allReminders {
+            guard reminder.status != .deleted else { continue }
+            guard let schedule = reminder.schedule else { continue }
+
+            switch schedule.kind {
+            case .once, .interval:
+                guard cal.isDate(reminder.nextRunAt, inSameDayAs: selectedDate) else { continue }
+                let h = cal.component(.hour, from: reminder.nextRunAt)
+                if h == hour { result.append((reminder, reminder.nextRunAt)) }
+
+            case .daily, .weekly, .monthly, .yearly:
+                let firesOnDay = cal.isDate(reminder.nextRunAt, inSameDayAs: selectedDate)
+                    || isCompletedOn(reminder, date: selectedDate)
+                guard firesOnDay else { continue }
+
+                let times: [String]
+                if let tod = schedule.timesOfDay, !tod.isEmpty {
+                    times = tod
+                } else if let tod = schedule.timeOfDay {
+                    times = [tod]
+                } else {
+                    let h = cal.component(.hour, from: reminder.nextRunAt)
+                    if h == hour { result.append((reminder, reminder.nextRunAt)) }
+                    continue
+                }
+
+                for timeStr in times {
+                    guard let (hh, mm) = ReminderCompute.parseHHMM(timeStr) else { continue }
+                    if hh == hour {
+                        let fireDate = cal.date(bySettingHour: hh, minute: mm, second: 0, of: dayAnchor) ?? dayAnchor
+                        result.append((reminder, fireDate))
+                    }
+                }
+            }
+        }
+
+        return result.sorted {
+            if $0.1 != $1.1 { return $0.1 < $1.1 }
+            return $0.0.title < $1.0.title
+        }
+    }
+
+    private func isCompletedOn(_ reminder: LystariaReminder, date: Date) -> Bool {
+        guard let completedAt = reminder.lastCompletedAt else { return false }
+        return tzCalendar.isDate(completedAt, inSameDayAs: date)
+    }
+
+    private func isOverdue(_ reminder: LystariaReminder, fireDate: Date) -> Bool {
+        if reminderIsDone(reminder) { return false }
+        let startOfToday = Calendar.current.startOfDay(for: Date())
+        return reminder.nextRunAt < startOfToday
+    }
+
+    private func isDueNow(_ reminder: LystariaReminder, fireDate: Date, now: Date) -> Bool {
+        if reminderIsDone(reminder) { return false }
+        if isOverdue(reminder, fireDate: fireDate) { return false }
+        guard tzCalendar.isDateInToday(selectedDate) else { return false }
+        // For recurring reminders: only due now if nextRunAt matches this fire slot's time
+        if reminder.isRecurring {
+            let cal = tzCalendar
+            let nextHour = cal.component(.hour, from: reminder.nextRunAt)
+            let nextMin = cal.component(.minute, from: reminder.nextRunAt)
+            let fireHour = cal.component(.hour, from: fireDate)
+            let fireMin = cal.component(.minute, from: fireDate)
+            // Only show Due Now if nextRunAt points at this specific slot and it has passed
+            guard nextHour == fireHour && nextMin == fireMin else { return false }
+            return fireDate <= now && cal.isDate(reminder.nextRunAt, inSameDayAs: now)
+        }
+        return fireDate <= now
+    }
+
+    private func isUpcoming(_ reminder: LystariaReminder, fireDate: Date, now: Date) -> Bool {
+        if reminderIsDone(reminder) { return false }
+        if isOverdue(reminder, fireDate: fireDate) { return false }
+        guard tzCalendar.isDateInToday(selectedDate) else { return false }
+        // Upcoming: fire time is still in the future
+        return fireDate > now
+    }
+
+    // MARK: - Body
+
+    var body: some View {
+        ZStack {
+            LystariaBackground()
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 0) {
+                    header
+                    LazyVStack(spacing: 0) {
+                        ForEach(visibleHours, id: \.self) { hour in
+                            hourRow(hour)
+                        }
+                    }
+                    .padding(.top, 8)
+                    .padding(.bottom, 120)
+                }
+            }
+        }
+        .fullScreenCover(item: $editingReminder) { r in
+            EditReminderSheet(onClose: { editingReminder = nil }, reminder: r)
+                .preferredColorScheme(.dark)
+        }
+        .navigationBarHidden(true)
+    }
+
+    // MARK: - Header
+
+    private var header: some View {
+        VStack(spacing: 0) {
+            HStack {
+                HStack(spacing: 12) {
+                    Button { prevDay() } label: {
+                        Image("chevleft")
+                            .renderingMode(.template)
+                            .resizable().scaledToFit()
+                            .frame(width: 14, height: 14)
+                            .foregroundColor(.white)
+                            .frame(width: 36, height: 36)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(LColors.glassBorder, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+
+                    GradientTitle(text: headerTitle, font: .system(size: 20, weight: .bold))
+                        .onTapGesture { dismiss() }
+
+                    Button { nextDay() } label: {
+                        Image("chevright")
+                            .renderingMode(.template)
+                            .resizable().scaledToFit()
+                            .frame(width: 14, height: 14)
+                            .foregroundColor(.white)
+                            .frame(width: 36, height: 36)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(LColors.glassBorder, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+                Spacer()
+
+                Button { selectedDate = Date() } label: {
+                    Text("Today")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.accent)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(LColors.accent.opacity(0.12))
+                        .clipShape(Capsule())
+                        .overlay(Capsule().stroke(LColors.accent.opacity(0.3), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .opacity(tzCalendar.isDateInToday(selectedDate) ? 0 : 1)
+                .animation(.easeInOut(duration: 0.2), value: tzCalendar.isDateInToday(selectedDate))
+            }
+            .padding(.horizontal, LSpacing.pageHorizontal)
+            .padding(.vertical, 16)
+
+            Rectangle().fill(LColors.glassBorder).frame(height: 1)
+        }
+    }
+
+    // MARK: - Hour row
+
+    private func hourRow(_ hour: Int) -> some View {
+        let slots = remindersForHour(hour)
+        return VStack(spacing: 0) {
+            HStack(alignment: .top, spacing: 14) {
+                VStack(spacing: 2) {
+                    Text(hourLabel(hour))
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(LColors.textPrimary)
+                    Text(hourPeriod(hour))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                }
+                .frame(width: 52)
+                .padding(.top, 8)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    if slots.isEmpty {
+                        Text("No reminders")
+                            .font(.system(size: 14))
+                            .foregroundStyle(LColors.textSecondary.opacity(0.5))
+                            .padding(.vertical, 12)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        ForEach(slots, id: \.0.persistentModelID) { reminder, fireDate in
+                            reminderSlotCard(reminder: reminder, fireDate: fireDate)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, LSpacing.pageHorizontal)
+            .padding(.vertical, 8)
+
+            Rectangle()
+                .fill(LColors.glassBorder.opacity(0.4))
+                .frame(height: 1)
+                .padding(.leading, 66 + LSpacing.pageHorizontal)
+        }
+    }
+
+    // MARK: - Reminder slot card
+
+    private func reminderSlotCard(reminder: LystariaReminder, fireDate: Date) -> some View {
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            let now = context.date
+            let done = reminderIsDone(reminder)
+            let overdue = isOverdue(reminder, fireDate: fireDate)
+            let dueNow = !overdue && isDueNow(reminder, fireDate: fireDate, now: now)
+            let upcoming = !overdue && !dueNow && isUpcoming(reminder, fireDate: fireDate, now: now)
+            let reminderColor = Color(ly_hex: reminder.color)
+            let accentColor: Color = overdue ? LColors.danger : (dueNow ? LColors.accent : (upcoming ? LColors.textSecondary : reminderColor))
+
+            HStack(spacing: 0) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(done ? LColors.success : (overdue || dueNow ? accentColor : reminderColor))
+                    .frame(width: 4)
+                    .padding(.vertical, 2)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        let kindLabel = reminder.schedule?.kind.label ?? "Once"
+                        Text(kindLabel.uppercased())
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(LColors.textSecondary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(Capsule())
+                            .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
+
+                        if done {
+                            ReminderStatusBadge(label: "Done", style: .upcoming)
+                        } else if overdue {
+                            ReminderStatusBadge(label: "Overdue", style: .overdue)
+                        } else if dueNow {
+                            ReminderStatusBadge(label: "Due Now", style: .dueNow)
+                        } else if upcoming {
+                            ReminderStatusBadge(label: "Upcoming", style: .upcoming)
+                        }
+                    }
+
+                    Text(reminder.title)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(LColors.textPrimary)
+
+                    if let details = reminder.details?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !details.isEmpty {
+                        Text(details)
+                            .font(.system(size: 12))
+                            .foregroundStyle(LColors.textSecondary)
+                            .lineLimit(2)
+                    }
+
+                    Text(formatTime(fireDate))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(done ? LColors.success : accentColor.opacity(0.9))
+                }
+                .padding(.leading, 10)
+
+                Spacer()
+
+                VStack(spacing: 8) {
+                    let id = reminder.persistentModelID
+                    Button {
+                        if let live = modelContext.model(for: id) as? LystariaReminder {
+                            if !live.isRecurring {
+                                locallyDoneIDs.insert(id)
+                            }
+                            onMarkDone(live)
+                            // For recurring reminders, clear immediately so circle doesn't stay filled
+                            if live.isRecurring {
+                                locallyDoneIDs.remove(id)
+                            }
+                        }
+                    } label: {
+                        Image(systemName: done ? "checkmark.circle.fill" : "circle")
+                            .font(.system(size: 22))
+                            .foregroundStyle(done ? LColors.success : LColors.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(done)
+
+                    Button { editingReminder = reminder } label: {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 12))
+                            .foregroundStyle(LColors.textPrimary.opacity(0.75))
+                            .frame(width: 28, height: 28)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(LColors.glassBorder, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.trailing, 4)
+            }
+            .padding(12)
+            .background(LColors.glassSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(LColors.glassBorder, lineWidth: 1))
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func prevDay() { selectedDate = tzCalendar.date(byAdding: .day, value: -1, to: selectedDate) ?? selectedDate }
+    private func nextDay() { selectedDate = tzCalendar.date(byAdding: .day, value: 1, to: selectedDate) ?? selectedDate }
+
+    private func hourLabel(_ hour: Int) -> String {
+        switch hour {
+        case 0: return "12"
+        case 13...23: return "\(hour - 12)"
+        default: return "\(hour)"
+        }
+    }
+
+    private func hourPeriod(_ hour: Int) -> String { hour < 12 ? "AM" : "PM" }
+
+    private func formatTime(_ date: Date) -> String {
+        let df = DateFormatter()
+        df.locale = .current
+        df.setLocalizedDateFormatFromTemplate("h:mm a")
+        return df.string(from: date)
+    }
+}

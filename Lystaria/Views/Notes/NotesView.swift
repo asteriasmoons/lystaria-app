@@ -11,13 +11,13 @@ import Foundation
 
 struct NotesView: View {
     @Environment(\.modelContext) private var modelContext
-
+    
     @Query(sort: \Note.updatedAt, order: .reverse)
     private var notes: [Note]
-
+    
     @Query(sort: \NotesTab.createdAt, order: .forward)
     private var tabs: [NotesTab]
-
+    
     @State private var selectedFilter: NotesFilter = .all
     @State private var selectedNote: Note?
     @State private var viewingNote: Note?
@@ -30,6 +30,8 @@ struct NotesView: View {
     @State private var isCreatingNote: Bool = false
     @State private var showDeleteConfirmation = false
     @State private var visibleCount: Int = 6
+    @AppStorage("notes.collapsedPinnedIDs") private var collapsedPinnedIDsStorage: String = ""
+    @State private var collapsedPinnedIDs: Set<String> = []
     
     @State private var selectedTab: String = ""
     @State private var newTabName: String = ""
@@ -41,17 +43,17 @@ struct NotesView: View {
     @State private var tabPopupMode: TabPopupMode = .create
     @FocusState private var isEditorFocused: Bool
     @FocusState private var isTabFieldFocused: Bool
-
+    
     private let columns = [
         GridItem(.flexible(), spacing: 14),
         GridItem(.flexible(), spacing: 14)
     ]
-
+    
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             LystariaBackground()
                 .ignoresSafeArea()
-
+            
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 18) {
                     headerSection
@@ -62,7 +64,7 @@ struct NotesView: View {
                 .padding(.top, 16)
                 .padding(.bottom, 110)
             }
-
+            
             FloatingActionButton {
                 createNote()
             }
@@ -138,10 +140,12 @@ struct NotesView: View {
                         Spacer()
                     }
                 } content: {
-                    Text("Notes in this tab will be moved to All Notes.")
-                        .font(.system(size: 14))
-                        .foregroundStyle(LColors.textSecondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(tabPendingDeletion == rootTabName && notesTabs.count > 1
+                         ? "Notes in this tab will be moved to the next available tab, which will become the new default tab."
+                         : "Notes in this tab will be moved to \(rootTabName).")
+                    .font(.system(size: 14))
+                    .foregroundStyle(LColors.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 } footer: {
                     HStack(spacing: 10) {
                         Spacer()
@@ -208,12 +212,16 @@ struct NotesView: View {
             if selectedTab.isEmpty {
                 selectedTab = rootTabName
             }
+            loadCollapsedPinnedIDs()
         }
         .onChange(of: tabs) { _, _ in
             // If the selected tab was deleted or renamed, fall back to root
             if !notesTabs.contains(selectedTab) {
                 selectedTab = rootTabName
             }
+        }
+        .onChange(of: collapsedPinnedIDs) { _, newValue in
+            collapsedPinnedIDsStorage = newValue.sorted().joined(separator: "\n")
         }
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
@@ -226,16 +234,16 @@ struct NotesView: View {
             }
         }
     }
-
+    
     // MARK: - Header
-
+    
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 GradientTitle(text: "Notes", size: 30)
-
+                
                 Spacer()
-
+                
                 Button {
                     newTabName = ""
                     tabPopupMode = .create
@@ -249,7 +257,7 @@ struct NotesView: View {
                                     .stroke(Color.white.opacity(0.16), lineWidth: 1)
                             )
                             .frame(width: 34, height: 34)
-
+                        
                         Image("wavyplus")
                             .renderingMode(.template)
                             .resizable()
@@ -260,20 +268,25 @@ struct NotesView: View {
                 }
                 .buttonStyle(.plain)
             }
-
+            
             Rectangle()
                 .fill(LColors.glassBorder)
                 .frame(height: 1)
-
+            
             Text("Quick thoughts, fragments, and things you want to keep nearby.")
-                .font(.subheadline)
+                .font(.system(size: 14, weight: .regular))
+                .foregroundStyle(LColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text("\(selectedTab.isEmpty ? rootTabName : selectedTab) currently has \(currentTabNoteCount) notes")
+                .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(LColors.textSecondary)
         }
         .padding(.horizontal, LSpacing.pageHorizontal)
     }
-
+    
     // MARK: - Filters
-
+    
     private var filterSection: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
@@ -343,8 +356,8 @@ struct NotesView: View {
                             tabPopupMode = .rename
                             showingTabPopup = true
                         }
-
-                        if tab != (notesTabs.first ?? "All Notes") {
+                        
+                        if tab != rootTabName || notesTabs.count > 1 {
                             Button("Delete", role: .destructive) {
                                 tabPendingDeletion = tab
                                 showDeleteTabConfirmation = true
@@ -356,9 +369,9 @@ struct NotesView: View {
             .padding(.horizontal, LSpacing.pageHorizontal)
         }
     }
-
+    
     // MARK: - Notes Section
-
+    
     @ViewBuilder
     private var notesSection: some View {
         if filteredNotes.isEmpty {
@@ -386,21 +399,44 @@ struct NotesView: View {
             .padding(.horizontal, LSpacing.pageHorizontal)
         } else {
             VStack(alignment: .leading, spacing: 14) {
-                LazyVGrid(columns: columns, spacing: 14) {
-                    ForEach(visibleNotes) { note in
-                        NoteStickyCard(
-                            note: note,
-                            stickyColor: color(from: note.colorHex),
-                            availableTabs: notesTabs,
-                            action: {
-                                open(note)
-                            },
-                            onMoveToTab: { tab in
-                                move(note, to: tab)
-                            }
-                        )
+                GeometryReader { geo in
+                    let cardWidth = (geo.size.width - 14) / 2
+                    let gridColumns = [
+                        GridItem(.fixed(cardWidth), spacing: 14, alignment: .top),
+                        GridItem(.fixed(cardWidth), spacing: 14, alignment: .top)
+                    ]
+
+                    LazyVGrid(columns: gridColumns, spacing: 14) {
+                        ForEach(visibleNotes) { note in
+                            NoteStickyCard(
+                                note: note,
+                                stickyColor: color(from: note.colorHex),
+                                availableTabs: notesTabs,
+                                isCollapsed: note.isPinned
+                                    ? Binding(
+                                        get: { collapsedPinnedIDs.contains(collapseID(for: note)) },
+                                        set: { collapsed in
+                                            let id = collapseID(for: note)
+                                            if collapsed {
+                                                collapsedPinnedIDs.insert(id)
+                                            } else {
+                                                collapsedPinnedIDs.remove(id)
+                                            }
+                                        }
+                                    )
+                                    : .constant(false),
+                                action: {
+                                    open(note)
+                                },
+                                onMoveToTab: { tab in
+                                    move(note, to: tab)
+                                }
+                            )
+                            .frame(width: cardWidth, alignment: .topLeading)
+                        }
                     }
                 }
+                .frame(height: gridHeight)
 
                 if filteredNotes.count > visibleCount {
                     HStack {
@@ -447,28 +483,6 @@ struct NotesView: View {
                     }
                 }
                 .buttonStyle(.plain)
-
-                Button {
-                    toggleFavorite(note)
-                } label: {
-                    ZStack {
-                        Circle()
-                            .fill(Color.white.opacity(0.08))
-                            .overlay(
-                                Circle()
-                                    .stroke(LColors.glassBorder, lineWidth: 1)
-                            )
-                            .frame(width: 34, height: 34)
-
-                        Image("starfill")
-                            .renderingMode(.template)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 14, height: 14)
-                            .foregroundStyle(note.isFavorite ? .white : LColors.textSecondary)
-                    }
-                }
-                .buttonStyle(.plain)
             }
         }
     }
@@ -498,28 +512,6 @@ struct NotesView: View {
                             .scaledToFit()
                             .frame(width: 14, height: 14)
                             .foregroundStyle(note.isPinned ? .white : LColors.textSecondary)
-                    }
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    toggleFavorite(note)
-                } label: {
-                    ZStack {
-                        Circle()
-                            .fill(Color.white.opacity(0.08))
-                            .overlay(
-                                Circle()
-                                    .stroke(LColors.glassBorder, lineWidth: 1)
-                            )
-                            .frame(width: 34, height: 34)
-
-                        Image("starfill")
-                            .renderingMode(.template)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 14, height: 14)
-                            .foregroundStyle(note.isFavorite ? .white : LColors.textSecondary)
                     }
                 }
                 .buttonStyle(.plain)
@@ -684,8 +676,46 @@ struct NotesView: View {
 
     // MARK: - Data
 
+    private var currentTabNoteCount: Int {
+        let root = rootTabName
+        let activeTab = selectedTab.isEmpty ? root : selectedTab
+
+        return notes.filter { note in
+            let noteTab = note.tabName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let resolved = noteTab.isEmpty ? root : noteTab
+            return resolved == activeTab
+        }.count
+    }
+
     private var visibleNotes: [Note] {
-        Array(filteredNotes.prefix(visibleCount))
+        let collapsedPinnedCount = filteredNotes.filter {
+            $0.isPinned && collapsedPinnedIDs.contains(collapseID(for: $0))
+        }.count
+
+        let effectiveCount = visibleCount + (collapsedPinnedCount * 2)
+        return Array(filteredNotes.prefix(effectiveCount))
+    }
+
+    private var gridHeight: CGFloat {
+        let rowCount = CGFloat((visibleNotes.count + 1) / 2)
+        guard rowCount > 0 else { return 0 }
+
+        let rowHeights: [CGFloat] = stride(from: 0, to: visibleNotes.count, by: 2).map { index in
+            let left = visibleNotes[index]
+            let right = index + 1 < visibleNotes.count ? visibleNotes[index + 1] : nil
+
+            let leftHeight: CGFloat = left.isPinned && collapsedPinnedIDs.contains(collapseID(for: left)) ? 96 : 190
+            let rightHeight: CGFloat = {
+                guard let right else { return 0 }
+                return right.isPinned && collapsedPinnedIDs.contains(collapseID(for: right)) ? 96 : 190
+            }()
+
+            return max(leftHeight, rightHeight)
+        }
+
+        let totalCardHeight = rowHeights.reduce(0, +)
+        let totalSpacing = max(0, rowCount - 1) * 14
+        return totalCardHeight + totalSpacing
     }
 
     private var filteredNotes: [Note] {
@@ -702,8 +732,6 @@ struct NotesView: View {
             return tabbedNotes.sorted { $0.isPinned && !$1.isPinned }
         case .pinned:
             return tabbedNotes.filter(\.isPinned)
-        case .favorites:
-            return tabbedNotes.filter(\.isFavorite).sorted { $0.isPinned && !$1.isPinned }
         case .recent:
             return tabbedNotes.sorted { lhs, rhs in
                 if lhs.isPinned != rhs.isPinned { return lhs.isPinned }
@@ -718,8 +746,6 @@ struct NotesView: View {
             return "Your notes will appear here."
         case .pinned:
             return "Pinned notes will appear here."
-        case .favorites:
-            return "Favorite notes will appear here."
         case .recent:
             return "Recent notes will appear here."
         }
@@ -774,6 +800,19 @@ struct NotesView: View {
             modelContext.insert(root)
         }
         try? modelContext.save()
+    }
+    
+    private func collapseID(for note: Note) -> String {
+        String(describing: note.id)
+    }
+
+    private func loadCollapsedPinnedIDs() {
+        let values = collapsedPinnedIDsStorage
+            .split(separator: "\n")
+            .map { String($0) }
+            .filter { !$0.isEmpty }
+
+        collapsedPinnedIDs = Set(values)
     }
     
     private func createTab() {
@@ -849,15 +888,45 @@ struct NotesView: View {
     }
 
     private func deleteTab() {
-        let rootTabName = self.rootTabName
-        guard !tabPendingDeletion.isEmpty, tabPendingDeletion != rootTabName else { return }
+        let currentRootTabName = self.rootTabName
+        let tabToDelete = tabPendingDeletion.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if let tab = tabModel(named: tabPendingDeletion) {
+        guard !tabToDelete.isEmpty else { return }
+
+        let isDeletingRoot = tabToDelete == currentRootTabName
+        let hasMultipleTabs = notesTabs.count > 1
+
+        if isDeletingRoot && !hasMultipleTabs {
+            return
+        }
+
+        let replacementRootName: String = {
+            if isDeletingRoot {
+                return notesTabs.first(where: { $0 != tabToDelete }) ?? currentRootTabName
+            } else {
+                return currentRootTabName
+            }
+        }()
+
+        if isDeletingRoot,
+           let replacementTab = tabModel(named: replacementRootName) {
+            replacementTab.isRootTab = true
+            replacementTab.touch()
+        }
+
+        if let tab = tabModel(named: tabToDelete) {
             modelContext.delete(tab)
         }
 
-        for note in notes where note.tabName == tabPendingDeletion {
-            note.tabName = rootTabName
+        for note in notes {
+            let noteTab = note.tabName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let matchesDeletedTab = noteTab == tabToDelete
+            let matchesEmptyRoot = isDeletingRoot && noteTab.isEmpty
+
+            if matchesDeletedTab || matchesEmptyRoot {
+                note.tabName = replacementRootName
+                note.touch()
+            }
         }
 
         do {
@@ -866,8 +935,8 @@ struct NotesView: View {
             print("Failed to delete tab: \(error)")
         }
 
-        if selectedTab == tabPendingDeletion {
-            selectedTab = rootTabName
+        if selectedTab == tabToDelete || (isDeletingRoot && selectedTab.isEmpty) {
+            selectedTab = replacementRootName
         }
 
         tabPendingDeletion = ""
@@ -1011,16 +1080,6 @@ struct NotesView: View {
         }
     }
 
-    private func toggleFavorite(_ note: Note) {
-        note.isFavorite.toggle()
-        note.touch()
-
-        do {
-            try modelContext.save()
-        } catch {
-            print("Failed to toggle favorite: \(error)")
-        }
-    }
 
     private func delete(_ note: Note) {
         selectedNote = nil
@@ -1058,8 +1117,18 @@ private struct NoteStickyCard: View {
     let note: Note
     let stickyColor: Color
     let availableTabs: [String]
+    @Binding var isCollapsed: Bool
     let action: () -> Void
     let onMoveToTab: (String) -> Void
+
+    private var cardHeight: CGFloat {
+        note.isPinned && isCollapsed ? 96 : 190
+    }
+
+    private var previewLineLimit: Int {
+        note.isPinned && isCollapsed ? 3 : 8
+    }
+
 
     var body: some View {
         Button(action: action) {
@@ -1075,16 +1144,31 @@ private struct NoteStickyCard: View {
                     HStack(alignment: .top, spacing: 8) {
                         HStack(spacing: 8) {
                             if note.isPinned {
-                                Image("pinfill")
-                                    .renderingMode(.template)
-                                    .resizable()
-                                    .scaledToFit()
-                                    .foregroundStyle(.white)
-                                    .frame(width: 18, height: 18)
-                            }
+                                Button {
+                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+                                        isCollapsed.toggle()
+                                    }
+                                } label: {
+                                    ZStack {
+                                        Circle()
+                                            .fill(Color.white.opacity(0.08))
+                                            .overlay(
+                                                Circle()
+                                                    .stroke(Color.white.opacity(0.16), lineWidth: 1)
+                                            )
+                                            .frame(width: 28, height: 28)
 
-                            if note.isFavorite {
-                                Image("starfill")
+                                        Image(isCollapsed ? "chevrondownfill" : "chevronupfill")
+                                            .renderingMode(.template)
+                                            .resizable()
+                                            .scaledToFit()
+                                            .frame(width: 12, height: 12)
+                                            .foregroundStyle(.white)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+
+                                Image("pinfill")
                                     .renderingMode(.template)
                                     .resizable()
                                     .scaledToFit()
@@ -1096,46 +1180,47 @@ private struct NoteStickyCard: View {
                         Spacer(minLength: 0)
 
                         VStack(alignment: .trailing, spacing: 5) {
-                            if note.isPinned {
+                            if note.isPinned && !isCollapsed {
                                 stickyBadge(text: "PINNED")
                             }
 
-                            if note.isFavorite {
-                                stickyBadge(text: "FAVORITE")
-                            }
-
-                            ForEach(note.activeLabels, id: \.self) { lbl in
-                                stickyBadge(text: lbl.uppercased())
+                            ForEach(displayedBadges, id: \.self) { badge in
+                                stickyBadge(text: badge)
                             }
                         }
+                        .fixedSize(horizontal: true, vertical: false)
                     }
 
                     Text(previewText)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(Color.black.opacity(0.82))
                         .lineSpacing(2)
-                        .lineLimit(8)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .lineLimit(previewLineLimit)
 
                     Spacer(minLength: 0)
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Created: \(shortDateTime(note.createdAt))")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(Color.black.opacity(0.55))
+                    if !(note.isPinned && isCollapsed) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Created: \(shortDateTime(note.createdAt))")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(Color.black.opacity(0.55))
 
-                        Text("Updated: \(shortDateTime(note.updatedAt))")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(Color.black.opacity(0.55))
+                            Text("Updated: \(shortDateTime(note.updatedAt))")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(Color.black.opacity(0.55))
+                        }
                     }
                 }
                 .padding(14)
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: 190)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .frame(height: cardHeight, alignment: .top)
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             .shadow(color: .black.opacity(0.10), radius: 10, y: 4)
         }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .buttonStyle(.plain)
         .contextMenu {
             Menu("Move to Tab") {
@@ -1153,12 +1238,29 @@ private struct NoteStickyCard: View {
         return cleaned.isEmpty ? "Empty note" : cleaned
     }
 
+    private var displayedBadges: [String] {
+        let labelBadges = note.activeLabels.map { $0.uppercased() }
+
+        if note.isPinned && isCollapsed {
+            return Array(labelBadges.prefix(2))
+        }
+
+        return labelBadges
+    }
+
     private func stickyBadge(text: String) -> some View {
-        Text(text)
-            .font(.system(size: 10, weight: .bold))
+        let isCollapsedPinned = note.isPinned && isCollapsed
+        let fontSize: CGFloat = isCollapsedPinned ? 8 : 9
+        let horizontalPadding: CGFloat = isCollapsedPinned ? 6 : 7
+        let verticalPadding: CGFloat = isCollapsedPinned ? 2 : 3
+
+        return Text(text)
+            .font(.system(size: fontSize, weight: .bold))
             .foregroundStyle(.white)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: true)
+            .padding(.horizontal, horizontalPadding)
+            .padding(.vertical, verticalPadding)
             .background(
                 Capsule(style: .continuous)
                     .fill(Color.black.opacity(0.14))
@@ -1167,7 +1269,7 @@ private struct NoteStickyCard: View {
                             .stroke(Color.white.opacity(0.18), lineWidth: 1)
                     )
             )
-            .fixedSize()
+            .fixedSize(horizontal: true, vertical: true)
     }
 
     private func shortDateTime(_ date: Date) -> String {
@@ -1183,7 +1285,6 @@ private struct NoteStickyCard: View {
 private enum NotesFilter: String, CaseIterable, Identifiable {
     case all
     case pinned
-    case favorites
     case recent
 
     var id: String { rawValue }
@@ -1192,7 +1293,6 @@ private enum NotesFilter: String, CaseIterable, Identifiable {
         switch self {
         case .all: return "All"
         case .pinned: return "Pinned"
-        case .favorites: return "Favorites"
         case .recent: return "Recent"
         }
     }

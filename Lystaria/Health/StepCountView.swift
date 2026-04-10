@@ -416,6 +416,12 @@ struct StepCountView: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                         }
                         .buttonStyle(.plain)
+                        .simultaneousGesture(TapGesture().onEnded {
+                            let cleaned = goalText.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if let value = Double(cleaned), value > 0 {
+                                health.updateStepGoalForSync(value)
+                            }
+                        })
 
                         Button {
                             isGoalFieldFocused = false
@@ -462,6 +468,7 @@ struct StepCountView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await health.requestAuthorization()
+            health.updateStepGoalForSync(stepGoal)
             selectedDate = Date()
             selectedDaySteps = health.todaySteps
             await recalculateReachedGoalDates()

@@ -28,6 +28,8 @@ struct BookmarksView: View {
     @State private var isReorderMode: Bool = false
     @State private var draggedFolderID: PersistentIdentifier? = nil
     @State private var pendingReorderFolder: BookmarkFolder? = nil
+    @State private var folderToDelete: BookmarkFolder? = nil
+    @State private var showingDeleteFolderDialog: Bool = false
 
     
 
@@ -83,6 +85,23 @@ struct BookmarksView: View {
         .onAppear {
             visibleFolderCount = 5
             resetReorderStateIfNeeded()
+        }
+        .confirmationDialog(
+            "Delete Folder",
+            isPresented: $showingDeleteFolderDialog,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Folder", role: .destructive) {
+                if let folderToDelete {
+                    deleteFolder(folderToDelete)
+                }
+            }
+
+            Button("Cancel", role: .cancel) {
+                folderToDelete = nil
+            }
+        } message: {
+            Text("This will delete the folder and move its bookmarks into Inbox.")
         }
     }
 }
@@ -279,6 +298,15 @@ private extension BookmarksView {
                     } label: {
                         Label("Reorder", systemImage: "line.3.horizontal")
                     }
+
+                    if folder.systemKey != "inbox" {
+                        Button(role: .destructive) {
+                            folderToDelete = folder
+                            showingDeleteFolderDialog = true
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
                 }
             }
 
@@ -382,10 +410,46 @@ private extension BookmarksView {
         }
     }
 
+    func deleteFolder(_ folder: BookmarkFolder) {
+        guard folder.systemKey != "inbox" else {
+            folderToDelete = nil
+            showingDeleteFolderDialog = false
+            return
+        }
+
+        guard let inboxFolder else {
+            folderToDelete = nil
+            showingDeleteFolderDialog = false
+            return
+        }
+
+        let bookmarksInFolder = bookmarks.filter { $0.folder?.persistentModelID == folder.persistentModelID }
+        for bookmark in bookmarksInFolder {
+            bookmark.folder = inboxFolder
+            bookmark.updatedAt = Date()
+        }
+
+        modelContext.delete(folder)
+
+        do {
+            try modelContext.save()
+            SharedFolderExportManager.exportFolders(modelContext: modelContext)
+        } catch {
+            print("Failed to delete folder: \(error)")
+        }
+
+        folderToDelete = nil
+        showingDeleteFolderDialog = false
+    }
+
     func resetReorderStateIfNeeded() {
         if !isReorderMode {
             draggedFolderID = nil
             pendingReorderFolder = nil
+        }
+
+        if !showingDeleteFolderDialog {
+            folderToDelete = nil
         }
     }
 }

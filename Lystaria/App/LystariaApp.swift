@@ -12,11 +12,25 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
-        // Set the notification delegate as early as possible — before SwiftUI
-        // initialises any views — so didReceive fires correctly on cold-launch
-        // taps where the app is woken by a notification.
         print("🔔🚀 AppDelegate didFinishLaunching — setting UNUserNotificationCenter delegate")
         UNUserNotificationCenter.current().delegate = NotificationManager.shared
+
+        // Wipe any stale health widget values that were written before the
+        // app group entitlement was fixed. A one-time migration flag prevents
+        // this from running on every launch.
+        let migrationKey = "healthWidget.staleDataCleared.v2"
+        let appGroupID = "group.com.asteriasmoons.LystariaDev"
+        if let suite = UserDefaults(suiteName: appGroupID),
+           !suite.bool(forKey: migrationKey) {
+            suite.removeObject(forKey: "healthWidget.stepsToday")
+            suite.removeObject(forKey: "healthWidget.stepGoal")
+            suite.removeObject(forKey: "healthWidget.waterToday")
+            suite.removeObject(forKey: "healthWidget.waterGoal")
+            suite.set(true, forKey: migrationKey)
+            suite.synchronize()
+            print("🧹 HealthWidget: cleared stale UserDefaults values")
+        }
+
         return true
     }
 }
@@ -108,6 +122,12 @@ struct LystariaApp: App {
                     SharedFolderExportManager.exportFolders(modelContext: sharedModelContainer.mainContext)
 
                     setupNotifications()
+
+                    // Re-fetch health data on launch to keep widget current.
+                    Task {
+                        await HealthKitManager.shared.fetchTodaySteps()
+                        await WaterHealthKitManager.shared.fetchTodayWater()
+                    }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .lystariaNotificationAction)) { notification in
                     handleNotificationAction(notification)
@@ -117,6 +137,12 @@ struct LystariaApp: App {
                     notificationManager.refreshAuthorizationStatus()
                     SharedBookmarkImportManager.importPendingBookmark(modelContext: sharedModelContainer.mainContext)
                     SharedFolderExportManager.exportFolders(modelContext: sharedModelContainer.mainContext)
+
+                    // Re-fetch health data and push to widget whenever the app foregrounding.
+                    Task {
+                        await HealthKitManager.shared.fetchTodaySteps()
+                        await WaterHealthKitManager.shared.fetchTodayWater()
+                    }
 
                     Task {
                         // Silently validate on foreground — do NOT sign out on failure.

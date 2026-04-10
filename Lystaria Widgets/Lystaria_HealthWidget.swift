@@ -94,6 +94,8 @@ struct LystariaHealthWidgetProvider: TimelineProvider {
             fallback: 80
         )
 
+        print("🔵 HealthWidget makeEntry — suite: \(HealthWidgetShared.appGroupID)  defaults nil: \(HealthWidgetShared.defaults == nil)  steps: \(stepsToday)/\(stepGoal)  water: \(waterToday)/\(waterGoal)")
+
         return LystariaHealthWidgetEntry(
             date: Date(),
             stepsToday: stepsToday,
