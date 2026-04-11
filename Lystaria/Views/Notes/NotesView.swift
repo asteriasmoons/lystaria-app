@@ -44,6 +44,9 @@ struct NotesView: View {
     @FocusState private var isEditorFocused: Bool
     @FocusState private var isTabFieldFocused: Bool
     
+    @StateObject private var voiceManager = VoiceTranscriptionManager()
+    @State private var didInsertTranscript: Bool = false
+    
     private let columns = [
         GridItem(.flexible(), spacing: 14),
         GridItem(.flexible(), spacing: 14)
@@ -559,9 +562,89 @@ struct NotesView: View {
         VStack(alignment: .leading, spacing: 14) {
             GlassCard {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Content")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(LColors.textSecondary)
+                    // Content header row with voice capture button
+                    HStack(alignment: .center) {
+                        Text("Content")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(LColors.textSecondary)
+
+                        Spacer()
+
+                        Button {
+                            if voiceManager.isRecording {
+                                let transcript = voiceManager.liveTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+                                voiceManager.stopRecording()
+                                if !transcript.isEmpty {
+                                    if draftContent.isEmpty {
+                                        draftContent = transcript
+                                    } else {
+                                        draftContent += " " + transcript
+                                    }
+                                }
+                            } else {
+                                Task { await voiceManager.startRecording() }
+                            }
+                        } label: {
+                            ZStack {
+                                Circle()
+                                    .fill(voiceManager.isRecording
+                                          ? Color.white.opacity(0.18)
+                                          : Color.white.opacity(0.08))
+                                    .overlay(
+                                        Circle()
+                                            .stroke(LColors.glassBorder, lineWidth: 1)
+                                    )
+                                    .frame(width: 34, height: 34)
+
+                                Image(voiceManager.isRecording ? "stopfill" : "micfill")
+                                    .renderingMode(.template)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 14, height: 14)
+                                    .foregroundStyle(
+                                        (voiceManager.isRecording || !didInsertTranscript)
+                                            ? .white
+                                            : LColors.textSecondary
+                                    )
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!voiceManager.isRecording && didInsertTranscript)
+                    }
+
+                    // Live transcript preview shown while recording
+                    if voiceManager.isRecording {
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(Color.red)
+                                .frame(width: 7, height: 7)
+
+                            Text(voiceManager.liveTranscript.isEmpty
+                                 ? "Listening..."
+                                 : voiceManager.liveTranscript)
+                                .font(.system(size: 13, weight: .regular))
+                                .foregroundStyle(LColors.textSecondary)
+                                .lineLimit(3)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding(10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(Color.white.opacity(0.06))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                )
+                        )
+                    }
+
+                    // Permission error
+                    if let error = voiceManager.permissionError {
+                        Text(error.errorDescription ?? "An error occurred.")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(Color.red.opacity(0.85))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
 
                     GlassTextEditor(
                         placeholder: "Write anything...",
@@ -996,11 +1079,14 @@ struct NotesView: View {
     }
 
     private func closeViewer() {
+        voiceManager.stopRecording()
         viewingNote = nil
         showDeleteConfirmation = false
     }
 
     private func closeEditor() {
+        voiceManager.stopRecording()
+        didInsertTranscript = false
         selectedNote = nil
         viewingNote = nil
         draftContent = ""
@@ -1308,4 +1394,74 @@ private enum NotesFilter: String, CaseIterable, Identifiable {
 private enum TabPopupMode {
     case create
     case rename
+}
+
+// MARK: - Cursor-Aware Editor
+
+/// Singleton that holds a weak reference to the active UITextView so that
+/// NotesCursorAwareEditor can insert text at the cursor position.
+final class NotesCursorInserter {
+    static let shared = NotesCursorInserter()
+    private init() {}
+    weak var textView: UITextView?
+
+    func insert(_ text: String) {
+        guard let tv = textView else { return }
+        let range = tv.selectedRange
+        if tv.textStorage.length == 0 {
+            tv.text = text
+        } else {
+            tv.textStorage.replaceCharacters(
+                in: range,
+                with: text
+            )
+            tv.selectedRange = NSRange(location: range.location + (text as NSString).length, length: 0)
+        }
+        // Propagate back to the SwiftUI binding via delegate
+        tv.delegate?.textViewDidChange?(tv)
+    }
+}
+
+/// A UITextView-backed editor that registers itself with NotesCursorInserter
+/// so voice transcript can be inserted at the current cursor position.
+struct NotesCursorAwareEditor: UIViewRepresentable {
+    let placeholder: String
+    @Binding var text: String
+    var minHeight: CGFloat = 100
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIView(context: Context) -> UITextView {
+        let tv = UITextView()
+        tv.delegate = context.coordinator
+        tv.backgroundColor = .clear
+        tv.textColor = UIColor(LColors.textPrimary)
+        tv.font = .systemFont(ofSize: 15)
+        tv.isScrollEnabled = false
+        tv.textContainerInset = UIEdgeInsets(top: 8, left: 12, bottom: 8, right: 12)
+        tv.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        NotesCursorInserter.shared.textView = tv
+        return tv
+    }
+
+    func updateUIView(_ tv: UITextView, context: Context) {
+        // Only push text into UITextView when it differs, to avoid
+        // clobbering cursor position on every SwiftUI redraw.
+        if tv.text != text {
+            tv.text = text
+        }
+        if text.isEmpty {
+            tv.textColor = UIColor(LColors.textPrimary)
+        }
+        NotesCursorInserter.shared.textView = tv
+    }
+
+    final class Coordinator: NSObject, UITextViewDelegate {
+        var parent: NotesCursorAwareEditor
+        init(_ parent: NotesCursorAwareEditor) { self.parent = parent }
+
+        func textViewDidChange(_ textView: UITextView) {
+            parent.text = textView.text
+        }
+    }
 }

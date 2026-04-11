@@ -311,7 +311,7 @@ struct ReadingTabView: View {
                                 Circle().stroke(LColors.glassBorder, lineWidth: 1)
                             )
                             .frame(width: 34, height: 34)
-                        Image("flipbook")
+                        Image("notepad")
                             .renderingMode(.template)
                             .resizable()
                             .scaledToFit()
@@ -432,7 +432,7 @@ struct ReadingTabView: View {
                 handleAddBookTap()
             }
             .padding(.trailing, 26)
-            .padding(.bottom, 90)
+            .padding(.bottom, 100)
             .zIndex(10000)
         }
         .ignoresSafeArea(edges: .bottom)

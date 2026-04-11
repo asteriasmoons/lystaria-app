@@ -14,6 +14,7 @@ struct MainTabView: View {
         case journal   = "Journal"
         case reading   = "Reading"
         case profile   = "Profile"
+        case info      = "Info"
         case dashboard = "Dashboard"
 
         var icon: String {
@@ -23,6 +24,7 @@ struct MainTabView: View {
             case .journal:   return "notesfill"
             case .reading:   return "bookopen"
             case .profile:   return "userwavy"
+            case .info:       return "infofill"
             case .dashboard: return "homeline"
             }
         }
@@ -39,6 +41,7 @@ struct MainTabView: View {
                 case .journal:   JournalTabView()
                 case .reading:   ReadingTabView()
                 case .profile:   ProfileTabView()
+                case .info:      InfoTabView()
                 case .dashboard: DashboardView()
                 }
             }

@@ -46,8 +46,12 @@ final class HealthKitManager: ObservableObject {
 #endif
     }
     
+    private var isAuthorized = false
+
     func requestAuthorization() async {
         guard HKHealthStore.isHealthDataAvailable() else { return }
+        guard !isAuthorized else { return }
+        isAuthorized = true
         
         let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount)!
         

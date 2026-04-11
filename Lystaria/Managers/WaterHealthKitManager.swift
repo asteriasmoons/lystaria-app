@@ -48,8 +48,12 @@ final class WaterHealthKitManager: ObservableObject {
 #endif
     }
 
+    private var isAuthorized = false
+
     func requestAuthorization() async {
         guard HKHealthStore.isHealthDataAvailable() else { return }
+        guard !isAuthorized else { return }
+        isAuthorized = true
 
         do {
             try await healthStore.requestAuthorization(

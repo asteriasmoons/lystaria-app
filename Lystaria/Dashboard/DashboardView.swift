@@ -77,7 +77,12 @@ struct DashboardView: View {
     @StateObject private var onboarding = OnboardingManager()
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("waterGoalFlOz") private var waterGoal: Double = 80
-    @AppStorage("stepGoal") private var stepGoal: Double = 5000
+    @Query(
+        filter: #Predicate<DailyCompletionSettings> { $0.key == "default" }
+    ) private var completionSettingsResults: [DailyCompletionSettings]
+    private var stepGoal: Double {
+        completionSettingsResults.first?.stepGoal ?? 5000
+    }
     @EnvironmentObject private var appState: AppState
 
     @State private var showToolbox = false
@@ -340,9 +345,6 @@ struct DashboardView: View {
     // These currently return false so the file compiles safely.
     // Replace the TODO sections with your real SwiftData / HealthKit queries.
 
-    private var journaledToday: Bool {
-        journalEntries.contains { isToday($0.createdAt) }
-    }
 
     private var moodLoggedToday: Bool {
         moodLogs.contains { isToday($0.createdAt) }
@@ -565,14 +567,107 @@ struct DashboardView: View {
     }
 
     private var journalDayStarts: Set<Date> {
-        Set(journalEntries.map { dashboardCalendar.startOfDay(for: $0.createdAt) })
+        Set(
+            journalEntries
+                .filter { $0.deletedAt == nil }
+                .map { dashboardCalendar.startOfDay(for: $0.createdAt) }
+        )
+    }
+
+    private var journaledToday: Bool {
+        journalDayStarts.contains(dashboardCalendar.startOfDay(for: Date()))
+    }
+
+    // MARK: - Habit Streak Helpers
+    private func habitResetMoment(for habit: Habit) -> Date? {
+        habit.statsResetAt
+    }
+
+    private func habitTarget(for habit: Habit) -> Int {
+        max(1, habit.timesPerDay)
+    }
+
+    private func includeHabitLogInCurrentStats(_ log: HabitLog, for habit: Habit) -> Bool {
+        guard let resetMoment = habitResetMoment(for: habit) else { return true }
+
+        let resetDay = dashboardCalendar.startOfDay(for: resetMoment)
+        let logDay = dashboardCalendar.startOfDay(for: log.dayStart)
+
+        if logDay > resetDay { return true }
+        if logDay < resetDay { return false }
+        return log.createdAt >= resetMoment
+    }
+
+    private func includeHabitSkipInCurrentStats(_ skip: HabitSkip, for habit: Habit) -> Bool {
+        guard let resetMoment = habitResetMoment(for: habit) else { return true }
+
+        let resetDay = dashboardCalendar.startOfDay(for: resetMoment)
+        let skipDay = dashboardCalendar.startOfDay(for: skip.dayStart)
+
+        if skipDay > resetDay { return true }
+        if skipDay < resetDay { return false }
+        return skip.createdAt >= resetMoment
+    }
+
+    private func habitCompletedDayStarts(for habit: Habit) -> Set<Date> {
+        let target = habitTarget(for: habit)
+
+        return Set((habit.logs ?? [])
+            .filter { log in
+                guard log.count >= target else { return false }
+                return includeHabitLogInCurrentStats(log, for: habit)
+            }
+            .map { dashboardCalendar.startOfDay(for: $0.dayStart) })
+    }
+
+    private func habitSkippedDayStarts(for habit: Habit) -> Set<Date> {
+        Set((habit.skips ?? [])
+            .filter { skip in
+                includeHabitSkipInCurrentStats(skip, for: habit)
+            }
+            .map { dashboardCalendar.startOfDay(for: $0.dayStart) })
+    }
+
+    private func isHabitCompletedDay(_ dayStart: Date, for habit: Habit) -> Bool {
+        habitCompletedDayStarts(for: habit).contains(dashboardCalendar.startOfDay(for: dayStart))
+    }
+
+    private func isHabitSkippedDay(_ dayStart: Date, for habit: Habit) -> Bool {
+        habitSkippedDayStarts(for: habit).contains(dashboardCalendar.startOfDay(for: dayStart))
+    }
+
+    private func habitDailyStreak(for habit: Habit) -> Int {
+        var cursor = dashboardCalendar.startOfDay(for: Date())
+
+        if !isHabitCompletedDay(cursor, for: habit) && !isHabitSkippedDay(cursor, for: habit) {
+            cursor = dashboardCalendar.date(byAdding: .day, value: -1, to: cursor) ?? cursor
+        }
+
+        var streak = 0
+
+        while true {
+            if isHabitCompletedDay(cursor, for: habit) {
+                streak += 1
+            } else if isHabitSkippedDay(cursor, for: habit) {
+                // skipped days protect the streak without incrementing it
+            } else {
+                break
+            }
+
+            guard let previous = dashboardCalendar.date(byAdding: .day, value: -1, to: cursor) else { break }
+            cursor = previous
+        }
+
+        return streak
     }
 
     private var habitDayStarts: Set<Date> {
-        Set(
-            habitLogs
-                .filter { $0.count > 0 }
-                .map { dashboardCalendar.startOfDay(for: $0.dayStart) }
+        let activeHabits = habits.filter { !$0.isArchived }
+
+        return Set(
+            activeHabits.flatMap { habit in
+                habitCompletedDayStarts(for: habit)
+            }
         )
     }
 
@@ -745,19 +840,13 @@ struct DashboardView: View {
 
     private func currentStreak(from activeDays: Set<Date>) -> Int {
         let today = dashboardCalendar.startOfDay(for: Date())
-        let startDay: Date
 
-        if activeDays.contains(today) {
-            startDay = today
-        } else if let yesterday = dashboardCalendar.date(byAdding: .day, value: -1, to: today),
-                  activeDays.contains(yesterday) {
-            startDay = yesterday
-        } else {
+        guard activeDays.contains(today) else {
             return 0
         }
 
         var streak = 0
-        var cursor = startDay
+        var cursor = today
 
         while activeDays.contains(cursor) {
             streak += 1
@@ -773,7 +862,22 @@ struct DashboardView: View {
     }
 
     private var journalCurrentStreak: Int {
-        currentStreak(from: journalDayStarts)
+        let todayStart = dashboardCalendar.startOfDay(for: Date())
+
+        guard journalDayStarts.contains(todayStart) else {
+            return 0
+        }
+
+        var streak = 0
+        var cursor = todayStart
+
+        while journalDayStarts.contains(cursor) {
+            streak += 1
+            guard let previous = dashboardCalendar.date(byAdding: .day, value: -1, to: cursor) else { break }
+            cursor = previous
+        }
+
+        return streak
     }
 
     private var moodCurrentStreak: Int {
@@ -781,7 +885,9 @@ struct DashboardView: View {
     }
 
     private var habitCurrentStreak: Int {
-        currentStreak(from: habitDayStarts)
+        let activeHabits = habits.filter { !$0.isArchived }
+        guard !activeHabits.isEmpty else { return 0 }
+        return activeHabits.map { habitDailyStreak(for: $0) }.max() ?? 0
     }
 
     private var waterCurrentStreak: Int {
@@ -1805,7 +1911,7 @@ private struct DashboardLenormandCard: View {
         GlassCard {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .center, spacing: 10) {
-                    Image("cardfill")
+                    Image("wandfill")
                         .renderingMode(.template)
                         .resizable()
                         .scaledToFit()
@@ -1873,7 +1979,7 @@ private struct FlexibleKeywordWrap: View {
                 HStack(spacing: 8) {
                     ForEach(row, id: \.self) { keyword in
                         Text(keyword)
-                            .font(.system(size: 12, weight: .regular))
+                            .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(LGradients.blue)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)

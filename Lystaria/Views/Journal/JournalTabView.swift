@@ -14,6 +14,7 @@ struct JournalTabView: View {
 
     @Query(filter: #Predicate<JournalBook> { $0.deletedAt == nil }, sort: \JournalBook.createdAt, order: .reverse) private var books: [JournalBook]
     @Query(filter: #Predicate<JournalEntry> { $0.deletedAt == nil }, sort: \JournalEntry.createdAt, order: .reverse) private var allEntries: [JournalEntry] // for migration + counts
+    @Query private var journalStatsRecords: [JournalStats]
 
     @State private var editingBook: JournalBook? = nil
     // Onboarding for hidden header icons
@@ -59,7 +60,7 @@ struct JournalTabView: View {
                     showBookEditor = true
                 }
                 .padding(.trailing, 24)
-                .padding(.bottom, 90)
+                .padding(.bottom, 100)
             }
             .ignoresSafeArea(edges: .bottom)
             
@@ -314,9 +315,24 @@ struct JournalTabView: View {
         return streak
     }
 
+    /// The best streak ever seen. Computed from live entries, but the result is
+    /// persisted to `JournalStats` so it can never drop below its historical high
+    /// (e.g. due to a book deletion removing backing entries).
     private var bestJournalStreak: Int {
+        let computed = computedBestStreak
+        let record = journalStatsRecord
+        let result = max(computed, record.bestStreakEver)
+        if result > record.bestStreakEver {
+            record.bestStreakEver = result
+            record.updatedAt = Date()
+            try? modelContext.save()
+        }
+        return result
+    }
+
+    private var computedBestStreak: Int {
         let sortedDays = journaledDayStarts.sorted()
-        guard !sortedDays.isEmpty else { return 0 }
+        guard !sortedDays.isEmpty else { return currentJournalStreak }
 
         var best = 1
         var current = 1
@@ -335,7 +351,18 @@ struct JournalTabView: View {
             best = max(best, current)
         }
 
-        return best
+        return max(best, currentJournalStreak)
+    }
+
+    /// Returns the single `JournalStats` record, creating it if it doesn't exist yet.
+    private var journalStatsRecord: JournalStats {
+        if let existing = journalStatsRecords.first {
+            return existing
+        }
+        let record = JournalStats()
+        modelContext.insert(record)
+        try? modelContext.save()
+        return record
     }
 
     // MARK: - Helpers
@@ -458,11 +485,11 @@ struct JournalStreakCard: View {
         GlassCard {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .center, spacing: 10) {
-                    Image("pencilsparkle")
+                    Image("pencilwrite")
                         .renderingMode(.template)
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 22, height: 22)
+                        .frame(width: 24, height: 24)
                         .foregroundStyle(.white)
 
                     GradientTitle(text: "Journal Streak", font: .system(size: 20, weight: .bold))
@@ -512,6 +539,59 @@ struct JournalStreakCard: View {
             Text(value)
                 .font(.system(size: 30, weight: .black))
                 .foregroundStyle(.white)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 14)
+        .background(Color.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(LColors.glassBorder, lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Overview Card
+
+struct JournalOverviewCard: View {
+    let entriesThisWeek: Int
+    let entriesThisYear: Int
+
+    var body: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 10) {
+                    Image("heartsum")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 24, height: 24)
+                        .foregroundStyle(.white)
+
+                    GradientTitle(text: "Overview", font: .system(size: 20, weight: .bold))
+                }
+
+                HStack(spacing: 10) {
+                    overviewBubble(label: "This Week", value: entriesThisWeek)
+                    overviewBubble(label: "This Year", value: entriesThisYear)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func overviewBubble(label: String, value: Int) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label.uppercased())
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(LColors.textSecondary)
+                .tracking(0.5)
+
+            Text("\(value)")
+                .font(.system(size: 30, weight: .black))
+                .foregroundStyle(.white)
+
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 14)
@@ -796,8 +876,9 @@ struct JournalBookDetailView: View {
                     navigateToEditorPage = true
                 }
                 .padding(.trailing, 24)
-                .padding(.bottom, 96)
+                .padding(.bottom, 100)
             }
+            .ignoresSafeArea(edges: .bottom)
             .navigationBarTitleDisplayMode(.inline)
             .overlay {
                 if showStoredPromptsPopup {
@@ -948,12 +1029,29 @@ struct JournalBookDetailView: View {
         .padding(.top, 14).padding(.bottom, 8)
     }
     
+    // MARK: - Overview Stats
+
+    private var entriesThisWeek: Int {
+        let cal = Calendar.autoupdatingCurrent
+        guard let weekStart = cal.dateInterval(of: .weekOfYear, for: Date())?.start else { return 0 }
+        return entries.filter { $0.createdAt >= weekStart }.count
+    }
+
+    private var entriesThisYear: Int {
+        let cal = Calendar.autoupdatingCurrent
+        let year = cal.component(.year, from: Date())
+        return entries.filter { cal.component(.year, from: $0.createdAt) == year }.count
+    }
+
     private var entriesList: some View {
         VStack(spacing: 12) {
             if filteredEntries.isEmpty {
                 EmptyState(icon: "doc.text", message: "No entries in this book yet.\nTap + to create one.")
                     .padding(.top, 20)
             } else {
+                JournalOverviewCard(entriesThisWeek: entriesThisWeek, entriesThisYear: entriesThisYear)
+                    .padding(.horizontal, LSpacing.pageHorizontal)
+
                 let allowedEntrySource = allEntries
                     .sorted { $0.createdAt < $1.createdAt }
                     .prefix(50)

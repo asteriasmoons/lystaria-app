@@ -5,8 +5,8 @@
 //  Created by Asteria Moon on 3/17/26.
 //
 
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 struct HealthPageView: View {
     @Environment(\.modelContext) private var modelContext
@@ -27,6 +27,7 @@ struct HealthPageView: View {
     @State private var showAddExercisePopup = false
     @State private var showHealthHistoryPopup = false
     @State private var showExerciseHistoryPopup = false
+    @State private var showCurrentFlowInfoPopup = false
 
     @State private var selectedHealthEntry: HealthMetricEntry?
     @State private var selectedExerciseEntry: ExerciseLogEntry?
@@ -34,7 +35,6 @@ struct HealthPageView: View {
     @State private var completionRefreshTick = Date()
     @State private var dayRefreshID = UUID()
     @StateObject private var onboarding = OnboardingManager()
-
 
     var body: some View {
         ZStack {
@@ -77,7 +77,7 @@ struct HealthPageView: View {
                             withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                                 showAddMetricsPopup = false
                             }
-                        }
+                        },
                     )
                 }
 
@@ -87,7 +87,7 @@ struct HealthPageView: View {
                             withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                                 showAddExercisePopup = false
                             }
-                        }
+                        },
                     )
                 }
 
@@ -102,6 +102,16 @@ struct HealthPageView: View {
                         onClose: {
                             withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                                 showHealthHistoryPopup = false
+                            }
+                        },
+                    )
+                }
+
+                if showCurrentFlowInfoPopup {
+                    CurrentFlowInfoPopup(
+                        onClose: {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                                showCurrentFlowInfoPopup = false
                             }
                         }
                     )
@@ -119,7 +129,7 @@ struct HealthPageView: View {
                             withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                                 showExerciseHistoryPopup = false
                             }
-                        }
+                        },
                     )
                 }
 
@@ -143,7 +153,7 @@ struct HealthPageView: View {
                             withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                                 selectedHealthEntry = nil
                             }
-                        }
+                        },
                     )
                 }
 
@@ -167,7 +177,7 @@ struct HealthPageView: View {
                             withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                                 selectedExerciseEntry = nil
                             }
-                        }
+                        },
                     )
                 }
             }
@@ -199,6 +209,7 @@ struct HealthPageView: View {
         .task {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(60))
+                await bodyStateManager.refreshAndStore(in: modelContext)
                 await MainActor.run {
                     completionRefreshTick = Date()
                 }
@@ -212,14 +223,18 @@ struct HealthPageView: View {
             if newPhase == .active {
                 dayRefreshID = UUID()
                 completionRefreshTick = Date()
+                Task {
+                    await bodyStateManager.refreshAndStore(in: modelContext)
+                }
             }
         }
     }
+
     private var dailyCompletionCard: some View {
         let arcData = DailyCompletionArcHelper.build(
             modelContext: modelContext,
             waterToday: waterManager.todayWaterFlOz,
-            stepsToday: stepManager.todaySteps
+            stepsToday: stepManager.todaySteps,
         )
 
         return GlassCard {
@@ -243,7 +258,7 @@ struct HealthPageView: View {
                     ZStack {
                         DailyCompletionBubbleArc(
                             fillStates: arcData.bubbleFillStates,
-                            size: 220
+                            size: 220,
                         )
 
                         VStack(spacing: 4) {
@@ -263,24 +278,24 @@ struct HealthPageView: View {
                 HStack(spacing: 10) {
                     completionPill(
                         title: "Water",
-                        value: "\(Int((arcData.waterProgress * 100).rounded()))%"
+                        value: "\(Int((arcData.waterProgress * 100).rounded()))%",
                     )
 
                     completionPill(
                         title: "Steps",
-                        value: "\(Int((arcData.stepsProgress * 100).rounded()))%"
+                        value: "\(Int((arcData.stepsProgress * 100).rounded()))%",
                     )
                 }
 
                 HStack(spacing: 10) {
                     completionPill(
                         title: "Mood",
-                        value: arcData.moodComplete ? "Done" : "Not Yet"
+                        value: arcData.moodComplete ? "Done" : "Not Yet",
                     )
 
                     completionPill(
                         title: "Journal",
-                        value: arcData.journalComplete ? "Done" : "Not Yet"
+                        value: arcData.journalComplete ? "Done" : "Not Yet",
                     )
                 }
             }
@@ -307,7 +322,7 @@ struct HealthPageView: View {
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay(
             RoundedRectangle(cornerRadius: 14)
-                .stroke(LColors.glassBorder, lineWidth: 1)
+                .stroke(LColors.glassBorder, lineWidth: 1),
         )
     }
 
@@ -332,7 +347,7 @@ struct HealthPageView: View {
                             .clipShape(Capsule())
                             .overlay(
                                 Capsule()
-                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                    .stroke(LColors.glassBorder, lineWidth: 1),
                             )
                     }
                     .buttonStyle(.plain)
@@ -351,7 +366,7 @@ struct HealthPageView: View {
                             .clipShape(Capsule())
                             .overlay(
                                 Capsule()
-                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                    .stroke(LColors.glassBorder, lineWidth: 1),
                             )
                     }
                     .buttonStyle(.plain)
@@ -368,7 +383,7 @@ struct HealthPageView: View {
                             .clipShape(Capsule())
                             .overlay(
                                 Capsule()
-                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                    .stroke(LColors.glassBorder, lineWidth: 1),
                             )
                     }
                     .buttonStyle(.plain)
@@ -388,29 +403,29 @@ struct HealthPageView: View {
 
     private var healthStreaksCard: some View {
         GlassCard {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .center, spacing: 10) {
                     Image("medhand")
                         .renderingMode(.template)
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 24, height: 24)
+                        .frame(width: 22, height: 22)
                         .foregroundStyle(.white)
 
-                    GradientTitle(text: "Health Streaks", size: 26)
+                    GradientTitle(text: "Health Streaks", size: 24)
 
                     Spacer()
                 }
 
-                HStack(spacing: 14) {
+                HStack(spacing: 10) {
                     streakBubble(
                         title: "Vitals",
-                        value: vitalsStreakCount
+                        value: vitalsStreakCount,
                     )
 
                     streakBubble(
                         title: "Exercise",
-                        value: exerciseStreakCount
+                        value: exerciseStreakCount,
                     )
                 }
             }
@@ -438,20 +453,30 @@ struct HealthPageView: View {
                 bodyStateBar(
                     title: "Body State",
                     value: record?.bodyScore ?? 0,
-                    label: record?.bodyLabel.isEmpty == false ? record!.bodyLabel : "Unavailable"
+                    label: record?.bodyLabel.isEmpty == false ? record!.bodyLabel : "Unavailable",
                 )
 
                 bodyStateBar(
                     title: "Nervous System",
                     value: record?.nervousSystemScore ?? 0,
-                    label: record?.nervousSystemLabel.isEmpty == false ? record!.nervousSystemLabel : "Unavailable"
+                    label: record?.nervousSystemLabel.isEmpty == false ? record!.nervousSystemLabel : "Unavailable",
                 )
+            }
+        }
+        .contentShape(RoundedRectangle(cornerRadius: LSpacing.cardRadius))
+        .onTapGesture {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                showCurrentFlowInfoPopup = true
             }
         }
     }
 
     private func bodyStateBar(title: String, value: Double, label: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let isUnavailable = label == "Unavailable"
+        // Always show at least a sliver so the bar is never completely blank.
+        let displayValue = isUnavailable ? 0.0 : max(value, 0.08)
+
+        return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(title.uppercased())
                     .font(.subheadline.weight(.bold))
@@ -466,11 +491,11 @@ struct HealthPageView: View {
                     .padding(.vertical, 5)
                     .background(
                         Capsule()
-                            .fill(stateGradient(for: label))
+                            .fill(isUnavailable ? AnyShapeStyle(Color.white.opacity(0.12)) : AnyShapeStyle(stateGradient(for: label))),
                     )
                     .overlay(
                         Capsule()
-                            .stroke(LColors.glassBorder, lineWidth: 1)
+                            .stroke(LColors.glassBorder, lineWidth: 1),
                     )
             }
 
@@ -479,15 +504,28 @@ struct HealthPageView: View {
                     Capsule()
                         .fill(Color.white.opacity(0.08))
 
-                    Capsule()
-                        .fill(stateGradient(for: label))
-                        .frame(width: geo.size.width * max(0, min(1, value)))
+                    if isUnavailable {
+                        Capsule()
+                            .fill(Color.white.opacity(0.12))
+                    } else {
+                        // Render the gradient at full width then clip to the correct
+                        // progress amount. This prevents SwiftUI from producing a
+                        // blank bar when the fill width is narrow — which happens
+                        // when the gradient is constrained by .frame(width:) alone.
+                        Capsule()
+                            .fill(stateGradient(for: label))
+                            .frame(width: geo.size.width)
+                            .mask(alignment: .leading) {
+                                Capsule()
+                                    .frame(width: geo.size.width * displayValue)
+                            }
+                    }
                 }
             }
             .frame(height: 12)
             .overlay(
                 Capsule()
-                    .stroke(LColors.glassBorder, lineWidth: 1)
+                    .stroke(LColors.glassBorder, lineWidth: 1),
             )
         }
     }
@@ -495,88 +533,87 @@ struct HealthPageView: View {
     private var latestBodyStateRecord: BodyStateRecord? {
         bodyStateRecords.first
     }
-    
+
     private func stateGradient(for label: String) -> LinearGradient {
         switch label {
-
         case "Excellent":
-            return LinearGradient(
+            LinearGradient(
                 colors: [
-                    Color(red: 255/255, green: 105/255, blue: 180/255), // bubblegum magenta pink
-                    Color(red: 255/255, green: 245/255, blue: 157/255)  // pastel yellow
+                    Color(red: 255 / 255, green: 105 / 255, blue: 180 / 255), // bubblegum magenta pink
+                    Color(red: 255 / 255, green: 245 / 255, blue: 157 / 255), // pastel yellow
                 ],
                 startPoint: .leading,
-                endPoint: .trailing
+                endPoint: .trailing,
             )
 
         case "Mellow":
-            return LinearGradient(
+            LinearGradient(
                 colors: [
-                    Color(red: 64/255, green: 224/255, blue: 208/255), // greenish blue
-                    Color(red: 0/255, green: 150/255, blue: 136/255)
+                    Color(red: 64 / 255, green: 224 / 255, blue: 208 / 255), // greenish blue
+                    Color(red: 0 / 255, green: 150 / 255, blue: 136 / 255),
                 ],
                 startPoint: .leading,
-                endPoint: .trailing
+                endPoint: .trailing,
             )
 
         case "Elevated":
-            return LinearGradient(
+            LinearGradient(
                 colors: [
-                    Color(red: 255/255, green: 105/255, blue: 180/255), // bubblegum magenta
-                    Color(red: 255/255, green: 59/255, blue: 48/255)    // candy red
+                    Color(red: 255 / 255, green: 105 / 255, blue: 180 / 255), // bubblegum magenta
+                    Color(red: 255 / 255, green: 59 / 255, blue: 48 / 255), // candy red
                 ],
                 startPoint: .leading,
-                endPoint: .trailing
+                endPoint: .trailing,
             )
 
-        case "Stressed":
-            return LinearGradient(
+        case "Activated":
+            LinearGradient(
                 colors: [
-                    Color(red: 255/255, green: 59/255, blue: 48/255),   // candy red
-                    Color(red: 255/255, green: 204/255, blue: 0/255)    // yellowish
+                    Color(red: 255 / 255, green: 59 / 255, blue: 48 / 255), // candy red
+                    Color(red: 255 / 255, green: 204 / 255, blue: 0 / 255), // yellowish
                 ],
                 startPoint: .leading,
-                endPoint: .trailing
+                endPoint: .trailing,
             )
 
         case "Rest Needed":
-            return LinearGradient(
+            LinearGradient(
                 colors: [
-                    Color(red: 135/255, green: 206/255, blue: 250/255), // sky blue
-                    Color(red: 144/255, green: 238/255, blue: 144/255)  // soft greenish
+                    Color(red: 135 / 255, green: 206 / 255, blue: 250 / 255), // sky blue
+                    Color(red: 144 / 255, green: 238 / 255, blue: 144 / 255), // soft greenish
                 ],
                 startPoint: .leading,
-                endPoint: .trailing
+                endPoint: .trailing,
             )
 
         default:
-            return LinearGradient(
-                colors: [Color.white.opacity(0.3), Color.white.opacity(0.1)],
+            LinearGradient(
+                colors: [Color.white.opacity(0.3), Color.white.opacity(0.2)],
                 startPoint: .leading,
-                endPoint: .trailing
+                endPoint: .trailing,
             )
         }
     }
 
     private func streakBubble(title: String, value: Int) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(title.uppercased())
-                .font(.subheadline.weight(.bold))
+                .font(.caption.weight(.bold))
                 .foregroundStyle(LColors.textSecondary)
 
             Text("\(value)")
-                .font(.system(size: 34, weight: .bold))
+                .font(.system(size: 24, weight: .bold))
                 .foregroundStyle(.white)
         }
-        .frame(maxWidth: .infinity, minHeight: 80, alignment: .topLeading)
-        .padding(16)
+        .frame(maxWidth: .infinity, minHeight: 56, alignment: .topLeading)
+        .padding(12)
         .background(
-            RoundedRectangle(cornerRadius: 18)
-                .fill(Color.white.opacity(0.08))
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color.white.opacity(0.08)),
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 18)
-                .stroke(LColors.glassBorder, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(LColors.glassBorder, lineWidth: 1),
         )
     }
 
@@ -621,9 +658,7 @@ struct HealthPageView: View {
             calendar.isDate($0.date, inSameDayAs: today)
         }
     }
-
 }
-
 
 private struct DailyCompletionBubbleArc: View {
     let fillStates: [Double]
@@ -666,19 +701,19 @@ private struct DailyCompletionBubble: View {
                 .fill(Color.white.opacity(0.08))
                 .overlay(
                     Circle()
-                        .stroke(LColors.glassBorder, lineWidth: 1)
+                        .stroke(LColors.glassBorder, lineWidth: 1),
                 )
 
             Circle()
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color(red: 3/255, green: 219/255, blue: 252/255),
-                            Color(red: 125/255, green: 25/255, blue: 247/255)
+                            Color(red: 3 / 255, green: 219 / 255, blue: 252 / 255),
+                            Color(red: 125 / 255, green: 25 / 255, blue: 247 / 255),
                         ],
                         startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
+                        endPoint: .bottomTrailing,
+                    ),
                 )
                 .mask(
                     GeometryReader { geo in
@@ -686,13 +721,191 @@ private struct DailyCompletionBubble: View {
                             .frame(
                                 width: geo.size.width,
                                 height: geo.size.height * CGFloat(min(max(fill, 0), 1)),
-                                alignment: .bottom
+                                alignment: .bottom,
                             )
                             .frame(maxHeight: .infinity, alignment: .bottom)
-                    }
+                    },
                 )
                 .opacity(fill > 0 ? 1 : 0)
         }
+    }
+}
+
+// MARK: - Current Flow Info Popup
+
+struct CurrentFlowInfoPopup: View {
+    let onClose: () -> Void
+
+    var body: some View {
+        LystariaOverlayPopup(
+            onClose: onClose,
+            width: 500,
+            heightRatio: 0.82,
+            header: {
+                HStack {
+                    GradientTitle(text: "Current Flow", size: 28)
+                    Spacer()
+                    Button(action: onClose) {
+                        Image("xmark")
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 12, height: 12)
+                            .foregroundStyle(.white)
+                            .frame(width: 30, height: 30)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(Circle())
+                            .overlay(
+                                Circle()
+                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            },
+            content: {
+                // BODY STATE SECTION
+                GradientTitle(text: "Body State", size: 22)
+                    .padding(.top, 4)
+
+                Text("The Body State bar reflects your overall physical readiness based on HRV, resting heart rate, respiratory rate, and sleep quality. A higher fill means your body is functioning optimally and recovering well.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(LColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Divider()
+                    .background(LColors.glassBorder)
+                    .padding(.vertical, 4)
+
+                bodyStateResultRow(
+                    label: "Excellent",
+                    description: "Your body is thriving. HRV is high, heart rate is low and stable, sleep was restorative, and your system is primed for performance or challenge."
+                )
+
+                Divider()
+                    .background(LColors.glassBorder)
+                    .padding(.vertical, 2)
+
+                bodyStateResultRow(
+                    label: "Mellow",
+                    description: "Your body is calm and balanced. Metrics are within healthy ranges and you're in a relaxed, steady state — good for focused or creative work."
+                )
+
+                Divider()
+                    .background(LColors.glassBorder)
+                    .padding(.vertical, 2)
+
+                bodyStateResultRow(
+                    label: "Elevated",
+                    description: "Your body is running hot. Heart rate or HRV signals heightened activation — this could be excitement, exertion, or early stress. Monitor and pace yourself."
+                )
+
+                Divider()
+                    .background(LColors.glassBorder)
+                    .padding(.vertical, 2)
+
+                bodyStateResultRow(
+                    label: "Activated",
+                    description: "Your body is working harder than baseline. HRV is moderately suppressed and your system is running with more effort — not harmful, but worth being gentle with yourself."
+                )
+
+                Divider()
+                    .background(LColors.glassBorder)
+                    .padding(.vertical, 2)
+
+                bodyStateResultRow(
+                    label: "Rest Needed",
+                    description: "Your body is calling for rest. Sleep or recovery metrics are low, and your system needs time to recharge before it can perform at its best."
+                )
+
+                Divider()
+                    .background(LColors.glassBorder)
+                    .padding(.vertical, 8)
+
+                // NERVOUS SYSTEM SECTION
+                GradientTitle(text: "Nervous System", size: 22)
+                    .padding(.top, 4)
+
+                Text("The Nervous System bar shows the state of your autonomic nervous system — the balance between your sympathetic (fight-or-flight) and parasympathetic (rest-and-digest) responses, primarily derived from HRV patterns.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(LColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Divider()
+                    .background(LColors.glassBorder)
+                    .padding(.vertical, 4)
+
+                nervousSystemResultRow(
+                    label: "Excellent",
+                    description: "Your autonomic nervous system is thriving. HRV is well above your baseline, indicating strong parasympathetic tone and exceptional resilience."
+                )
+
+                Divider()
+                    .background(LColors.glassBorder)
+                    .padding(.vertical, 2)
+
+                nervousSystemResultRow(
+                    label: "Mellow",
+                    description: "Your nervous system is calm and regulated. HRV is healthy relative to your baseline and your body is in a balanced, steady state."
+                )
+
+                Divider()
+                    .background(LColors.glassBorder)
+                    .padding(.vertical, 2)
+
+                nervousSystemResultRow(
+                    label: "Elevated",
+                    description: "Your nervous system is moderately activated. Sympathetic activity is slightly raised — this could be alertness, mild exertion, or early stress building up."
+                )
+
+                Divider()
+                    .background(LColors.glassBorder)
+                    .padding(.vertical, 2)
+
+                nervousSystemResultRow(
+                    label: "Activated",
+                    description: "Your nervous system is running with more sympathetic activity than usual. HRV is moderately below baseline — your body is engaged and working, not necessarily in distress."
+                )
+
+                Divider()
+                    .background(LColors.glassBorder)
+                    .padding(.vertical, 2)
+
+                nervousSystemResultRow(
+                    label: "Rest Needed",
+                    description: "Your nervous system is depleted. HRV is significantly below baseline and your body urgently needs rest, calm, and recovery to restore regulation."
+                )
+            },
+            footer: { EmptyView() }
+        )
+    }
+
+    @ViewBuilder
+    private func bodyStateResultRow(label: String, description: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.white)
+            Text(description)
+                .font(.system(size: 12))
+                .foregroundStyle(LColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func nervousSystemResultRow(label: String, description: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.white)
+            Text(description)
+                .font(.system(size: 12))
+                .foregroundStyle(LColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

@@ -547,11 +547,17 @@ struct HabitCard: View {
 
         return streak
     }
-    private var linkedHabitReminders: [LystariaReminder] {
+    private var allLinkedHabitReminders: [LystariaReminder] {
         allReminders.filter { r in
             r.linkedKind == .habit
             && r.linkedHabitId == habit.id
             && r.status != .deleted
+        }
+    }
+
+    private var linkedHabitReminders: [LystariaReminder] {
+        allLinkedHabitReminders.filter { r in
+            r.status == .scheduled
         }
     }
 
@@ -562,45 +568,182 @@ struct HabitCard: View {
         formatter.dateStyle = .none
         formatter.timeStyle = .short
 
-        let times: [String] = linkedHabitReminders.compactMap { r in
-            let raw: String?
-
-            // Prefer explicit timeOfDay; fall back to the first time in timesOfDay if present.
-            if let t = r.schedule?.timeOfDay, !t.isEmpty {
-                raw = t
-            } else if let arr = r.schedule?.timesOfDay, let first = arr.first, !first.isEmpty {
-                raw = first
-            } else {
-                raw = nil
+        let extracted: [(minutes: Int, label: String)] = linkedHabitReminders.flatMap { reminder in
+            reminderTimesOfDay(for: reminder).compactMap { hhmm in
+                guard let (hh, mm) = ReminderCompute.parseHHMM(hhmm) else { return nil }
+                let date = ReminderCompute.merge(day: Date(), hour: hh, minute: mm)
+                let minutes = (hh * 60) + mm
+                return (minutes: minutes, label: formatter.string(from: date))
             }
-
-            guard let hhmm = raw,
-                  let (hh, mm) = ReminderCompute.parseHHMM(hhmm) else { return nil }
-
-            let date = ReminderCompute.merge(day: Date(), hour: hh, minute: mm)
-            return formatter.string(from: date)
         }
 
-        // Keep stable order and remove duplicates.
+        let sorted = extracted.sorted { a, b in
+            if a.minutes != b.minutes { return a.minutes < b.minutes }
+            return a.label < b.label
+        }
+
         var seen = Set<String>()
-        return times.filter { seen.insert($0).inserted }
+        return sorted.compactMap { item in
+            seen.insert(item.label).inserted ? item.label : nil
+        }
+    }
+
+    private func reminderTimesOfDay(for reminder: LystariaReminder) -> [String] {
+        if let times = reminder.schedule?.timesOfDay, !times.isEmpty {
+            return times.filter { !$0.isEmpty }
+        }
+
+        if let time = reminder.schedule?.timeOfDay, !time.isEmpty {
+            return [time]
+        }
+
+        return []
+    }
+
+    private func recomputedNextRunAt(for reminder: LystariaReminder, after referenceDate: Date) -> Date? {
+        guard let schedule = reminder.schedule else { return nil }
+
+        let timesOfDay = reminderTimesOfDay(for: reminder)
+        guard !timesOfDay.isEmpty else { return nil }
+
+        let recurrenceInterval = max(1, schedule.interval ?? 1)
+
+        return ReminderCompute.firstRun(
+            kind: schedule.kind,
+            startDay: referenceDate.addingTimeInterval(1),
+            timesOfDay: timesOfDay,
+            daysOfWeek: schedule.daysOfWeek,
+            intervalMinutes: schedule.intervalMinutes,
+            recurrenceInterval: recurrenceInterval,
+            dayOfMonth: schedule.dayOfMonth,
+            anchorMonth: schedule.anchorMonth,
+            anchorDay: schedule.anchorDay
+        )
     }
 
     private func resolvedNextRunAt(for reminder: LystariaReminder, now: Date) -> Date? {
-        guard reminder.status != .deleted else { return nil }
-        return reminder.nextRunAt
+        guard reminder.status == .scheduled else { return nil }
+
+        let grace: TimeInterval = 15 * 60
+        let currentRun = reminder.nextRunAt
+
+        // If this occurrence is still upcoming, or close enough to now to still be the
+        // currently active occurrence, keep showing it.
+        if currentRun >= now.addingTimeInterval(-grace) {
+            return currentRun
+        }
+
+        // If the stored occurrence is already in the past and has been acknowledged,
+        // locally derive the next future occurrence instead of trusting stale stored data.
+        if let acknowledgedAt = reminder.acknowledgedAt,
+           acknowledgedAt >= currentRun {
+            let referenceDate = max(now, acknowledgedAt)
+            return recomputedNextRunAt(for: reminder, after: referenceDate)
+        }
+
+        // For stale past occurrences that have not been acknowledged yet, keep returning
+        // the stored time so overdue reminders can still surface on the habit card.
+        return currentRun
+    }
+
+    private func fallbackNextRunAt(from reminders: [LystariaReminder], now: Date) -> Date? {
+        let grace: TimeInterval = 15 * 60
+
+        let candidates = reminders
+            .filter { $0.status != .deleted }
+            .map { $0.nextRunAt }
+
+        let activeOrUpcoming = candidates
+            .filter { $0 >= now.addingTimeInterval(-grace) }
+            .sorted()
+
+        if let next = activeOrUpcoming.first {
+            return next
+        }
+
+        let overdue = candidates
+            .filter { $0 < now.addingTimeInterval(-grace) }
+            .sorted(by: >)
+
+        return overdue.first
+    }
+
+    private func fallbackTimesFromHabitModel() -> [String] {
+        if let time = habit.reminderTimeOfDay,
+           !time.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return [time]
+        }
+
+        return []
+    }
+
+    private func fallbackNextRunAtFromHabitModel(now: Date) -> Date? {
+        guard habit.reminderEnabled else { return nil }
+
+        let timesOfDay = fallbackTimesFromHabitModel()
+        guard !timesOfDay.isEmpty else { return nil }
+
+        let scheduleKind: ReminderScheduleKind = (habit.reminderKind == .weekly) ? .weekly : .daily
+        let selectedDays = scheduleKind == .weekly ? habit.reminderDaysOfWeek : nil
+        let startDay = Calendar.current.startOfDay(for: max(now, habit.reminderStartDate ?? now))
+
+        return ReminderCompute.firstRun(
+            kind: scheduleKind,
+            startDay: startDay,
+            timesOfDay: timesOfDay,
+            daysOfWeek: selectedDays,
+            intervalMinutes: nil,
+            recurrenceInterval: 1,
+            dayOfMonth: nil,
+            anchorMonth: nil,
+            anchorDay: nil
+        )
     }
 
     private var nextReminderRunAt: Date? {
         let now = Date()
-        return linkedHabitReminders
+        let grace: TimeInterval = 15 * 60
+
+        let resolvedRuns = linkedHabitReminders
             .compactMap { resolvedNextRunAt(for: $0, now: now) }
+
+        let activeOrUpcoming = resolvedRuns
+            .filter { $0 >= now.addingTimeInterval(-grace) }
             .sorted()
-            .first
+
+        if let next = activeOrUpcoming.first {
+            return next
+        }
+
+        let overdue = resolvedRuns
+            .filter { $0 < now.addingTimeInterval(-grace) }
+            .sorted(by: >)
+
+        if let overdueRun = overdue.first {
+            return overdueRun
+        }
+
+        // Fallback 1: surface the stored nextRunAt from any linked reminder so the card still
+        // reflects what the Reminders view already knows.
+        if let linkedFallback = fallbackNextRunAt(from: allLinkedHabitReminders, now: now) {
+            return linkedFallback
+        }
+
+        // Fallback 2: if the card still cannot see any usable linked reminder state,
+        // derive a next occurrence directly from the habit's own reminder settings.
+        return fallbackNextRunAtFromHabitModel(now: now)
     }
 
     private var nextReminderLabel: String {
-        guard let d = nextReminderRunAt else { return "—" }
+        let dateToShow: Date?
+
+        if let run = nextReminderRunAt {
+            dateToShow = run
+        } else {
+            dateToShow = fallbackNextRunAtFromHabitModel(now: Date())
+        }
+
+        guard let d = dateToShow else { return "—" }
 
         let df = DateFormatter()
         df.locale = .current
@@ -984,7 +1127,7 @@ struct HabitCard: View {
 
     private func deleteHabit() {
         // Cancel and delete any linked reminders for this habit
-        for r in linkedHabitReminders {
+        for r in allLinkedHabitReminders {
             NotificationManager.shared.cancelReminder(r)
             modelContext.delete(r)
         }
@@ -1809,6 +1952,64 @@ struct EditHabitSheet: View {
         }
     }
 
+    private func reminderTimesFromLinkedReminders() -> [Date] {
+        let sorted = linkedReminders.sorted { a, b in
+            let aRun = a.nextRunAt
+            let bRun = b.nextRunAt
+
+            if aRun != bRun { return aRun < bRun }
+            return a.createdAt < b.createdAt
+        }
+
+        let extracted: [Date] = sorted.compactMap { reminder in
+            let raw: String?
+
+            if let time = reminder.schedule?.timeOfDay, !time.isEmpty {
+                raw = time
+            } else if let times = reminder.schedule?.timesOfDay,
+                      let first = times.first(where: { !$0.isEmpty }) {
+                raw = first
+            } else {
+                raw = nil
+            }
+
+            guard let hhmm = raw,
+                  let (hh, mm) = ReminderCompute.parseHHMM(hhmm) else { return nil }
+
+            return ReminderCompute.merge(day: Date(), hour: hh, minute: mm)
+        }
+
+        if !extracted.isEmpty {
+            return extracted
+        }
+
+        if let hhmm = habit.reminderTimeOfDay,
+           let (hh, mm) = ReminderCompute.parseHHMM(hhmm) {
+            return [ReminderCompute.merge(day: Date(), hour: hh, minute: mm)]
+        }
+
+        return []
+    }
+
+    private func normalizedReminderTimes(_ times: [Date], targetCount: Int) -> [Date] {
+        let count = max(1, targetCount)
+        var normalized = times
+
+        if normalized.isEmpty {
+            normalized = [Date()]
+        }
+
+        if normalized.count < count {
+            while normalized.count < count {
+                normalized.append(normalized.last ?? Date())
+            }
+        } else if normalized.count > count {
+            normalized = Array(normalized.prefix(count))
+        }
+
+        return normalized
+    }
+
     var body: some View {
         LystariaOverlayPopup(
             onClose: {
@@ -2035,10 +2236,12 @@ struct EditHabitSheet: View {
         weeklyDays = Set(habit.reminderDaysOfWeek)
         reminderStartDate = habit.reminderStartDate ?? Date()
 
-        // Seed time pickers from the stored first time.
-        if reminderEnabled, let hhmm = habit.reminderTimeOfDay, let (hh, mm) = ReminderCompute.parseHHMM(hhmm) {
-            let seeded = ReminderCompute.merge(day: Date(), hour: hh, minute: mm)
-            reminderTimes = Array(repeating: seeded, count: max(1, timesPerDay))
+        // Seed time pickers from the actual linked reminders when available.
+        if reminderEnabled {
+            reminderTimes = normalizedReminderTimes(
+                reminderTimesFromLinkedReminders(),
+                targetCount: timesPerDay
+            )
         } else {
             reminderTimes = Array(repeating: Date(), count: max(1, timesPerDay))
         }
@@ -2049,12 +2252,7 @@ struct EditHabitSheet: View {
             weeklyDays = []
         }
 
-        // Ensure the times array matches timesPerDay.
-        if reminderTimes.count < timesPerDay {
-            while reminderTimes.count < timesPerDay { reminderTimes.append(reminderTimes.last ?? Date()) }
-        } else if reminderTimes.count > timesPerDay {
-            reminderTimes = Array(reminderTimes.prefix(timesPerDay))
-        }
+        reminderTimes = normalizedReminderTimes(reminderTimes, targetCount: timesPerDay)
     }
 
     private func applyChanges() {

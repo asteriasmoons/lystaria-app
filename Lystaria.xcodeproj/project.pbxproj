@@ -226,6 +226,9 @@
 		CFB0B1772F832BF900B42AB3 /* ReadingTimerActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFB0B1752F832BC000B42AB3 /* ReadingTimerActivityAttributes.swift */; };
 		CFB0B17C2F85630D00B42AB3 /* CalendarOverviewSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFB0B17B2F85630500B42AB3 /* CalendarOverviewSheet.swift */; };
 		CFB0B17E2F87163A00B42AB3 /* ReminderTimeBlockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFB0B17D2F87163100B42AB3 /* ReminderTimeBlockView.swift */; };
+		CFB0B1802F8944E500B42AB3 /* JournalStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFB0B17F2F8944E500B42AB3 /* JournalStats.swift */; };
+		CFB0B1822F897BC800B42AB3 /* VoiceTranscriptionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFB0B1812F897BBF00B42AB3 /* VoiceTranscriptionManager.swift */; };
+		CFB0B1852F8AC14500B42AB3 /* InfoTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFB0B1842F8AC14100B42AB3 /* InfoTabView.swift */; };
 		CFDD11AB2F7F22BF0067B262 /* Note.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFDD11AA2F7F22BC0067B262 /* Note.swift */; };
 		CFDD11AE2F7F24040067B262 /* NotesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFDD11AD2F7F24010067B262 /* NotesView.swift */; };
 		CFF7C5AF2F72EA0D00A67EC3 /* Medication.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFF7C5AE2F72EA0800A67EC3 /* Medication.swift */; };
@@ -478,6 +481,9 @@
 		CFB0B17A2F83368100B42AB3 /* Lystaria WidgetsExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Lystaria WidgetsExtension.entitlements"; sourceTree = "<group>"; };
 		CFB0B17B2F85630500B42AB3 /* CalendarOverviewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarOverviewSheet.swift; sourceTree = "<group>"; };
 		CFB0B17D2F87163100B42AB3 /* ReminderTimeBlockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderTimeBlockView.swift; sourceTree = "<group>"; };
+		CFB0B17F2F8944E500B42AB3 /* JournalStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalStats.swift; sourceTree = "<group>"; };
+		CFB0B1812F897BBF00B42AB3 /* VoiceTranscriptionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceTranscriptionManager.swift; sourceTree = "<group>"; };
+		CFB0B1842F8AC14100B42AB3 /* InfoTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InfoTabView.swift; sourceTree = "<group>"; };
 		CFDD11AA2F7F22BC0067B262 /* Note.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Note.swift; sourceTree = "<group>"; };
 		CFDD11AD2F7F24010067B262 /* NotesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesView.swift; sourceTree = "<group>"; };
 		CFF7C5AE2F72EA0800A67EC3 /* Medication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Medication.swift; sourceTree = "<group>"; };
@@ -669,6 +675,7 @@
 		CF4790AD2F5B676E0026696B /* Managers */ = {
 			isa = PBXGroup;
 			children = (
+				CFB0B1812F897BBF00B42AB3 /* VoiceTranscriptionManager.swift */,
 				CF92D5612F7591FD00174F04 /* DailyCompletionArcHelper.swift */,
 				CF8B7F822F6B738D006A7D3B /* SelfCarePointsManager.swift */,
 				CF8B7F5F2F6B0586006A7D3B /* BodyStateHealthKitManager.swift */,
@@ -881,6 +888,7 @@
 		CF8D83152F50A4640092FC98 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				CFB0B1832F8AC13B00B42AB3 /* Info */,
 				CFDD11AC2F7F231D0067B262 /* Notes */,
 				CF8B7F8C2F6C4A7E006A7D3B /* Bookmark */,
 				CF13B6692F69B2C1008D3CE9 /* Health */,
@@ -925,6 +933,7 @@
 		CF8D832C2F50A4940092FC98 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				CFB0B17F2F8944E500B42AB3 /* JournalStats.swift */,
 				CFB0B1732F82FE3000B42AB3 /* ReadingPointsEntry.swift */,
 				CFB0B1712F80B78100B42AB3 /* NotesTab.swift */,
 				CFDD11AA2F7F22BC0067B262 /* Note.swift */,
@@ -1043,6 +1052,14 @@
 				CF8D83492F5124C70092FC98 /* LystariaComponents.swift */,
 			);
 			path = Components;
+			sourceTree = "<group>";
+		};
+		CFB0B1832F8AC13B00B42AB3 /* Info */ = {
+			isa = PBXGroup;
+			children = (
+				CFB0B1842F8AC14100B42AB3 /* InfoTabView.swift */,
+			);
+			path = Info;
 			sourceTree = "<group>";
 		};
 		CFDD11AC2F7F231D0067B262 /* Notes */ = {
@@ -1372,6 +1389,7 @@
 				CF8D83302F50A4940092FC98 /* JournalEntry.swift in Sources */,
 				CF13B6622F69AC9A008D3CE9 /* HealthMetricEntry.swift in Sources */,
 				CF8D83562F5125F80092FC98 /* ContentView.swift in Sources */,
+				CFB0B1802F8944E500B42AB3 /* JournalStats.swift in Sources */,
 				CF29FC9D2F70AC7300EC47F8 /* DailyLenormandRecord.swift in Sources */,
 				CF20513E2F5787DD006B71AA /* JournalBook.swift in Sources */,
 				CF13B6332F65B563008D3CE9 /* DailyIntentionWriter.swift in Sources */,
@@ -1406,6 +1424,7 @@
 				CF8421832F5FBD8B0069F12F /* WaterHealthKitManager.swift in Sources */,
 				CFAF69242F7DDAFB00E74833 /* WaterBottlePlanEntry.swift in Sources */,
 				CF13B66F2F69B54A008D3CE9 /* AddExercisePopupView.swift in Sources */,
+				CFB0B1822F897BC800B42AB3 /* VoiceTranscriptionManager.swift in Sources */,
 				CF8421C72F636DD00069F12F /* ToolboxView.swift in Sources */,
 				CF29FC992F70905A00EC47F8 /* HealthWidgetSync.swift in Sources */,
 				CF13B6832F6A2DFF008D3CE9 /* JournalPromptUsage.swift in Sources */,
@@ -1461,6 +1480,7 @@
 				CF8421C02F6329610069F12F /* DailyHoroscope.swift in Sources */,
 				CF92D5192F75660900174F04 /* PremiumView.swift in Sources */,
 				CF8B7F8E2F6C4BE2006A7D3B /* BookmarksView.swift in Sources */,
+				CFB0B1852F8AC14500B42AB3 /* InfoTabView.swift in Sources */,
 				CFAF69182F7AA67800E74833 /* SymptomLog.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

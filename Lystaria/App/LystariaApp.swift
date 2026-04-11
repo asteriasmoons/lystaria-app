@@ -74,6 +74,7 @@ struct LystariaApp: App {
             JournalBook.self,
             JournalPrompt.self,
             JournalPromptUsage.self,
+            JournalStats.self,
             LystariaReminder.self,
             UserSettings.self,
             SelfCarePointEntry.self,

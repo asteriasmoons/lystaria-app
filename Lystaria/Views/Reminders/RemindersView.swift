@@ -184,7 +184,7 @@ struct RemindersView: View {
                         }
                         .buttonStyle(.plain)
                         .padding(.trailing, 24)
-                        .padding(.bottom, 90)
+                        .padding(.bottom, 100)
                     }
                 }
                 .zIndex(50)
@@ -221,10 +221,10 @@ struct RemindersView: View {
             }
             .navigationDestination(isPresented: $showTimeBlock) {
                 ReminderTimeBlockView(allReminders: allReminders, onMarkDone: { reminder in
-                    markDone(reminder)
-                })
-                .preferredColorScheme(.dark)
-            }
+                                markDoneFromTimeBlock(reminder)
+                            })
+                            .preferredColorScheme(.dark)
+                        }
             .onReceive(NotificationCenter.default.publisher(for: .lystariaNotificationAction)) { note in
                 guard let info = note.userInfo,
                       let actionID = info["actionID"] as? String,
@@ -296,7 +296,7 @@ struct RemindersView: View {
                                 )
                                 .frame(width: 34, height: 34)
 
-                            Image("timerfill")
+                            Image("fillalarm")
                                 .renderingMode(.template)
                                 .resizable()
                                 .scaledToFit()
@@ -759,6 +759,39 @@ struct RemindersView: View {
             showToast("\(reminder.title) marked complete")
         }
     }
+    
+    private func markDoneFromTimeBlock(_ reminder: LystariaReminder) {
+        logHabitIfLinked(reminder)
+        logMedicationIfLinked(reminder)
+        let completedOccurrenceDate = reminder.nextRunAt
+
+        if reminder.isRecurring {
+            let now = Date()
+            let base = max(now, reminder.nextRunAt)
+            reminder.nextRunAt = ReminderCompute.nextRun(after: base.addingTimeInterval(91), reminder: reminder)
+            reminder.acknowledgedAt = nil
+            if reminder.reminderType == .routine {
+                reminder.resetRoutineChecklist(for: "\(reminder.nextRunAt.timeIntervalSince1970)")
+            }
+            reminder.lastCompletedAt = Date()
+            incrementCompletionsToday(reminder, occurrenceDate: completedOccurrenceDate)
+            reminder.updatedAt = Date()
+            resetTodayHabitProgressIfNeeded(for: reminder, now: now)
+            try? modelContext.save()
+            awardPointsForReminderCompletion(reminder, occurrenceDate: completedOccurrenceDate)
+            NotificationManager.shared.cancelReminder(reminder)
+            NotificationManager.shared.scheduleReminder(reminder)
+        } else {
+            reminder.lastCompletedAt = Date()
+            incrementCompletionsToday(reminder, occurrenceDate: completedOccurrenceDate)
+            reminder.acknowledgedAt = Date()
+            reminder.status = .sent
+            reminder.updatedAt = Date()
+            try? modelContext.save()
+            awardPointsForReminderCompletion(reminder, occurrenceDate: completedOccurrenceDate)
+            NotificationManager.shared.cancelReminder(reminder)
+        }
+    }
 
     private func showToast(_ message: String) {
         withAnimation {
@@ -1164,6 +1197,7 @@ struct ReminderCard: View {
             GlassCard(padding: 14) {
                 Button {
                     reminder.nextRunAt = rescheduleDateTime
+                    reminder.completionTimestampsStorage = "[]"  // clear today's completions — occurrence moved
                     reminder.updatedAt = Date()
                     NotificationManager.shared.scheduleReminder(reminder)
                     #if DEBUG
@@ -1285,15 +1319,6 @@ struct ReminderCard: View {
                             .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(LColors.textPrimary)
                             .frame(maxWidth: .infinity, alignment: .leading)
-
-                        Image("fillalarm")
-                            .renderingMode(.template)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 18, height: 18) // ADJUST ICON UP/DOWN
-                            .foregroundStyle(.white)
-                            .padding(.leading, -2)
-                            .opacity(1)
                     }
 
                     if let details = reminder.details, !details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {

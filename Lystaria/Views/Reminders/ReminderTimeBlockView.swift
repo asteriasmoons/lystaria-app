@@ -11,13 +11,15 @@ struct ReminderTimeBlockView: View {
     let allReminders: [LystariaReminder]
     let onMarkDone: (LystariaReminder) -> Void
 
-    @State private var selectedDate: Date = Date()
+    @State private var selectedDate: Date = .init()
     @State private var editingReminder: LystariaReminder? = nil
     /// Optimistic local tracking: IDs marked done this session so the circle
     /// flips immediately without waiting for SwiftData to propagate.
     @State private var locallyDoneIDs: Set<PersistentIdentifier> = []
 
-    private var tzCalendar: Calendar { ReminderCompute.tzCalendar }
+    private var tzCalendar: Calendar {
+        ReminderCompute.tzCalendar
+    }
 
     private var headerTitle: String {
         let df = DateFormatter()
@@ -26,7 +28,9 @@ struct ReminderTimeBlockView: View {
         return df.string(from: selectedDate)
     }
 
-    private var visibleHours: [Int] { Array(5...23) }
+    private var visibleHours: [Int] {
+        Array(5 ... 23)
+    }
 
     // MARK: - Done state
 
@@ -94,7 +98,7 @@ struct ReminderTimeBlockView: View {
         return tzCalendar.isDate(completedAt, inSameDayAs: date)
     }
 
-    private func isOverdue(_ reminder: LystariaReminder, fireDate: Date) -> Bool {
+    private func isOverdue(_ reminder: LystariaReminder, fireDate _: Date) -> Bool {
         if reminderIsDone(reminder) { return false }
         let startOfToday = Calendar.current.startOfDay(for: Date())
         return reminder.nextRunAt < startOfToday
@@ -112,7 +116,7 @@ struct ReminderTimeBlockView: View {
             let fireHour = cal.component(.hour, from: fireDate)
             let fireMin = cal.component(.minute, from: fireDate)
             // Only show Due Now if nextRunAt points at this specific slot and it has passed
-            guard nextHour == fireHour && nextMin == fireMin else { return false }
+            guard nextHour == fireHour, nextMin == fireMin else { return false }
             return fireDate <= now && cal.isDate(reminder.nextRunAt, inSameDayAs: now)
         }
         return fireDate <= now
@@ -131,16 +135,24 @@ struct ReminderTimeBlockView: View {
     var body: some View {
         ZStack {
             LystariaBackground()
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 0) {
-                    header
-                    LazyVStack(spacing: 0) {
-                        ForEach(visibleHours, id: \.self) { hour in
-                            hourRow(hour)
+            ScrollViewReader { proxy in
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: 0) {
+                        header
+                        LazyVStack(spacing: 0) {
+                            ForEach(visibleHours, id: \.self) { hour in
+                                hourRow(hour)
+                                    .id(hour)
+                            }
                         }
+                        .padding(.top, 8)
+                        .padding(.bottom, 300)
                     }
-                    .padding(.top, 8)
-                    .padding(.bottom, 120)
+                }
+                .onAppear {
+                    let currentHour = tzCalendar.component(.hour, from: Date())
+                    let targetHour = visibleHours.contains(currentHour) ? currentHour : visibleHours.first ?? 5
+                    proxy.scrollTo(targetHour, anchor: .top)
                 }
             }
         }
@@ -215,13 +227,17 @@ struct ReminderTimeBlockView: View {
         let slots = remindersForHour(hour)
         return VStack(spacing: 0) {
             HStack(alignment: .top, spacing: 14) {
-                VStack(spacing: 2) {
-                    Text(hourLabel(hour))
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(LColors.textPrimary)
-                    Text(hourPeriod(hour))
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(LColors.textSecondary)
+                TimelineView(.periodic(from: .now, by: 60)) { context in
+                    let isCurrentHour = tzCalendar.isDateInToday(selectedDate)
+                        && tzCalendar.component(.hour, from: context.date) == hour
+                    VStack(spacing: 2) {
+                        Text(hourLabel(hour))
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(isCurrentHour ? LColors.accent : LColors.textPrimary)
+                        Text(hourPeriod(hour))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(isCurrentHour ? LColors.accent.opacity(0.7) : LColors.textSecondary)
+                    }
                 }
                 .frame(width: 52)
                 .padding(.top, 8)
@@ -282,13 +298,13 @@ struct ReminderTimeBlockView: View {
                             .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
 
                         if done {
-                            ReminderStatusBadge(label: "Done", style: .upcoming)
+                            TimeBlockStatusBadge(label: "Done", style: .upcoming)
                         } else if overdue {
-                            ReminderStatusBadge(label: "Overdue", style: .overdue)
+                            TimeBlockStatusBadge(label: "Overdue", style: .overdue)
                         } else if dueNow {
-                            ReminderStatusBadge(label: "Due Now", style: .dueNow)
+                            TimeBlockStatusBadge(label: "Due Now", style: .dueNow)
                         } else if upcoming {
-                            ReminderStatusBadge(label: "Upcoming", style: .upcoming)
+                            TimeBlockStatusBadge(label: "Upcoming", style: .upcoming)
                         }
                     }
 
@@ -297,7 +313,8 @@ struct ReminderTimeBlockView: View {
                         .foregroundStyle(LColors.textPrimary)
 
                     if let details = reminder.details?.trimmingCharacters(in: .whitespacesAndNewlines),
-                       !details.isEmpty {
+                       !details.isEmpty
+                    {
                         Text(details)
                             .font(.system(size: 12))
                             .foregroundStyle(LColors.textSecondary)
@@ -315,7 +332,12 @@ struct ReminderTimeBlockView: View {
                 VStack(spacing: 8) {
                     let id = reminder.persistentModelID
                     Button {
+                        print("[TimeBlock] Circle tapped for: \(reminder.title)")
+                        print("[TimeBlock] isRecurring: \(reminder.isRecurring)")
+                        print("[TimeBlock] done: \(done)")
+                        print("[TimeBlock] disabled: \(done)")
                         if let live = modelContext.model(for: id) as? LystariaReminder {
+                            print("[TimeBlock] Got live model: \(live.title)")
                             if !live.isRecurring {
                                 locallyDoneIDs.insert(id)
                             }
@@ -355,23 +377,72 @@ struct ReminderTimeBlockView: View {
 
     // MARK: - Helpers
 
-    private func prevDay() { selectedDate = tzCalendar.date(byAdding: .day, value: -1, to: selectedDate) ?? selectedDate }
-    private func nextDay() { selectedDate = tzCalendar.date(byAdding: .day, value: 1, to: selectedDate) ?? selectedDate }
+    private func prevDay() {
+        selectedDate = tzCalendar.date(byAdding: .day, value: -1, to: selectedDate) ?? selectedDate
+    }
+
+    private func nextDay() {
+        selectedDate = tzCalendar.date(byAdding: .day, value: 1, to: selectedDate) ?? selectedDate
+    }
 
     private func hourLabel(_ hour: Int) -> String {
         switch hour {
-        case 0: return "12"
-        case 13...23: return "\(hour - 12)"
-        default: return "\(hour)"
+        case 0: "12"
+        case 13 ... 23: "\(hour - 12)"
+        default: "\(hour)"
         }
     }
 
-    private func hourPeriod(_ hour: Int) -> String { hour < 12 ? "AM" : "PM" }
+    private func hourPeriod(_ hour: Int) -> String {
+        hour < 12 ? "AM" : "PM"
+    }
 
     private func formatTime(_ date: Date) -> String {
         let df = DateFormatter()
         df.locale = .current
         df.setLocalizedDateFormatFromTemplate("h:mm a")
         return df.string(from: date)
+    }
+
+    // MARK: - Time Block Status Badge (smaller, matches schedule kind badge size)
+
+    private struct TimeBlockStatusBadge: View {
+        let label: String
+        let style: ReminderStatusBadgeStyle
+
+        var body: some View {
+            Text(label.uppercased())
+                .font(.system(size: 10, weight: .bold))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(background)
+                .foregroundStyle(foreground)
+                .clipShape(Capsule())
+                .overlay(Capsule().stroke(border, lineWidth: 1))
+        }
+
+        private var background: Color {
+            switch style {
+            case .overdue: LColors.danger.opacity(0.17)
+            case .dueNow: LColors.accent.opacity(0.18)
+            case .upcoming: Color.white.opacity(0.09)
+            }
+        }
+
+        private var foreground: Color {
+            switch style {
+            case .overdue: LColors.danger
+            case .dueNow: LColors.accent
+            case .upcoming: LColors.textPrimary
+            }
+        }
+
+        private var border: Color {
+            switch style {
+            case .overdue: LColors.danger.opacity(0.45)
+            case .dueNow: LColors.accent.opacity(0.44)
+            case .upcoming: LColors.glassBorder
+            }
+        }
     }
 }

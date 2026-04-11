@@ -52,22 +52,42 @@ final class BodyStateHealthKitManager: ObservableObject {
 
     func refreshAndStore(in modelContext: ModelContext) async {
         do {
-            let latestHRV = try await fetchLatestSampleValue(
-                for: hrvType,
-                unit: HKUnit.secondUnit(with: .milli)
-            )
+            // Today's HRV: average of all samples recorded since midnight.
+            // This is far more stable than a single raw sample and mirrors
+            // how Whoop/Garmin derive their daily HRV figure.
+            let todayHRV = try await fetchTodayAverageHRV()
 
+            // Fallback: if no HRV has been recorded today yet (e.g. early morning
+            // before the watch has synced), use the most recent single sample
+            // from the last 48 hours so the card isn't blank all day.
+            let latestHRV: Double?
+            if let todayHRV {
+                latestHRV = todayHRV
+            } else {
+                latestHRV = try await fetchRecentSampleAverage(
+                    for: hrvType,
+                    unit: HKUnit.secondUnit(with: .milli),
+                    hoursBack: 48
+                )
+            }
+
+            // Baseline: personal 30-day average HRV.
+            // 30 days gives a more stable personal baseline than 21.
             let baselineHRV = try await fetchAverageValue(
                 for: hrvType,
                 unit: HKUnit.secondUnit(with: .milli),
-                daysBack: 21
+                daysBack: 30
             )
 
-            let latestHeartRate = try await fetchLatestSampleValue(
+            // Heart rate: average of readings from the last 3 hours.
+            // This avoids a single workout spike or stale reading skewing the score.
+            let latestHeartRate = try await fetchRecentSampleAverage(
                 for: heartRateType,
-                unit: HKUnit.count().unitDivided(by: .minute())
+                unit: HKUnit.count().unitDivided(by: .minute()),
+                hoursBack: 3
             )
 
+            // Resting heart rate: most recent daily value Apple has computed.
             let restingHeartRate = try await fetchLatestSampleValue(
                 for: restingHeartRateType,
                 unit: HKUnit.count().unitDivided(by: .minute())
@@ -133,6 +153,63 @@ final class BodyStateHealthKitManager: ObservableObject {
 
     // MARK: - Queries
 
+    /// Average of all HRV samples recorded since midnight today.
+    private func fetchTodayAverageHRV() async throws -> Double? {
+        let startOfDay = Calendar.current.startOfDay(for: Date())
+        let predicate = HKQuery.predicateForSamples(
+            withStart: startOfDay,
+            end: Date(),
+            options: .strictStartDate
+        )
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Double?, Error>) in
+            let query = HKStatisticsQuery(
+                quantityType: hrvType,
+                quantitySamplePredicate: predicate,
+                options: .discreteAverage
+            ) { _, statistics, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                let value = statistics?.averageQuantity()?.doubleValue(for: HKUnit.secondUnit(with: .milli))
+                continuation.resume(returning: value)
+            }
+            healthStore.execute(query)
+        }
+    }
+
+    /// Average of all samples of a given type within the last N hours.
+    private func fetchRecentSampleAverage(
+        for type: HKQuantityType,
+        unit: HKUnit,
+        hoursBack: Int
+    ) async throws -> Double? {
+        let end = Date()
+        let start = Calendar.current.date(byAdding: .hour, value: -hoursBack, to: end)!
+        let predicate = HKQuery.predicateForSamples(
+            withStart: start,
+            end: end,
+            options: .strictStartDate
+        )
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Double?, Error>) in
+            let query = HKStatisticsQuery(
+                quantityType: type,
+                quantitySamplePredicate: predicate,
+                options: .discreteAverage
+            ) { _, statistics, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                let value = statistics?.averageQuantity()?.doubleValue(for: unit)
+                continuation.resume(returning: value)
+            }
+            healthStore.execute(query)
+        }
+    }
+
+    /// Most recent single sample — used only for resting heart rate which
+    /// Apple computes once per day and doesn't need averaging.
     private func fetchLatestSampleValue(
         for type: HKQuantityType,
         unit: HKUnit
@@ -160,6 +237,7 @@ final class BodyStateHealthKitManager: ObservableObject {
         }
     }
 
+    /// Long-window average used for the personal baseline.
     private func fetchAverageValue(
         for type: HKQuantityType,
         unit: HKUnit,
