@@ -31,27 +31,12 @@ struct WaterTrackingView: View {
         settings.waterGoalFlOz
     }
 
-    private var todayWaterPlan: WaterBottlePlanEntry {
-        let todayKey = WaterBottlePlanEntry.key(for: Date(), calendar: calendar)
-
-        if let existing = waterBottlePlans.first(where: { $0.key == todayKey }) {
-            return existing
-        }
-
-        let entry = WaterBottlePlanEntry(
-            key: todayKey,
-            date: calendar.startOfDay(for: Date())
-        )
-        modelContext.insert(entry)
-        return entry
-    }
-
     private var plannedBottlesToday: Int {
-        todayWaterPlan.plannedBottles
+        todayWaterPlanEntry?.plannedBottles ?? 0
     }
 
     private var extraBottlesToday: Int {
-        todayWaterPlan.extraBottles
+        todayWaterPlanEntry?.extraBottles ?? 0
     }
 
     private var sortedWaterPlanningHistory: [WaterBottlePlanEntry] {
@@ -89,6 +74,8 @@ struct WaterTrackingView: View {
     @State private var plannedBottleText = ""
     @State private var extraBottleText = ""
     @State private var dayRefreshID = UUID()
+    @State private var todayWaterPlanEntry: WaterBottlePlanEntry?
+    @State private var todayWaterPlanKey: String = ""
 
     @State private var displayedMonth = Date()
     @State private var reachedGoalDates: Set<String> = []
@@ -99,7 +86,7 @@ struct WaterTrackingView: View {
 
     @FocusState private var focusedField: PopupField?
 
-    private enum PopupField {
+    fileprivate enum PopupField {
         case customAmount
         case clearCustomAmount
         case goal
@@ -241,6 +228,35 @@ struct WaterTrackingView: View {
 
         reachedGoalDates = result
     }
+    
+    private func ensureTodayWaterPlan() {
+        let today = calendar.startOfDay(for: Date())
+        let todayKey = WaterBottlePlanEntry.key(for: today, calendar: calendar)
+
+        if todayWaterPlanKey == todayKey, todayWaterPlanEntry != nil {
+            return
+        }
+
+        if let existing = waterBottlePlans.first(where: { $0.key == todayKey }) {
+            todayWaterPlanEntry = existing
+            todayWaterPlanKey = todayKey
+            return
+        }
+
+        let entry = WaterBottlePlanEntry(
+            key: todayKey,
+            date: today
+        )
+        modelContext.insert(entry)
+        todayWaterPlanEntry = entry
+        todayWaterPlanKey = todayKey
+
+        do {
+            try modelContext.save()
+        } catch {
+            assertionFailure("Failed to save today's water plan: \(error)")
+        }
+    }
 
     // MARK: - Watch Sync
 
@@ -256,8 +272,18 @@ struct WaterTrackingView: View {
 
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 18) {
-                    GradientTitle(text: "Water", font: .title.bold())
-                        .padding(.top, 24)
+                    VStack(spacing: 0) {
+                        HStack {
+                            GradientTitle(text: "Water", font: .title2.bold())
+                            Spacer()
+                        }
+                        .padding(.top, 20)
+
+                        Rectangle()
+                            .fill(LColors.glassBorder)
+                            .frame(height: 1)
+                            .padding(.top, 6)
+                    }
 
                     GlassCard {
                         VStack(alignment: .leading, spacing: 18) {
@@ -987,115 +1013,81 @@ struct WaterTrackingView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            await water.requestAuthorization()
-            water.updateWaterGoalForSync(amountGoal)
-            selectedDate = Date()
-            selectedDayWater = water.todayWaterFlOz
-            await recalculateReachedGoalDates()
-            HealthWidgetSync.syncWater(waterToday: water.todayWaterFlOz, waterGoal: amountGoal)
-            syncGoalToWatch(amountGoal)
-        }
-        .onChange(of: displayedMonth) { _, _ in
-            if let selectedDate {
-                let selectedMonth = calendar.dateComponents([.year, .month], from: selectedDate)
-                let visibleMonth = calendar.dateComponents([.year, .month], from: displayedMonth)
-                if selectedMonth.year != visibleMonth.year || selectedMonth.month != visibleMonth.month {
-                    self.selectedDate = nil
-                    self.selectedDayWater = water.todayWaterFlOz
-                }
-            }
-            Task { await recalculateReachedGoalDates() }
-        }
-        .onChange(of: water.todayWaterFlOz) { _, newValue in
-            if let selectedDate, calendar.isDateInToday(selectedDate) {
-                selectedDayWater = newValue
-            }
-            Task { await recalculateReachedGoalDates() }
-            HealthWidgetSync.syncWater(waterToday: newValue, waterGoal: amountGoal)
-        }
-        .onChange(of: amountGoal) { _, newGoal in
-            water.updateWaterGoalForSync(newGoal)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
-            dayRefreshID = UUID()
-            plannedBottleText = ""
-            extraBottleText = ""
-        }
-        .onChange(of: scenePhase) { _, newPhase in
-            if newPhase == .active {
-                dayRefreshID = UUID()
-            }
-        }
-        .onChange(of: showCustomAmountPopup) { _, isShowing in
-            if isShowing {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { focusedField = .customAmount }
-            } else if focusedField == .customAmount {
-                focusedField = nil
-            }
-        }
-        .onChange(of: showClearCustomPopup) { _, isShowing in
-            if isShowing {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { focusedField = .clearCustomAmount }
-            } else if focusedField == .clearCustomAmount {
-                focusedField = nil
-            }
-        }
-        .onChange(of: showGoalPopup) { _, isShowing in
-            if isShowing {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { focusedField = .goal }
-            } else if focusedField == .goal {
-                focusedField = nil
-            }
-        }
-        .onChange(of: showPlanPopup) { _, isShowing in
-            if isShowing {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { focusedField = .plannedBottles }
-            } else if focusedField == .plannedBottles {
-                focusedField = nil
-            }
-        }
-        .onChange(of: showExtraPopup) { _, isShowing in
-            if isShowing {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { focusedField = .extraBottles }
-            } else if focusedField == .extraBottles {
-                focusedField = nil
-            }
-        }
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("Done") { focusedField = nil }
-            }
-        }
-        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: showCustomAmountPopup)
-        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: showClearCustomPopup)
-        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: showGoalPopup)
-        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: showPlanPopup)
-        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: showExtraPopup)
-        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: showWaterPlanningHistoryPopup)
+        .modifier(WaterTrackingLifecycleModifier(
+            water: water,
+            limits: limits,
+            amountGoal: amountGoal,
+            displayedMonth: displayedMonth,
+            calendar: calendar,
+            waterBottlePlans: waterBottlePlans,
+            showCustomAmountPopup: $showCustomAmountPopup,
+            showClearCustomPopup: $showClearCustomPopup,
+            showGoalPopup: $showGoalPopup,
+            showPlanPopup: $showPlanPopup,
+            showExtraPopup: $showExtraPopup,
+            showWaterPlanningHistoryPopup: $showWaterPlanningHistoryPopup,
+            plannedBottleText: $plannedBottleText,
+            extraBottleText: $extraBottleText,
+            dayRefreshID: $dayRefreshID,
+            todayWaterPlanEntry: $todayWaterPlanEntry,
+            todayWaterPlanKey: $todayWaterPlanKey,
+            selectedDate: $selectedDate,
+            selectedDayWater: $selectedDayWater,
+            recalculateReachedGoalDates: recalculateReachedGoalDates,
+            syncGoalToWatch: syncGoalToWatch,
+            ensureTodayWaterPlan: ensureTodayWaterPlan
+        ))
+        .modifier(WaterTrackingPopupFocusModifier(
+            showCustomAmountPopup: showCustomAmountPopup,
+            showClearCustomPopup: showClearCustomPopup,
+            showGoalPopup: showGoalPopup,
+            showPlanPopup: showPlanPopup,
+            showExtraPopup: showExtraPopup,
+            showWaterPlanningHistoryPopup: showWaterPlanningHistoryPopup,
+            focusedField: $focusedField
+        ))
     }
 
     private func savePlannedBottles() {
+        ensureTodayWaterPlan()
+
+        guard let entry = todayWaterPlanEntry else { return }
+
         let cleaned = plannedBottleText.trimmingCharacters(in: .whitespacesAndNewlines)
         let value = Int(cleaned) ?? 0
 
-        todayWaterPlan.plannedBottles = max(0, value)
-        todayWaterPlan.touchUpdated()
-        try? modelContext.save()
+        entry.plannedBottles = max(0, value)
+        entry.touchUpdated()
 
+        do {
+            try modelContext.save()
+        } catch {
+            assertionFailure("Failed to save planned bottles: \(error)")
+        }
+
+        todayWaterPlanEntry = entry
         focusedField = nil
         showPlanPopup = false
     }
 
     private func saveExtraBottles() {
+        ensureTodayWaterPlan()
+
+        guard let entry = todayWaterPlanEntry else { return }
+
         let cleaned = extraBottleText.trimmingCharacters(in: .whitespacesAndNewlines)
         let value = Int(cleaned) ?? 0
 
-        todayWaterPlan.extraBottles = max(0, value)
-        todayWaterPlan.touchUpdated()
-        try? modelContext.save()
+        entry.extraBottles = max(0, value)
+        entry.touchUpdated()
 
+        do {
+            try modelContext.save()
+        } catch {
+            assertionFailure("Failed to save extra bottles: \(error)")
+        }
+
+        todayWaterPlanEntry = entry
         focusedField = nil
         showExtraPopup = false
     }
@@ -1150,5 +1142,165 @@ struct WaterTrackingView: View {
         let date: Date?
         let isGoalMet: Bool
         let isToday: Bool
+    }
+}
+
+fileprivate struct WaterTrackingLifecycleModifier: ViewModifier {
+    let water: WaterHealthKitManager
+    let limits: LimitManager
+    let amountGoal: Double
+    let displayedMonth: Date
+    let calendar: Calendar
+    let waterBottlePlans: [WaterBottlePlanEntry]
+
+    @Binding var showCustomAmountPopup: Bool
+    @Binding var showClearCustomPopup: Bool
+    @Binding var showGoalPopup: Bool
+    @Binding var showPlanPopup: Bool
+    @Binding var showExtraPopup: Bool
+    @Binding var showWaterPlanningHistoryPopup: Bool
+    @Binding var plannedBottleText: String
+    @Binding var extraBottleText: String
+    @Binding var dayRefreshID: UUID
+    @Binding var todayWaterPlanEntry: WaterBottlePlanEntry?
+    @Binding var todayWaterPlanKey: String
+    @Binding var selectedDate: Date?
+    @Binding var selectedDayWater: Double
+
+    let recalculateReachedGoalDates: () async -> Void
+    let syncGoalToWatch: (Double) -> Void
+    let ensureTodayWaterPlan: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .task {
+                await water.requestAuthorization()
+                water.updateWaterGoalForSync(amountGoal)
+                selectedDate = Date()
+                selectedDayWater = water.todayWaterFlOz
+                await recalculateReachedGoalDates()
+                HealthWidgetSync.syncWater(waterToday: water.todayWaterFlOz, waterGoal: amountGoal)
+                syncGoalToWatch(amountGoal)
+                ensureTodayWaterPlan()
+            }
+            .onChange(of: displayedMonth) { _, _ in
+                if let selectedDate {
+                    let selectedMonth = calendar.dateComponents([.year, .month], from: selectedDate)
+                    let visibleMonth = calendar.dateComponents([.year, .month], from: displayedMonth)
+                    if selectedMonth.year != visibleMonth.year || selectedMonth.month != visibleMonth.month {
+                        self.selectedDate = nil
+                        self.selectedDayWater = water.todayWaterFlOz
+                    }
+                }
+                Task { await recalculateReachedGoalDates() }
+            }
+            .onChange(of: water.todayWaterFlOz) { _, newValue in
+                if let selectedDate, calendar.isDateInToday(selectedDate) {
+                    selectedDayWater = newValue
+                }
+                Task { await recalculateReachedGoalDates() }
+                HealthWidgetSync.syncWater(waterToday: newValue, waterGoal: amountGoal)
+            }
+            .onChange(of: amountGoal) { _, newGoal in
+                water.updateWaterGoalForSync(newGoal)
+            }
+            .onChange(of: waterBottlePlans.count) { _, _ in
+                let today = calendar.startOfDay(for: Date())
+                let todayKey = WaterBottlePlanEntry.key(for: today, calendar: calendar)
+
+                if let existing = waterBottlePlans.first(where: { $0.key == todayKey }) {
+                    todayWaterPlanEntry = existing
+                    todayWaterPlanKey = todayKey
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
+                dayRefreshID = UUID()
+                plannedBottleText = ""
+                extraBottleText = ""
+                todayWaterPlanEntry = nil
+                todayWaterPlanKey = ""
+                ensureTodayWaterPlan()
+            }
+            .onChange(of: scenePhaseValue) { _, newPhase in
+                if newPhase == .active {
+                    dayRefreshID = UUID()
+                    ensureTodayWaterPlan()
+                }
+            }
+    }
+
+    @Environment(\.scenePhase) private var scenePhaseValue
+}
+
+fileprivate struct WaterTrackingPopupFocusModifier: ViewModifier {
+    let showCustomAmountPopup: Bool
+    let showClearCustomPopup: Bool
+    let showGoalPopup: Bool
+    let showPlanPopup: Bool
+    let showExtraPopup: Bool
+    let showWaterPlanningHistoryPopup: Bool
+    let focusedField: FocusState<WaterTrackingView.PopupField?>.Binding
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: showCustomAmountPopup) { _, isShowing in
+                if isShowing {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                        focusedField.wrappedValue = .customAmount
+                    }
+                } else if focusedField.wrappedValue == .customAmount {
+                    focusedField.wrappedValue = nil
+                }
+            }
+            .onChange(of: showClearCustomPopup) { _, isShowing in
+                if isShowing {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                        focusedField.wrappedValue = .clearCustomAmount
+                    }
+                } else if focusedField.wrappedValue == .clearCustomAmount {
+                    focusedField.wrappedValue = nil
+                }
+            }
+            .onChange(of: showGoalPopup) { _, isShowing in
+                if isShowing {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                        focusedField.wrappedValue = .goal
+                    }
+                } else if focusedField.wrappedValue == .goal {
+                    focusedField.wrappedValue = nil
+                }
+            }
+            .onChange(of: showPlanPopup) { _, isShowing in
+                if isShowing {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                        focusedField.wrappedValue = .plannedBottles
+                    }
+                } else if focusedField.wrappedValue == .plannedBottles {
+                    focusedField.wrappedValue = nil
+                }
+            }
+            .onChange(of: showExtraPopup) { _, isShowing in
+                if isShowing {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                        focusedField.wrappedValue = .extraBottles
+                    }
+                } else if focusedField.wrappedValue == .extraBottles {
+                    focusedField.wrappedValue = nil
+                }
+            }
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        focusedField.wrappedValue = nil
+                    }
+                }
+            }
+            .animation(.spring(response: 0.32, dampingFraction: 0.82), value: showCustomAmountPopup)
+            .animation(.spring(response: 0.32, dampingFraction: 0.82), value: showClearCustomPopup)
+            .animation(.spring(response: 0.32, dampingFraction: 0.82), value: showGoalPopup)
+            .animation(.spring(response: 0.32, dampingFraction: 0.82), value: showPlanPopup)
+            .animation(.spring(response: 0.32, dampingFraction: 0.82), value: showExtraPopup)
+            .animation(.spring(response: 0.32, dampingFraction: 0.82), value: showWaterPlanningHistoryPopup)
     }
 }

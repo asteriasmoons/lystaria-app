@@ -92,18 +92,14 @@ private extension BookmarkFolderDetailView {
                         )
                         .frame(width: 34, height: 34)
 
-                    Image(systemName: folder.systemKey == "inbox"
-                          ? "tray.full.fill"
-                          : (folder.iconName.isEmpty ? "folder.fill" : folder.iconName))
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white)
+                    folderIconView(for: folder, size: 15)
                 }
 
                 GradientTitle(
                     text: folder.name.isEmpty ? "Untitled Folder" : folder.name,
                     font: .title2.bold()
                 )
-                Spacer()
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 Button {
                     resetAddBookmarkForm()
@@ -124,6 +120,7 @@ private extension BookmarkFolderDetailView {
                 }
                 .buttonStyle(.plain)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 20)
             .padding(.horizontal, LSpacing.pageHorizontal)
 
@@ -147,11 +144,7 @@ private extension BookmarkFolderDetailView {
                             )
                             .frame(width: 42, height: 42)
 
-                        Image(systemName: folder.systemKey == "inbox"
-                              ? "tray.full.fill"
-                              : (folder.iconName.isEmpty ? "folder.fill" : folder.iconName))
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(.white)
+                        folderIconView(for: folder, size: 17)
                     }
 
                     VStack(alignment: .leading, spacing: 6) {
@@ -589,6 +582,29 @@ private extension BookmarkFolderDetailView {
 // MARK: - Small UI Pieces
 
 private extension BookmarkFolderDetailView {
+    @ViewBuilder
+    func folderIconView(for folder: BookmarkFolder, size: CGFloat) -> some View {
+        if folder.systemKey == "inbox" {
+            Image(systemName: "tray.full.fill")
+                .font(.system(size: size, weight: .semibold))
+                .foregroundStyle(.white)
+        } else {
+            switch folder.iconSource {
+            case .system:
+                Image(systemName: folder.iconName.isEmpty ? "folder.fill" : folder.iconName)
+                    .font(.system(size: size, weight: .semibold))
+                    .foregroundStyle(.white)
+            case .asset:
+                Image(folder.iconName)
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: size + 4, height: size + 4)
+                    .foregroundStyle(.white)
+            }
+        }
+    }
+
     func popupLabel(_ text: String) -> some View {
         Text(text)
             .font(.subheadline.weight(.semibold))

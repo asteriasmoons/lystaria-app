@@ -128,6 +128,12 @@ struct LystariaApp: App {
                     Task {
                         await HealthKitManager.shared.fetchTodaySteps()
                         await WaterHealthKitManager.shared.fetchTodayWater()
+                        HealthWidgetSync.sync(
+                            stepsToday: HealthKitManager.shared.todaySteps,
+                            stepGoal: HealthKitManager.shared.stepGoalForSync,
+                            waterToday: WaterHealthKitManager.shared.todayWaterFlOz,
+                            waterGoal: WaterHealthKitManager.shared.waterGoalForSync
+                        )
                     }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .lystariaNotificationAction)) { notification in
@@ -138,11 +144,18 @@ struct LystariaApp: App {
                     notificationManager.refreshAuthorizationStatus()
                     SharedBookmarkImportManager.importPendingBookmark(modelContext: sharedModelContainer.mainContext)
                     SharedFolderExportManager.exportFolders(modelContext: sharedModelContainer.mainContext)
+                    processRefills(modelContext: sharedModelContainer.mainContext)
 
                     // Re-fetch health data and push to widget whenever the app foregrounding.
                     Task {
                         await HealthKitManager.shared.fetchTodaySteps()
                         await WaterHealthKitManager.shared.fetchTodayWater()
+                        HealthWidgetSync.sync(
+                            stepsToday: HealthKitManager.shared.todaySteps,
+                            stepGoal: HealthKitManager.shared.stepGoalForSync,
+                            waterToday: WaterHealthKitManager.shared.todayWaterFlOz,
+                            waterGoal: WaterHealthKitManager.shared.waterGoalForSync
+                        )
                     }
 
                     Task {
@@ -154,6 +167,61 @@ struct LystariaApp: App {
                 #endif
         }
         .modelContainer(sharedModelContainer)
+    }
+
+    // ─────────────────────────────────────────────
+    // MARK: - Refill Processor
+    // ─────────────────────────────────────────────
+
+    /// Runs on launch and foreground. For each medication that has a refill date
+    /// that has passed today, sets currentAmount to supplyAmount and advances
+    /// refillDate by daysSupply days (if daysSupply > 0). Guarded by a day key
+    /// so it never double-processes within the same calendar day.
+    private func processRefills(modelContext: ModelContext) {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let todayKey = {
+            let fmt = DateFormatter()
+            fmt.dateFormat = "yyyy-MM-dd"
+            return fmt.string(from: today)
+        }()
+
+        let descriptor = FetchDescriptor<Medication>()
+        guard let medications = try? modelContext.fetch(descriptor) else { return }
+
+        for medication in medications {
+            guard medication.isActive,
+                  let refillDate = medication.refillDate,
+                  cal.startOfDay(for: refillDate) <= today,
+                  medication.lastAutoRefillDayKey != todayKey
+            else { continue }
+
+            let previousAmount = medication.currentAmount
+            medication.currentAmount = max(0, medication.supplyAmount)
+            medication.lastAutoRefillDayKey = todayKey
+            medication.updatedAt = Date()
+
+            if medication.daysSupply > 0 {
+                medication.refillDate = cal.date(
+                    byAdding: .day,
+                    value: medication.daysSupply,
+                    to: cal.startOfDay(for: refillDate)
+                )
+            }
+
+            let historyEntry = MedicationHistoryEntry(
+                type: .refilled,
+                amountText: "\(previousAmount) \u{2192} \(medication.currentAmount)",
+                details: medication.daysSupply > 0
+                    ? "Auto-refilled on refill date. Next refill in \(medication.daysSupply) days."
+                    : "Auto-refilled on refill date.",
+                createdAt: Date(),
+                medication: medication
+            )
+            modelContext.insert(historyEntry)
+        }
+
+        try? modelContext.save()
     }
 
     // ─────────────────────────────────────────────

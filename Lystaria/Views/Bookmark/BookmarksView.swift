@@ -215,11 +215,7 @@ private extension BookmarksView {
                                     )
                                     .frame(width: 38, height: 38)
 
-                                Image(systemName: folder.systemKey == "inbox"
-                                      ? "tray.full.fill"
-                                      : (folder.iconName.isEmpty ? "folder.fill" : folder.iconName))
-                                    .font(.system(size: 15, weight: .semibold))
-                                    .foregroundStyle(.white)
+                                folderIconView(for: folder, size: 15)
                             }
                         }
                         .buttonStyle(.plain)
@@ -456,7 +452,30 @@ private extension BookmarksView {
 
 // MARK: - Small UI Pieces
 
-
+private extension BookmarksView {
+    @ViewBuilder
+    func folderIconView(for folder: BookmarkFolder, size: CGFloat) -> some View {
+        if folder.systemKey == "inbox" {
+            Image(systemName: "tray.full.fill")
+                .font(.system(size: size, weight: .semibold))
+                .foregroundStyle(.white)
+        } else {
+            switch folder.iconSource {
+            case .system:
+                Image(systemName: folder.iconName.isEmpty ? "folder.fill" : folder.iconName)
+                    .font(.system(size: size, weight: .semibold))
+                    .foregroundStyle(.white)
+            case .asset:
+                Image(folder.iconName)
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: size + 4, height: size + 4)
+                    .foregroundStyle(.white)
+            }
+        }
+    }
+}
 // MARK: - Enums
 
 

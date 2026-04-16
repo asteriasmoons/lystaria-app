@@ -16,8 +16,7 @@ struct AddEditBookmarkFolderView: View {
     let onClose: () -> Void
 
     @State private var name: String = ""
-    @State private var selectedIconName: String = "folder.fill"
-    @State private var iconSearchText: String = ""
+    @State private var selectedIcon: BookmarkIconItem? = BookmarkIconItem(name: "folder.fill", source: .system)
 
     var isEditing: Bool {
         folder != nil
@@ -54,15 +53,26 @@ struct AddEditBookmarkFolderView: View {
                             )
                             .frame(width: 46, height: 46)
 
-                        Image(systemName: selectedIconName)
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(.white)
+                        Group {
+                            switch selectedIcon?.source {
+                            case .system, .none:
+                                Image(systemName: selectedIcon?.name ?? "folder.fill")
+                                    .font(.system(size: 18, weight: .semibold))
+                            case .asset:
+                                Image(selectedIcon?.name ?? "folder.fill")
+                                    .renderingMode(.template)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 22, height: 22)
+                            }
+                        }
+                        .foregroundStyle(.white)
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
                         label("Folder Icon")
 
-                        Text("Pick an SF Symbol for this folder.")
+                        Text("Pick an icon for this folder.")
                             .font(.footnote)
                             .foregroundStyle(LColors.textSecondary)
                     }
@@ -75,45 +85,13 @@ struct AddEditBookmarkFolderView: View {
                     text: $name
                 )
 
-                label("Search Icons")
+                label("Choose Icon")
 
-                GlassTextField(
-                    placeholder: "Search SF Symbols",
-                    text: $iconSearchText
+                BookmarkAssetAndSymbolPicker(
+                    selectedIcon: $selectedIcon,
+                    icons: BookmarkCombinedIconLibrary.all
                 )
-
-                ScrollView {
-                    LazyVGrid(
-                        columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 5),
-                        spacing: 12
-                    ) {
-                        ForEach(filteredIconOptions, id: \.self) { icon in
-                            Button {
-                                selectedIconName = icon
-                            } label: {
-                                ZStack {
-                                    RoundedRectangle(cornerRadius: 14)
-                                        .fill(Color.white.opacity(0.08))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 14)
-                                                .stroke(
-                                                    selectedIconName == icon ? LColors.accent : LColors.glassBorder,
-                                                    lineWidth: 1
-                                                )
-                                        )
-                                        .frame(height: 56)
-
-                                    Image(systemName: icon)
-                                        .font(.system(size: 18, weight: .semibold))
-                                        .foregroundStyle(.white)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.top, 2)
-                }
-                .frame(maxHeight: 220)
+                .frame(maxHeight: 280)
 
                 if isInbox {
                     Text("The Inbox folder cannot be renamed.")
@@ -127,9 +105,12 @@ struct AddEditBookmarkFolderView: View {
         .onAppear {
             if let folder {
                 name = folder.name
-                selectedIconName = folder.iconName.isEmpty ? "folder.fill" : folder.iconName
+                selectedIcon = BookmarkIconItem(
+                    name: folder.iconName.isEmpty ? "folder.fill" : folder.iconName,
+                    source: folder.iconSource
+                )
             } else {
-                selectedIconName = "folder.fill"
+                selectedIcon = BookmarkIconItem(name: "folder.fill", source: .system)
             }
         }
     }
@@ -176,7 +157,8 @@ private extension AddEditBookmarkFolderView {
             guard folder.systemKey != "inbox" else { return }
 
             folder.name = cleaned
-            folder.iconName = selectedIconName
+            folder.iconName = selectedIcon?.name ?? "folder.fill"
+            folder.iconSource = selectedIcon?.source ?? .system
             folder.updatedAt = Date()
         } else {
             // Enforce free folder limit (exclude inbox)
@@ -192,7 +174,8 @@ private extension AddEditBookmarkFolderView {
             let new = BookmarkFolder(
                 name: cleaned,
                 systemKey: "",
-                iconName: selectedIconName,
+                iconName: selectedIcon?.name ?? "folder.fill",
+                iconSourceRaw: selectedIcon?.source.rawValue ?? BookmarkIconSource.system.rawValue,
                 createdAt: Date(),
                 updatedAt: Date()
             )
@@ -208,12 +191,4 @@ private extension AddEditBookmarkFolderView {
         }
     }
 
-    var filteredIconOptions: [String] {
-        let query = iconSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !query.isEmpty else { return BookmarkIconLibrary.all }
-
-        return BookmarkIconLibrary.all.filter { icon in
-            icon.lowercased().contains(query)
-        }
-    }
 }

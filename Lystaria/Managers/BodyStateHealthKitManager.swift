@@ -146,6 +146,13 @@ final class BodyStateHealthKitManager: ObservableObject {
 
             try modelContext.save()
             lastRefreshDate = Date()
+
+            HealthWidgetSync.syncBodyState(
+                bodyScore: snapshot.bodyScore,
+                bodyLabel: snapshot.bodyLabel,
+                nervousSystemScore: snapshot.nervousSystemScore,
+                nervousSystemLabel: snapshot.nervousSystemLabel
+            )
         } catch {
             print("BodyState refresh/store error:", error)
         }

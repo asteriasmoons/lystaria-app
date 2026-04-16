@@ -13,15 +13,25 @@ final class Medication {
     
     // MARK: - Core Info
     var id: UUID = UUID()
-    var name: String = ""
-    var dosage: String = "" // "10mg", "2 pills", etc
+    var dosage: String = "" // retained for CloudKit — no longer shown in UI
     
+    // MARK: - Name
+    var name: String = ""
+
     // MARK: - Supply Tracking
     var currentAmount: Int = 0
     var supplyAmount: Int = 0
+
+    // MARK: - Days Supply
+    // How many days the supplyAmount covers. Used to auto-advance refillDate.
+    // 0 means not set — no auto-advance will occur.
+    var daysSupply: Int = 0
     
     // MARK: - Refill
     var refillDate: Date? = nil
+    // Day key of the last auto-refill that was processed, e.g. "2026-04-14".
+    // Guards against double-processing within the same calendar day.
+    var lastAutoRefillDayKey: String = ""
     
     // MARK: - Usage
     var timesPerDay: Int = 1
@@ -40,18 +50,20 @@ final class Medication {
     // MARK: - Init
     init(
         name: String,
-        dosage: String,
         currentAmount: Int,
         supplyAmount: Int,
+        daysSupply: Int = 0,
         refillDate: Date? = nil,
         timesPerDay: Int = 1
     ) {
         self.id = UUID()
         self.name = name
-        self.dosage = dosage
+        self.dosage = ""
         self.currentAmount = currentAmount
         self.supplyAmount = supplyAmount
+        self.daysSupply = daysSupply
         self.refillDate = refillDate
+        self.lastAutoRefillDayKey = ""
         self.timesPerDay = timesPerDay
         self.lastTakenAt = nil
         self.isActive = true

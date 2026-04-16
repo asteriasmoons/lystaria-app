@@ -38,6 +38,20 @@ enum RecurrenceExceptionKind: String {
     case split = "split"
 }
 
+enum CalendarEventShareMode: String, CaseIterable {
+    case personal = "personal"
+    case inviteOnly = "invite_only"
+    case shared = "shared"
+}
+
+enum CalendarEventParticipationStatus: String, CaseIterable {
+    case owner = "owner"
+    case invited = "invited"
+    case joined = "joined"
+    case declined = "declined"
+    case left = "left"
+}
+
 /// Codable struct stored as JSON in SwiftData
 struct RecurrenceEnd: Equatable, Sendable {
     var kind: RecurrenceEndKind
@@ -75,6 +89,8 @@ extension RecurrenceRule: nonisolated Codable {}
 extension LocationCoords: nonisolated Codable {}
 extension CalendarEventSyncState: nonisolated Codable {}
 extension RecurrenceExceptionKind: nonisolated Codable {}
+extension CalendarEventShareMode: nonisolated Codable {}
+extension CalendarEventParticipationStatus: nonisolated Codable {}
 
 // MARK: - CalendarEvent Model
 
@@ -135,6 +151,23 @@ final class CalendarEvent {
     var originalOccurrenceDate: Date?
     var splitEffectiveFrom: Date?
     var exceptionKindRaw: String?
+    
+    // MARK: - Sharing / join support
+    var isSharedEvent: Bool = false
+    var isJoinable: Bool = false
+    var joinCode: String = ""
+    var shareModeRaw: String = CalendarEventShareMode.personal.rawValue
+    var participationStatusRaw: String = CalendarEventParticipationStatus.owner.rawValue
+    var ownerUserId: String?
+    var ownerDisplayName: String?
+    var shareToken: String?
+    var shareURL: String?
+    var requiresApprovalToJoin: Bool = false
+    var allowGuestsToInvite: Bool = false
+    var allowGuestsToEdit: Bool = false
+    var maxAttendees: Int?
+    var attendeeCount: Int = 0
+    var joinDeadline: Date?
     
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
@@ -213,6 +246,16 @@ final class CalendarEvent {
         }
     }
     
+    var shareMode: CalendarEventShareMode {
+        get { CalendarEventShareMode(rawValue: shareModeRaw) ?? .personal }
+        set { shareModeRaw = newValue.rawValue }
+    }
+
+    var participationStatus: CalendarEventParticipationStatus {
+        get { CalendarEventParticipationStatus(rawValue: participationStatusRaw) ?? .owner }
+        set { participationStatusRaw = newValue.rawValue }
+    }
+
     init(
         title: String,
         startDate: Date,
@@ -237,7 +280,22 @@ final class CalendarEvent {
         splitFromSeriesLocalId: String? = nil,
         originalOccurrenceDate: Date? = nil,
         splitEffectiveFrom: Date? = nil,
-        exceptionKind: RecurrenceExceptionKind? = nil
+        exceptionKind: RecurrenceExceptionKind? = nil,
+        isSharedEvent: Bool = false,
+        isJoinable: Bool = false,
+        shareMode: CalendarEventShareMode = .personal,
+        participationStatus: CalendarEventParticipationStatus = .owner,
+        ownerUserId: String? = nil,
+        ownerDisplayName: String? = nil,
+        joinCode: String = "",
+        shareToken: String? = nil,
+        shareURL: String? = nil,
+        requiresApprovalToJoin: Bool = false,
+        allowGuestsToInvite: Bool = false,
+        allowGuestsToEdit: Bool = false,
+        maxAttendees: Int? = nil,
+        attendeeCount: Int = 0,
+        joinDeadline: Date? = nil
     ) {
         self.localEventId = localEventId
         self.title = title
@@ -276,6 +334,21 @@ final class CalendarEvent {
         self.originalOccurrenceDate = originalOccurrenceDate
         self.splitEffectiveFrom = splitEffectiveFrom
         self.exceptionKindRaw = exceptionKind?.rawValue
+        self.isSharedEvent = isSharedEvent
+        self.isJoinable = isJoinable
+        self.shareModeRaw = shareMode.rawValue
+        self.participationStatusRaw = participationStatus.rawValue
+        self.ownerUserId = ownerUserId
+        self.ownerDisplayName = ownerDisplayName
+        self.joinCode = joinCode
+        self.shareToken = shareToken
+        self.shareURL = shareURL
+        self.requiresApprovalToJoin = requiresApprovalToJoin
+        self.allowGuestsToInvite = allowGuestsToInvite
+        self.allowGuestsToEdit = allowGuestsToEdit
+        self.maxAttendees = maxAttendees
+        self.attendeeCount = attendeeCount
+        self.joinDeadline = joinDeadline
         self.createdAt = Date()
         self.updatedAt = Date()
         self.recurrence = recurrence

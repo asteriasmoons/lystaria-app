@@ -5,6 +5,7 @@ import SwiftUI
 import SwiftData
 import PhotosUI
 import Combine
+import UIKit
 import ActivityKit
 
 // Cross-platform: numeric keyboard only exists on iOS/visionOS
@@ -787,23 +788,22 @@ struct ReadingTabView: View {
                 GlassCard {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(alignment: .center, spacing: 12) {
-                            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            HStack(alignment: .center, spacing: 10) {
                                 Image("trophyfill")
                                     .renderingMode(.template)
                                     .resizable()
                                     .scaledToFit()
                                     .frame(width: 24, height: 24)
 
-                                VStack(alignment: .leading, spacing: 4) {
-                                    GradientTitle(text: "Reading Points", font: .system(size: 14, weight: .bold))
-                                    Text("Earned through reading timer sessions")
-                                        .font(.subheadline)
-                                        .foregroundStyle(LColors.textSecondary)
-                                }
+                                GradientTitle(text: "Reading Points", font: .system(size: 14, weight: .bold))
                             }
 
                             Spacer()
                         }
+
+                        Text("Earned through reading timer sessions")
+                            .font(.subheadline)
+                            .foregroundStyle(LColors.textSecondary)
 
                         HStack(spacing: 10) {
                             VStack(alignment: .leading, spacing: 8) {
@@ -2679,240 +2679,246 @@ struct AddBookSheet: View {
                 }
             },
             content: {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("TITLE")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(LColors.textSecondary)
-                        .tracking(0.5)
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("TITLE")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(LColors.textSecondary)
+                            .tracking(0.5)
 
-                    LystariaTextField(placeholder: "Book title", text: $title)
-                }
+                        LystariaTextField(placeholder: "Book title", text: $title)
+                    }
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("AUTHOR")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(LColors.textSecondary)
-                        .tracking(0.5)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("AUTHOR")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(LColors.textSecondary)
+                            .tracking(0.5)
 
-                    LystariaTextField(placeholder: "Author name", text: $author)
-                }
+                        LystariaTextField(placeholder: "Author name", text: $author)
+                    }
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("SUMMARY")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(LColors.textSecondary)
-                        .tracking(0.5)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("SUMMARY")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(LColors.textSecondary)
+                            .tracking(0.5)
 
-                    LystariaTextArea(placeholder: "Short summary (optional)", text: $shortSummary)
-                }
+                        LystariaTextArea(placeholder: "Short summary (optional)", text: $shortSummary)
+                    }
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("TAGS")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(LColors.textSecondary)
-                        .tracking(0.5)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("TAGS")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(LColors.textSecondary)
+                            .tracking(0.5)
 
-                    LystariaTextField(placeholder: "Fantasy, Romance, Fae", text: $tagsRaw)
-                }
+                        LystariaTextField(placeholder: "Fantasy, Romance, Fae", text: $tagsRaw)
+                    }
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("STATUS")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(LColors.textSecondary)
-                        .tracking(0.5)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("STATUS")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(LColors.textSecondary)
+                            .tracking(0.5)
 
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 10) {
-                            ForEach(BookStatus.allCases, id: \.self) { s in
-                                let isSelected = status == s
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 10) {
+                                ForEach(BookStatus.allCases, id: \.self) { s in
+                                    let isSelected = status == s
+
+                                    Button {
+                                        status = s
+                                    } label: {
+                                        Text(s.label)
+                                            .font(.system(size: 13, weight: .semibold))
+                                            .foregroundStyle(isSelected ? .white : LColors.textPrimary)
+                                            .lineLimit(1)
+                                            .fixedSize()
+                                            .padding(.horizontal, 16)
+                                            .padding(.vertical, 10)
+                                            .background(
+                                                isSelected
+                                                ? LColors.accent
+                                                : Color.white.opacity(0.08)
+                                            )
+                                            .clipShape(Capsule())
+                                            .overlay(
+                                                Capsule()
+                                                    .stroke(
+                                                        isSelected
+                                                        ? LColors.accent
+                                                        : LColors.glassBorder,
+                                                        lineWidth: 1
+                                                    )
+                                            )
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Toggle(isOn: $hasSeries) {
+                            Text("SERIES")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(LColors.textSecondary)
+                                .tracking(0.5)
+                        }
+                        .tint(LColors.accent)
+
+                        if hasSeries {
+                            HStack(spacing: 10) {
+                                Button {
+                                    showSeriesPicker = true
+                                } label: {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "books.vertical")
+                                        Text(selectedSeriesName.isEmpty ? "Select Series" : selectedSeriesName)
+                                            .font(.system(size: 13, weight: .semibold))
+                                            .lineLimit(1)
+                                    }
+                                    .foregroundStyle(LColors.textPrimary)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 10)
+                                    .background(Color.white.opacity(0.08))
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(LColors.glassBorder, lineWidth: 1)
+                                    )
+                                }
+                                .buttonStyle(.plain)
 
                                 Button {
-                                    status = s
+                                    showNewSeriesPopup = true
                                 } label: {
-                                    Text(s.label)
-                                        .font(.system(size: 13, weight: .semibold))
-                                        .foregroundStyle(isSelected ? .white : LColors.textPrimary)
-                                        .lineLimit(1)
-                                        .fixedSize()
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 10)
-                                        .background(
-                                            isSelected
-                                            ? LColors.accent
-                                            : Color.white.opacity(0.08)
-                                        )
-                                        .clipShape(Capsule())
-                                        .overlay(
-                                            Capsule()
-                                                .stroke(
-                                                    isSelected
-                                                    ? LColors.accent
-                                                    : LColors.glassBorder,
-                                                    lineWidth: 1
-                                                )
-                                        )
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "plus")
+                                        Text("New Series")
+                                            .font(.system(size: 13, weight: .semibold))
+                                    }
+                                    .foregroundStyle(LColors.textPrimary)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 10)
+                                    .background(Color.white.opacity(0.08))
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(LColors.glassBorder, lineWidth: 1)
+                                    )
                                 }
                                 .buttonStyle(.plain)
                             }
-                        }
-                    }
-                }
 
-                VStack(alignment: .leading, spacing: 12) {
-                    Toggle(isOn: $hasSeries) {
-                        Text("SERIES")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(LColors.textSecondary)
-                            .tracking(0.5)
-                    }
-                    .tint(LColors.accent)
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("POSITION")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(LColors.textSecondary)
+                                    .tracking(0.5)
 
-                    if hasSeries {
-                        HStack(spacing: 10) {
-                            Button {
-                                showSeriesPicker = true
-                            } label: {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "books.vertical")
-                                    Text(selectedSeriesName.isEmpty ? "Select Series" : selectedSeriesName)
-                                        .font(.system(size: 13, weight: .semibold))
-                                        .lineLimit(1)
-                                }
-                                .foregroundStyle(LColors.textPrimary)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 10)
-                                .background(Color.white.opacity(0.08))
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(LColors.glassBorder, lineWidth: 1)
-                                )
+                                LystariaNumberField(placeholder: "1", text: $seriesPositionText)
+                                    .numericKeyboardIfAvailable()
                             }
-                            .buttonStyle(.plain)
 
-                            Button {
-                                showNewSeriesPopup = true
-                            } label: {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "plus")
-                                    Text("New Series")
-                                        .font(.system(size: 13, weight: .semibold))
-                                }
-                                .foregroundStyle(LColors.textPrimary)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 10)
-                                .background(Color.white.opacity(0.08))
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(LColors.glassBorder, lineWidth: 1)
-                                )
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("LABEL")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(LColors.textSecondary)
+                                    .tracking(0.5)
+
+                                LystariaTextField(placeholder: "Book 1, Novella 0.5, Companion", text: $seriesLabelText)
                             }
-                            .buttonStyle(.plain)
-                        }
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("POSITION")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(LColors.textSecondary)
-                                .tracking(0.5)
-
-                            LystariaNumberField(placeholder: "1", text: $seriesPositionText)
-                                .numericKeyboardIfAvailable()
-                        }
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("LABEL")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(LColors.textSecondary)
-                                .tracking(0.5)
-
-                            LystariaTextField(placeholder: "Book 1, Novella 0.5, Companion", text: $seriesLabelText)
                         }
                     }
-                }
 
-                VStack(alignment: .leading, spacing: 12) {
-                    Toggle(isOn: $hasStartedDate) {
-                        Text("START DATE")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(LColors.textSecondary)
-                            .tracking(0.5)
-                    }
-                    .tint(LColors.accent)
-
-                    if hasStartedDate {
-                        DatePicker(
-                            "",
-                            selection: $startedDate,
-                            displayedComponents: [.date]
-                        )
-                        .datePickerStyle(.compact)
-                        .labelsHidden()
-                        .padding(12)
-                        .background(Color.white.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 14)
-                                .stroke(LColors.glassBorder, lineWidth: 1)
-                        )
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 12) {
-                    Toggle(isOn: $hasFinishedDate) {
-                        Text("FINISH DATE")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(LColors.textSecondary)
-                            .tracking(0.5)
-                    }
-                    .tint(LColors.accent)
-
-                    if hasFinishedDate {
-                        DatePicker(
-                            "",
-                            selection: $finishedDate,
-                            displayedComponents: [.date]
-                        )
-                        .datePickerStyle(.compact)
-                        .labelsHidden()
-                        .padding(12)
-                        .background(Color.white.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 14)
-                                .stroke(LColors.glassBorder, lineWidth: 1)
-                        )
-                    }
-                }
-
-                if status == .reading {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("PAGES")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(LColors.textSecondary)
-                            .tracking(0.5)
+                        Toggle(isOn: $hasStartedDate) {
+                            Text("START DATE")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(LColors.textSecondary)
+                                .tracking(0.5)
+                        }
+                        .tint(LColors.accent)
 
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("CURRENT")
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(LColors.textSecondary)
+                        if hasStartedDate {
+                            DatePicker(
+                                "",
+                                selection: $startedDate,
+                                displayedComponents: [.date]
+                            )
+                            .datePickerStyle(.compact)
+                            .labelsHidden()
+                            .padding(12)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                        }
+                    }
 
-                                LystariaNumberField(placeholder: "0", text: $currentPageText)
-                                    .numericKeyboardIfAvailable()
-                            }
+                    VStack(alignment: .leading, spacing: 12) {
+                        Toggle(isOn: $hasFinishedDate) {
+                            Text("FINISH DATE")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(LColors.textSecondary)
+                                .tracking(0.5)
+                        }
+                        .tint(LColors.accent)
 
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("TOTAL")
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(LColors.textSecondary)
+                        if hasFinishedDate {
+                            DatePicker(
+                                "",
+                                selection: $finishedDate,
+                                displayedComponents: [.date]
+                            )
+                            .datePickerStyle(.compact)
+                            .labelsHidden()
+                            .padding(12)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                        }
+                    }
 
-                                LystariaNumberField(placeholder: "0", text: $totalPagesText)
-                                    .numericKeyboardIfAvailable()
+                    if status == .reading {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("PAGES")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(LColors.textSecondary)
+                                .tracking(0.5)
+
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("CURRENT")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(LColors.textSecondary)
+
+                                    LystariaNumberField(placeholder: "0", text: $currentPageText)
+                                        .numericKeyboardIfAvailable()
+                                }
+
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("TOTAL")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(LColors.textSecondary)
+
+                                    LystariaNumberField(placeholder: "0", text: $totalPagesText)
+                                        .numericKeyboardIfAvailable()
+                                }
                             }
                         }
                     }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    dismissKeyboard()
                 }
             },
             footer: {
@@ -3150,234 +3156,240 @@ struct EditBookSheet: View {
                 }
             },
             content: {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("TITLE")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(LColors.textSecondary)
-                        .tracking(0.5)
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("TITLE")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(LColors.textSecondary)
+                            .tracking(0.5)
 
-                    LystariaTextField(placeholder: "Book title", text: $title)
-                }
+                        LystariaTextField(placeholder: "Book title", text: $title)
+                    }
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("AUTHOR")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(LColors.textSecondary)
-                        .tracking(0.5)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("AUTHOR")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(LColors.textSecondary)
+                            .tracking(0.5)
 
-                    LystariaTextField(placeholder: "Author name", text: $author)
-                }
+                        LystariaTextField(placeholder: "Author name", text: $author)
+                    }
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("SUMMARY")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(LColors.textSecondary)
-                        .tracking(0.5)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("SUMMARY")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(LColors.textSecondary)
+                            .tracking(0.5)
 
-                    LystariaTextArea(placeholder: "Short summary (optional)", text: $shortSummary)
-                }
+                        LystariaTextArea(placeholder: "Short summary (optional)", text: $shortSummary)
+                    }
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("TAGS")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(LColors.textSecondary)
-                        .tracking(0.5)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("TAGS")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(LColors.textSecondary)
+                            .tracking(0.5)
 
-                    LystariaTextField(placeholder: "Fantasy, Romance, Fae", text: $tagsRaw)
-                }
+                        LystariaTextField(placeholder: "Fantasy, Romance, Fae", text: $tagsRaw)
+                    }
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("STATUS")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(LColors.textSecondary)
-                        .tracking(0.5)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("STATUS")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(LColors.textSecondary)
+                            .tracking(0.5)
 
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 10) {
-                            ForEach(BookStatus.allCases, id: \.self) { s in
-                                let isSelected = status == s
-                                let backgroundStyle = isSelected ? LColors.accent : Color.white.opacity(0.08)
-                                let strokeColor = isSelected ? LColors.accent : LColors.glassBorder
-                                let textColor = isSelected ? Color.white : LColors.textPrimary
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 10) {
+                                ForEach(BookStatus.allCases, id: \.self) { s in
+                                    let isSelected = status == s
+                                    let backgroundStyle = isSelected ? LColors.accent : Color.white.opacity(0.08)
+                                    let strokeColor = isSelected ? LColors.accent : LColors.glassBorder
+                                    let textColor = isSelected ? Color.white : LColors.textPrimary
+
+                                    Button {
+                                        status = s
+                                    } label: {
+                                        Text(s.label)
+                                            .font(.system(size: 13, weight: .semibold))
+                                            .foregroundStyle(textColor)
+                                            .lineLimit(1)
+                                            .fixedSize()
+                                            .padding(.horizontal, 16)
+                                            .padding(.vertical, 10)
+                                            .background(backgroundStyle)
+                                            .clipShape(Capsule())
+                                            .overlay(
+                                                Capsule()
+                                                    .stroke(strokeColor, lineWidth: 1)
+                                            )
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Toggle(isOn: $hasSeries) {
+                            Text("SERIES")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(LColors.textSecondary)
+                                .tracking(0.5)
+                        }
+                        .tint(LColors.accent)
+
+                        if hasSeries {
+                            HStack(spacing: 10) {
+                                Button {
+                                    showSeriesPicker = true
+                                } label: {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "books.vertical")
+                                        Text(selectedSeriesName.isEmpty ? "Select Series" : selectedSeriesName)
+                                            .font(.system(size: 13, weight: .semibold))
+                                            .lineLimit(1)
+                                    }
+                                    .foregroundStyle(LColors.textPrimary)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 10)
+                                    .background(Color.white.opacity(0.08))
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(LColors.glassBorder, lineWidth: 1)
+                                    )
+                                }
+                                .buttonStyle(.plain)
 
                                 Button {
-                                    status = s
+                                    showNewSeriesPopup = true
                                 } label: {
-                                    Text(s.label)
-                                        .font(.system(size: 13, weight: .semibold))
-                                        .foregroundStyle(textColor)
-                                        .lineLimit(1)
-                                        .fixedSize()
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 10)
-                                        .background(backgroundStyle)
-                                        .clipShape(Capsule())
-                                        .overlay(
-                                            Capsule()
-                                                .stroke(strokeColor, lineWidth: 1)
-                                        )
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "plus")
+                                        Text("New Series")
+                                            .font(.system(size: 13, weight: .semibold))
+                                    }
+                                    .foregroundStyle(LColors.textPrimary)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 10)
+                                    .background(Color.white.opacity(0.08))
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(LColors.glassBorder, lineWidth: 1)
+                                    )
                                 }
                                 .buttonStyle(.plain)
                             }
-                        }
-                    }
-                }
 
-                VStack(alignment: .leading, spacing: 12) {
-                    Toggle(isOn: $hasSeries) {
-                        Text("SERIES")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(LColors.textSecondary)
-                            .tracking(0.5)
-                    }
-                    .tint(LColors.accent)
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("POSITION")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(LColors.textSecondary)
+                                    .tracking(0.5)
 
-                    if hasSeries {
-                        HStack(spacing: 10) {
-                            Button {
-                                showSeriesPicker = true
-                            } label: {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "books.vertical")
-                                    Text(selectedSeriesName.isEmpty ? "Select Series" : selectedSeriesName)
-                                        .font(.system(size: 13, weight: .semibold))
-                                        .lineLimit(1)
-                                }
-                                .foregroundStyle(LColors.textPrimary)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 10)
-                                .background(Color.white.opacity(0.08))
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(LColors.glassBorder, lineWidth: 1)
-                                )
+                                LystariaNumberField(placeholder: "1", text: $seriesPositionText)
+                                    .numericKeyboardIfAvailable()
                             }
-                            .buttonStyle(.plain)
 
-                            Button {
-                                showNewSeriesPopup = true
-                            } label: {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "plus")
-                                    Text("New Series")
-                                        .font(.system(size: 13, weight: .semibold))
-                                }
-                                .foregroundStyle(LColors.textPrimary)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 10)
-                                .background(Color.white.opacity(0.08))
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(LColors.glassBorder, lineWidth: 1)
-                                )
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("LABEL")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(LColors.textSecondary)
+                                    .tracking(0.5)
+
+                                LystariaTextField(placeholder: "Book 1, Novella 0.5, Companion", text: $seriesLabelText)
                             }
-                            .buttonStyle(.plain)
-                        }
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("POSITION")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(LColors.textSecondary)
-                                .tracking(0.5)
-
-                            LystariaNumberField(placeholder: "1", text: $seriesPositionText)
-                                .numericKeyboardIfAvailable()
-                        }
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("LABEL")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(LColors.textSecondary)
-                                .tracking(0.5)
-
-                            LystariaTextField(placeholder: "Book 1, Novella 0.5, Companion", text: $seriesLabelText)
                         }
                     }
-                }
 
-                VStack(alignment: .leading, spacing: 12) {
-                    Toggle(isOn: $hasStartedDate) {
-                        Text("START DATE")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(LColors.textSecondary)
-                            .tracking(0.5)
-                    }
-                    .tint(LColors.accent)
-
-                    if hasStartedDate {
-                        DatePicker(
-                            "",
-                            selection: $startedDate,
-                            displayedComponents: [.date]
-                        )
-                        .datePickerStyle(.compact)
-                        .labelsHidden()
-                        .padding(12)
-                        .background(Color.white.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 14)
-                                .stroke(LColors.glassBorder, lineWidth: 1)
-                        )
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 12) {
-                    Toggle(isOn: $hasFinishedDate) {
-                        Text("FINISH DATE")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(LColors.textSecondary)
-                            .tracking(0.5)
-                    }
-                    .tint(LColors.accent)
-
-                    if hasFinishedDate {
-                        DatePicker(
-                            "",
-                            selection: $finishedDate,
-                            displayedComponents: [.date]
-                        )
-                        .datePickerStyle(.compact)
-                        .labelsHidden()
-                        .padding(12)
-                        .background(Color.white.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 14)
-                                .stroke(LColors.glassBorder, lineWidth: 1)
-                        )
-                    }
-                }
-
-                if status == .reading {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("PAGES")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(LColors.textSecondary)
-                            .tracking(0.5)
+                        Toggle(isOn: $hasStartedDate) {
+                            Text("START DATE")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(LColors.textSecondary)
+                                .tracking(0.5)
+                        }
+                        .tint(LColors.accent)
 
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("CURRENT")
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(LColors.textSecondary)
+                        if hasStartedDate {
+                            DatePicker(
+                                "",
+                                selection: $startedDate,
+                                displayedComponents: [.date]
+                            )
+                            .datePickerStyle(.compact)
+                            .labelsHidden()
+                            .padding(12)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                        }
+                    }
 
-                                LystariaNumberField(placeholder: "0", text: $currentPageText)
-                                    .numericKeyboardIfAvailable()
-                            }
+                    VStack(alignment: .leading, spacing: 12) {
+                        Toggle(isOn: $hasFinishedDate) {
+                            Text("FINISH DATE")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(LColors.textSecondary)
+                                .tracking(0.5)
+                        }
+                        .tint(LColors.accent)
 
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("TOTAL")
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(LColors.textSecondary)
+                        if hasFinishedDate {
+                            DatePicker(
+                                "",
+                                selection: $finishedDate,
+                                displayedComponents: [.date]
+                            )
+                            .datePickerStyle(.compact)
+                            .labelsHidden()
+                            .padding(12)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                        }
+                    }
 
-                                LystariaNumberField(placeholder: "0", text: $totalPagesText)
-                                    .numericKeyboardIfAvailable()
+                    if status == .reading {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("PAGES")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(LColors.textSecondary)
+                                .tracking(0.5)
+
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("CURRENT")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(LColors.textSecondary)
+
+                                    LystariaNumberField(placeholder: "0", text: $currentPageText)
+                                        .numericKeyboardIfAvailable()
+                                }
+
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("TOTAL")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(LColors.textSecondary)
+
+                                    LystariaNumberField(placeholder: "0", text: $totalPagesText)
+                                        .numericKeyboardIfAvailable()
+                                }
                             }
                         }
                     }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    dismissKeyboard()
                 }
             },
             footer: {
@@ -4781,19 +4793,25 @@ struct AddBookNotePopup: View {
                 }
             },
             content: {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(autoDateText)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(LColors.textSecondary)
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(autoDateText)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(LColors.textSecondary)
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("NOTE")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(LColors.textSecondary)
+                            .tracking(0.5)
+
+                        LystariaTextArea(placeholder: "Write your note...", text: $noteText)
+                    }
                 }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("NOTE")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(LColors.textSecondary)
-                        .tracking(0.5)
-
-                    LystariaTextArea(placeholder: "Write your note...", text: $noteText)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    dismissKeyboard()
                 }
             },
             footer: {
@@ -5613,4 +5631,13 @@ struct ReadingGoalSheet: View {
         try? modelContext.save()
         closeAction()
     }
+}
+
+// MARK: - Keyboard Dismiss Helper
+#if canImport(UIKit)
+import UIKit
+#endif
+
+fileprivate func dismissKeyboard() {
+    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
 }

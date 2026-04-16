@@ -100,19 +100,53 @@ final class ReminderMedicationLink {
     var medicationId: UUID?
     var quantity: Int = 1
     var sortOrder: Int = 0
+    // JSON-encoded [Int: Int] where key = Calendar.weekday (1=Sun...7=Sat), value = dose override.
+    // Days absent from the dict fall back to `quantity`.
+    var quantityOverridesStorage: String = "{}"
+
+    var quantityOverrides: [Int: Int] {
+        get {
+            guard let data = quantityOverridesStorage.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([Int: Int].self, from: data)
+            else { return [:] }
+            return decoded
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue),
+               let str = String(data: data, encoding: .utf8) {
+                quantityOverridesStorage = str
+            } else {
+                quantityOverridesStorage = "{}"
+            }
+        }
+    }
+
+    /// Returns the effective dose quantity for a given date, respecting per-weekday overrides.
+    func effectiveQuantity(for date: Date = Date()) -> Int {
+        let weekday = Calendar.current.component(.weekday, from: date)
+        return quantityOverrides[weekday] ?? quantity
+    }
 
     init(
         id: UUID = UUID(),
         reminder: LystariaReminder? = nil,
         medicationId: UUID? = nil,
         quantity: Int = 1,
-        sortOrder: Int = 0
+        sortOrder: Int = 0,
+        quantityOverrides: [Int: Int] = [:]
     ) {
         self.id = id
         self.reminder = reminder
         self.medicationId = medicationId
         self.quantity = max(1, quantity)
         self.sortOrder = sortOrder
+        self.quantityOverridesStorage = "{}"
+        if !quantityOverrides.isEmpty {
+            if let data = try? JSONEncoder().encode(quantityOverrides),
+               let str = String(data: data, encoding: .utf8) {
+                self.quantityOverridesStorage = str
+            }
+        }
     }
 }
 

@@ -39,6 +39,7 @@ struct CalendarTabView: View {
 
     @State private var showingDayView = false
     @State private var dayViewDate: Date = Date()
+    @State private var showingJoinSharedEvent = false
 
     // FIX 1: Pre-compute event instances once per render into a State dict,
     // instead of calling eventsFor() inside @ViewBuilder (which touches
@@ -193,19 +194,28 @@ struct CalendarTabView: View {
                 LystariaBackground()
                 
                 ScrollView {
-                    VStack(spacing: 0) {
-                        calendarHeader
-                        
-                        LazyVStack(spacing: 0) {
-                            ForEach(daysInMonth, id: \.self) { date in
-                                // FIX 4: Read from the pre-computed dict instead of
-                                // calling eventsFor() (which hits SwiftData) inside body.
-                                let key = isoDayString(tzCalendar.startOfDay(for: date))
-                                dayRow(date, events: eventsByDay[key] ?? [])
+                    ScrollViewReader { proxy in
+                        VStack(spacing: 0) {
+                            calendarHeader
+                            
+                            LazyVStack(spacing: 0) {
+                                ForEach(daysInMonth, id: \.self) { date in
+                                    let key = isoDayString(tzCalendar.startOfDay(for: date))
+                                    dayRow(date, events: eventsByDay[key] ?? [])
+                                        .id(isoDayString(tzCalendar.startOfDay(for: date)))
+                                }
+                            }
+                            .padding(.top, 8)
+                            .padding(.bottom, 120)
+                        }
+                        .onAppear {
+                            let todayKey = isoDayString(tzCalendar.startOfDay(for: Date()))
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                                withAnimation {
+                                    proxy.scrollTo(todayKey, anchor: .top)
+                                }
                             }
                         }
-                        .padding(.top, 8)
-                        .padding(.bottom, 120)
                     }
                 }
                 .scrollIndicators(.hidden)
@@ -444,6 +454,10 @@ struct CalendarTabView: View {
                             deleteRecurringDialogMessage
                         }
            }
+           .sheet(isPresented: $showingJoinSharedEvent) {
+               JoinSharedEventView()
+                   .preferredColorScheme(.dark)
+           }
         }
 
     // MARK: - Header
@@ -538,9 +552,10 @@ struct CalendarTabView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                
-                NavigationLink {
-                    SettingsView()
+
+                // JOIN SHARED EVENT BUTTON
+                Button {
+                    showingJoinSharedEvent = true
                 } label: {
                     ZStack {
                         Circle()
@@ -549,17 +564,13 @@ struct CalendarTabView: View {
                                 Circle().stroke(LColors.glassBorder, lineWidth: 1)
                             )
                             .frame(width: 34, height: 34)
-                        
-                        Image("settingsfill")
-                            .renderingMode(.template)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 16, height: 16)
-                            .foregroundColor(.white)
+
+                        Image(systemName: "person.crop.circle.badge.plus")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white)
                     }
                 }
                 .buttonStyle(.plain)
-                .onboardingTarget("calendarSettingsIcon")
             }
             .padding(.horizontal, LSpacing.pageHorizontal)
             .padding(.vertical, 16)
@@ -972,7 +983,14 @@ struct CalendarTabView: View {
 struct EventSheet: View {
     @Environment(\.modelContext) private var modelContext
     @StateObject private var limits = LimitManager.shared
+    @Query private var authUsers: [AuthUser]
     var onClose: (() -> Void)? = nil
+
+    // API-fetched attendees for shared events (replaces local EventAttendee queries)
+    @State private var apiAttendees: [SharedEventAttendeeDTO] = []
+    @State private var apiCurrentUserAttendee: SharedEventAttendeeDTO? = nil
+    @State private var isLoadingAttendees: Bool = false
+    @State private var sharedEventServerId: String? = nil
 
     let selectedDate: Date
     let editingEvent: CalendarEvent?
@@ -1081,6 +1099,13 @@ struct EventSheet: View {
     @State private var showRecurringEditScopeDialog = false
     @State private var showDeleteConfirm = false
     @State private var showRecurringDeleteScopeDialog = false
+    @State private var inviteDisplayName = ""
+    @State private var inviteUserId = ""
+    @State private var showInviteAttendeeSection = false
+    @State private var joinCodeStatusMessage = ""
+    @State private var joinCodeInput: String = ""
+    @State private var showJoinByCode = false
+    @State private var isEventShared: Bool = false
 
     private let colorOptions = ["#5b8def","#a855f7","#ec4899","#4caf50","#ff9800","#f44336","#00dbff"]
 
@@ -1111,6 +1136,24 @@ struct EventSheet: View {
         editingEvent != nil
     }
 
+    private var canInviteAttendees: Bool {
+        guard let event = editingEvent, event.isSharedEvent else { return false }
+        guard let myAttendee = apiCurrentUserAttendee else { return false }
+        return myAttendee.isHost || myAttendee.status == "owner"
+    }
+    
+    private var canAcceptCurrentInvite: Bool {
+        guard let event = editingEvent, event.isSharedEvent else { return false }
+        guard let myAttendee = apiCurrentUserAttendee else { return false }
+        return !myAttendee.isHost && myAttendee.status == "invited"
+    }
+
+    private var canLeaveSharedEvent: Bool {
+        guard let event = editingEvent, event.isSharedEvent else { return false }
+        guard let myAttendee = apiCurrentUserAttendee else { return false }
+        return !myAttendee.isHost && myAttendee.status == "joined"
+    }
+
     private var occurrenceAnchorDate: Date {
         guard let editingEvent else { return selectedDate }
         if isEditingOccurrenceFromSeries {
@@ -1122,6 +1165,33 @@ struct EventSheet: View {
     private var displayTimeZone: TimeZone {
         TimeZone(identifier: NotificationManager.shared.effectiveTimezoneID) ?? .current
     }
+    
+    private var currentUserId: String {
+        // Use the backend serverId from AuthUser — this is the MongoDB _id
+        // the shared-events API keys everything to.
+        if let id = authUsers.first?.serverId, !id.isEmpty { return id }
+        // Fallback: stable device-local UUID (only reached before first sign-in)
+        let key = "LystariaCurrentUserId"
+        if let existing = UserDefaults.standard.string(forKey: key), !existing.isEmpty {
+            return existing
+        }
+        let newId = UUID().uuidString
+        UserDefaults.standard.set(newId, forKey: key)
+        return newId
+    }
+
+    private var currentUserName: String {
+        if let name = authUsers.first?.displayName,
+           !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return name
+        }
+        if let saved = UserDefaults.standard.string(forKey: "LystariaDisplayName"),
+           !saved.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return saved
+        }
+        return UIDevice.current.name
+    }
+    
     private var tzCalendar: Calendar {
         var cal = Calendar.current
         cal.timeZone = displayTimeZone
@@ -1137,7 +1207,19 @@ struct EventSheet: View {
         ) {
             formContent
         }
-        .onAppear { loadInitialState() }
+        .onAppear {
+            loadInitialState()
+            // Seed isEventShared from the editing event if present
+            isEventShared = editingEvent?.isSharedEvent ?? false
+            // If editing an existing shared event, seed sharedEventServerId
+            // and fetch live attendees from the API.
+            if let e = editingEvent, e.isSharedEvent, let sid = e.serverId, !sid.isEmpty {
+                sharedEventServerId = sid
+                Task {
+                    await fetchAttendeesFromAPI(eventId: sid)
+                }
+            }
+        }
         .sheet(isPresented: $showLocationSearchSheet) {
             LocationSearchSheet { displayName, _, _ in
                 location = displayName
@@ -1625,6 +1707,40 @@ struct EventSheet: View {
                             eventColor = newColor.toHexString()
                         }
                 }
+            
+            if let event = editingEvent, event.isSharedEvent {
+                attendeeSection(for: event)
+            }
+
+                // SHARE EVENT toggle — only shown when creating a new event
+                // (existing shared events already show the attendee section above)
+                if editingEvent == nil {
+                    GlassCard(padding: 16) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Toggle(isOn: $isEventShared) {
+                                HStack(spacing: 10) {
+                                    Image(systemName: "person.2.fill")
+                                        .font(.system(size: 15, weight: .semibold))
+                                        .foregroundStyle(isEventShared ? LColors.accent : LColors.textSecondary)
+                                    Text("Share Event")
+                                        .font(.system(size: 15, weight: .semibold))
+                                        .foregroundStyle(LColors.textPrimary)
+                                }
+                            }
+                            .tint(LColors.accent)
+
+                            if isEventShared {
+                                Text("A join code will be generated after saving. Share it so others can join from the calendar header.")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(LColors.textSecondary)
+                            } else {
+                                Text("Turn on to create a shared event others can join with a code.")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(LColors.textSecondary)
+                            }
+                        }
+                    }
+                }
 
                 if canDeleteCurrentEvent {
                     LButton(
@@ -1639,6 +1755,65 @@ struct EventSheet: View {
         .contentShape(Rectangle())
         .onTapGesture {
             dismissKeyboard()
+        }
+        .sheet(isPresented: $showJoinByCode) {
+            NavigationStack {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Join Event")
+                            .font(.system(size: 26, weight: .bold))
+                            .foregroundStyle(LColors.textPrimary)
+
+                        Text("Enter a join code to add yourself to a shared event.")
+                            .font(.system(size: 14))
+                            .foregroundStyle(LColors.textSecondary)
+
+                        CalendarLabeledGlassField(label: "JOIN CODE") {
+                            TextField("Example: AB12CD34", text: $joinCodeInput)
+                                .textFieldStyle(.plain)
+                                .foregroundStyle(LColors.textPrimary)
+                                .textInputAutocapitalization(.characters)
+                                .autocorrectionDisabled()
+                        }
+
+                        Button {
+                            joinEventByCode()
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "arrow.right.circle.fill")
+                                    .font(.system(size: 12, weight: .semibold))
+                                Text("Join Event")
+                                    .font(.system(size: 13, weight: .semibold))
+                            }
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(LGradients.blue)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(joinCodeInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .opacity(joinCodeInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.5 : 1)
+
+                        if !joinCodeStatusMessage.isEmpty {
+                            Text(joinCodeStatusMessage)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(LColors.textSecondary)
+                        }
+                    }
+                    .padding()
+                }
+                .background(LystariaBackground().ignoresSafeArea())
+                .navigationTitle("Join Event")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Close") {
+                            showJoinByCode = false
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -1848,11 +2023,467 @@ struct EventSheet: View {
         return try? modelContext.fetch(descriptor).first
     }
 
+    private func attendees(for event: CalendarEvent) -> [SharedEventAttendeeDTO] {
+        return apiAttendees
+    }
+
+    @ViewBuilder
+    private func attendeeSection(for event: CalendarEvent) -> some View {
+        let people = apiAttendees
+        let joinCode = event.joinCode
+
+        VStack(alignment: .leading, spacing: 10) {
+            Text("ATTENDEES")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(LColors.textSecondary)
+                .tracking(0.5)
+
+            Text("JOIN CODE")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(LColors.textSecondary)
+
+            Text(joinCode.isEmpty ? "—" : joinCode)
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(LColors.textPrimary)
+
+            HStack(spacing: 10) {
+                Button {
+                    UIPasteboard.general.string = joinCode
+                    joinCodeStatusMessage = "Join code copied."
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "doc.on.doc.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("Copy Code")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(LGradients.blue)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+
+                ShareLink(
+                    item: "Join my Lystaria event \"\(event.title)\" using code: \(joinCode)",
+                    subject: Text(event.title),
+                    message: Text("Use this join code in Lystaria: \(joinCode)")
+                ) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "square.and.arrow.up.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("Share Event")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundStyle(LColors.textPrimary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(LColors.glassBorder, lineWidth: 1)
+                    )
+                }
+            }
+
+            Button {
+                joinCodeStatusMessage = ""
+                showJoinByCode = true
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "person.crop.circle.badge.plus")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text("Open Join Event Screen")
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(LGradients.blue)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+            .buttonStyle(.plain)
+
+            if !joinCodeStatusMessage.isEmpty {
+                Text(joinCodeStatusMessage)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(LColors.textSecondary)
+            }
+
+            if isLoadingAttendees {
+                ProgressView()
+                    .tint(LColors.accent)
+                    .padding(.vertical, 4)
+            } else if people.isEmpty {
+                Text("No attendees yet.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(LColors.textSecondary)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(people) { person in
+                        HStack(spacing: 10) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(person.displayName)
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(LColors.textPrimary)
+                                    .lineLimit(1)
+
+                                Text(person.status.replacingOccurrences(of: "_", with: " ").capitalized)
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(LColors.textSecondary)
+                            }
+
+                            Spacer()
+
+                            if person.isHost {
+                                Text("HOST")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 5)
+                                    .background(LGradients.blue)
+                                    .clipShape(Capsule())
+                            }
+                        }
+                        .padding(12)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(LColors.glassBorder, lineWidth: 1)
+                        )
+                    }
+                }
+            }
+
+            if canInviteAttendees {
+                VStack(alignment: .leading, spacing: 10) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showInviteAttendeeSection.toggle()
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "person.badge.plus")
+                                .font(.system(size: 12, weight: .semibold))
+                            Text(showInviteAttendeeSection ? "Hide Invite Form" : "Invite Attendee")
+                                .font(.system(size: 13, weight: .semibold))
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .background(LGradients.blue)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                    .buttonStyle(.plain)
+
+                    if showInviteAttendeeSection {
+                        VStack(alignment: .leading, spacing: 10) {
+                            CalendarLabeledGlassField(label: "DISPLAY NAME") {
+                                TextField("Attendee name", text: $inviteDisplayName)
+                                    .textFieldStyle(.plain)
+                                    .foregroundStyle(LColors.textPrimary)
+                            }
+
+                            CalendarLabeledGlassField(label: "USER ID") {
+                                TextField("Attendee ID", text: $inviteUserId)
+                                    .textFieldStyle(.plain)
+                                    .foregroundStyle(LColors.textPrimary)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
+                            }
+
+                            HStack {
+                                Spacer()
+
+                                Button {
+                                    Task { await inviteAttendee(to: event) }
+                                } label: {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "paperplane.fill")
+                                            .font(.system(size: 12, weight: .semibold))
+                                        Text("Add Invite")
+                                            .font(.system(size: 13, weight: .semibold))
+                                    }
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 10)
+                                    .background(LGradients.blue)
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(inviteDisplayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || inviteUserId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                .opacity((inviteDisplayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || inviteUserId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) ? 0.5 : 1)
+                            }
+                        }
+                        .padding(.top, 4)
+                    }
+                }
+                .padding(.top, 6)
+            }
+
+            if canAcceptCurrentInvite || canLeaveSharedEvent {
+                VStack(alignment: .leading, spacing: 10) {
+                    if canAcceptCurrentInvite {
+                        Button {
+                            Task { await acceptInvite(to: event) }
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 12, weight: .semibold))
+                                Text("Join Event")
+                                    .font(.system(size: 13, weight: .semibold))
+                            }
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(LGradients.blue)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    if canLeaveSharedEvent {
+                        Button {
+                            Task { await leaveSharedEvent(event) }
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 12, weight: .semibold))
+                                Text("Leave Event")
+                                    .font(.system(size: 13, weight: .semibold))
+                            }
+                            .foregroundStyle(LColors.textPrimary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.top, 6)
+            }
+        }
+    }
+
     private func handleSaveTapped() {
         if isEditingRecurringSeries {
             showRecurringEditScopeDialog = true
         } else {
             save(editScope: .allEvents)
+        }
+    }
+
+    // MARK: - API Helpers
+
+    /// Fetch attendees for a shared event from the backend and update local state.
+    private func fetchAttendeesFromAPI(eventId: String) async {
+        isLoadingAttendees = true
+        defer { isLoadingAttendees = false }
+        do {
+            let fetched = try await SharedEventsAPIService.shared.fetchAttendees(eventId: eventId)
+            apiAttendees = fetched
+            apiCurrentUserAttendee = fetched.first(where: { $0.userId == currentUserId })
+        } catch {
+            print("❌ [SharedEvents] fetchAttendees failed: \(error)")
+        }
+    }
+
+    private func inviteAttendee(to event: CalendarEvent) async {
+        let cleanName = inviteDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanUserId = inviteUserId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanName.isEmpty, !cleanUserId.isEmpty else { return }
+        guard let eventId = sharedEventServerId ?? event.serverId, !eventId.isEmpty else {
+            joinCodeStatusMessage = "Event not yet synced to server."
+            return
+        }
+
+        do {
+            let response = try await SharedEventsAPIService.shared.inviteAttendee(
+                eventId: eventId,
+                request: InviteSharedEventAttendeeRequestDTO(
+                    actorUserId: currentUserId,
+                    inviteeUserId: cleanUserId,
+                    inviteeDisplayName: cleanName
+                )
+            )
+            apiAttendees = response.attendees
+            apiCurrentUserAttendee = response.attendees.first(where: { $0.userId == currentUserId })
+            event.attendeeCount = response.event.attendeeCount
+            event.updatedAt = Date()
+            try? modelContext.save()
+            inviteDisplayName = ""
+            inviteUserId = ""
+            showInviteAttendeeSection = false
+            joinCodeStatusMessage = "\(cleanName) invited."
+        } catch {
+            joinCodeStatusMessage = "Failed to invite: \(error.localizedDescription)"
+            print("❌ [SharedEvents] inviteAttendee failed: \(error)")
+        }
+    }
+
+    private func acceptInvite(to event: CalendarEvent) async {
+        guard let eventId = sharedEventServerId ?? event.serverId, !eventId.isEmpty else {
+            joinCodeStatusMessage = "Event not yet synced to server."
+            return
+        }
+
+        do {
+            let response = try await SharedEventsAPIService.shared.acceptInvite(
+                eventId: eventId,
+                request: AcceptSharedEventInviteRequestDTO(
+                    userId: currentUserId,
+                    displayName: currentUserName
+                )
+            )
+            apiAttendees = response.attendees
+            apiCurrentUserAttendee = response.attendees.first(where: { $0.userId == currentUserId })
+            event.participationStatus = .joined
+            event.attendeeCount = response.event.attendeeCount
+            event.updatedAt = Date()
+            try? modelContext.save()
+            joinCodeStatusMessage = "You joined the event."
+        } catch {
+            joinCodeStatusMessage = "Failed to join: \(error.localizedDescription)"
+            print("❌ [SharedEvents] acceptInvite failed: \(error)")
+        }
+    }
+
+    private func leaveSharedEvent(_ event: CalendarEvent) async {
+        guard let eventId = sharedEventServerId ?? event.serverId, !eventId.isEmpty else {
+            joinCodeStatusMessage = "Event not yet synced to server."
+            return
+        }
+
+        do {
+            let response = try await SharedEventsAPIService.shared.leaveSharedEvent(
+                eventId: eventId,
+                request: LeaveSharedEventRequestDTO(userId: currentUserId)
+            )
+            apiAttendees = response.attendees
+            apiCurrentUserAttendee = response.attendees.first(where: { $0.userId == currentUserId })
+            event.participationStatus = .left
+            event.attendeeCount = response.event.attendeeCount
+            event.updatedAt = Date()
+            try? modelContext.save()
+        } catch {
+            joinCodeStatusMessage = "Failed to leave: \(error.localizedDescription)"
+            print("❌ [SharedEvents] leaveSharedEvent failed: \(error)")
+        }
+    }
+
+    private func joinEventByCode() {
+        let code = joinCodeInput
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+
+        guard !code.isEmpty else {
+            joinCodeStatusMessage = "Enter a join code first."
+            return
+        }
+
+        Task {
+            do {
+                // 1. Look up the event by join code on the backend
+                let lookupResponse = try await SharedEventsAPIService.shared.fetchSharedEventByJoinCode(
+                    joinCode: code,
+                    currentUserId: currentUserId
+                )
+                let dto = lookupResponse.event
+
+                // 2. Join via backend
+                let joinResponse = try await SharedEventsAPIService.shared.joinSharedEventByCode(
+                    JoinSharedEventByCodeRequestDTO(
+                        joinCode: code,
+                        userId: currentUserId,
+                        displayName: currentUserName
+                    )
+                )
+
+                // 3. Upsert a local CalendarEvent so it appears in the calendar
+                let localEventId = dto.localEventId
+                let descriptor = FetchDescriptor<CalendarEvent>(
+                    predicate: #Predicate { $0.localEventId == localEventId }
+                )
+                let existingLocal = try? modelContext.fetch(descriptor).first
+
+                let isoParser: DateFormatter = {
+                    let df = DateFormatter()
+                    df.locale = Locale(identifier: "en_US_POSIX")
+                    df.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSZ"
+                    return df
+                }()
+                let parsedStart = isoParser.date(from: dto.startDate) ?? Date()
+                let parsedEnd = dto.endDate.flatMap { isoParser.date(from: $0) }
+
+                if let local = existingLocal {
+                    // Already on device — just refresh participation status
+                    local.participationStatus = .joined
+                    local.serverId = dto.id
+                    local.joinCode = dto.joinCode
+                    local.attendeeCount = joinResponse.event.attendeeCount
+                    local.updatedAt = Date()
+                } else {
+                    // Create a local mirror of the backend event
+                    let newEvent = CalendarEvent(
+                        title: dto.title,
+                        startDate: parsedStart,
+                        endDate: parsedEnd,
+                        allDay: dto.allDay,
+                        eventDescription: dto.eventDescription,
+                        color: dto.color,
+                        meetingUrl: dto.meetingUrl,
+                        location: dto.location,
+                        recurrenceRRule: dto.recurrenceRRule,
+                        timeZoneId: dto.timeZoneId,
+                        recurrence: nil,
+                        recurrenceExceptions: [],
+                        calendarId: dto.calendarId,
+                        serverId: dto.id,
+                        localEventId: dto.localEventId,
+                        syncState: .synced,
+                        isSharedEvent: true,
+                        isJoinable: dto.isJoinable,
+                        shareMode: CalendarEventShareMode(rawValue: dto.shareMode) ?? .shared,
+                        participationStatus: .joined,
+                        ownerUserId: dto.ownerUserId,
+                        ownerDisplayName: dto.ownerDisplayName,
+                        joinCode: dto.joinCode,
+                        attendeeCount: joinResponse.event.attendeeCount
+                    )
+                    modelContext.insert(newEvent)
+                }
+
+                try? modelContext.save()
+
+                // 4. Update the attendee state so the UI reflects immediately
+                apiAttendees = joinResponse.attendees
+                apiCurrentUserAttendee = joinResponse.attendees.first(where: { $0.userId == currentUserId })
+
+                joinCodeStatusMessage = "You joined the event."
+                joinCodeInput = ""
+            } catch SharedEventsAPIError.httpError(let code, let message) {
+                switch message {
+                case "HOST_ALREADY_MEMBER":
+                    joinCodeStatusMessage = "You already host this event."
+                case "EVENT_NOT_JOINABLE":
+                    joinCodeStatusMessage = "This event is not open to joining."
+                case "EVENT_NOT_FOUND":
+                    joinCodeStatusMessage = "No event found with that code."
+                default:
+                    joinCodeStatusMessage = "Error \(code): \(message)"
+                }
+            } catch {
+                joinCodeStatusMessage = "Failed: \(error.localizedDescription)"
+                print("❌ [SharedEvents] joinEventByCode failed: \(error)")
+            }
         }
     }
 
@@ -2159,15 +2790,95 @@ struct EventSheet: View {
                 splitFromSeriesLocalId: nil,
                 originalOccurrenceDate: nil,
                 splitEffectiveFrom: nil,
-                exceptionKind: nil
+                exceptionKind: nil,
+                isSharedEvent: isEventShared,
+                isJoinable: isEventShared,
+                shareMode: isEventShared ? .shared : .personal,
+                participationStatus: isEventShared ? .owner : .owner,
+                ownerUserId: isEventShared ? currentUserId : nil,
+                ownerDisplayName: isEventShared ? currentUserName : nil,
+                joinCode: "",  // filled in by API response if shared
+                attendeeCount: 0
             )
             modelContext.insert(e)
+
             if let id = selectedCalendarId {
                 e.calendar = calendars.first(where: { $0.serverId == id })
             } else {
                 e.calendar = nil
             }
             targetEvent = e
+
+            // Only call the shared-events API if the user toggled sharing on
+            if isEventShared {
+                let capturedLocalEventId = e.localEventId
+                let capturedTitle = cleanTitle
+                let capturedStart = start
+                let capturedEnd = end
+                let capturedAllDay = isAllDay
+                let capturedDesc = cleanDesc.isEmpty ? nil as String? : cleanDesc
+                let capturedColor = chosenColor
+                let capturedMeetingUrl = cleanMeetingUrl.isEmpty ? nil as String? : cleanMeetingUrl
+                let capturedLocation = cleanLocation.isEmpty ? nil as String? : cleanLocation
+                let capturedRRule = resolvedRRule
+                let capturedTzId = NotificationManager.shared.effectiveTimezoneID
+                let capturedCalendarId = selectedCalendarId
+                let capturedOwnerId = currentUserId
+                let capturedOwnerName = currentUserName
+
+                let isoFormatter: DateFormatter = {
+                    let df = DateFormatter()
+                    df.locale = Locale(identifier: "en_US_POSIX")
+                    df.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSZ"
+                    return df
+                }()
+
+                Task { @MainActor in
+                    do {
+                        let response = try await SharedEventsAPIService.shared.createSharedEvent(
+                            CreateSharedEventRequestDTO(
+                                ownerUserId: capturedOwnerId,
+                                ownerDisplayName: capturedOwnerName,
+                                localEventId: capturedLocalEventId,
+                                title: capturedTitle,
+                                startDate: isoFormatter.string(from: capturedStart),
+                                endDate: capturedEnd.map { isoFormatter.string(from: $0) },
+                                allDay: capturedAllDay,
+                                eventDescription: capturedDesc,
+                                color: capturedColor,
+                                meetingUrl: capturedMeetingUrl,
+                                location: capturedLocation,
+                                recurrenceRRule: capturedRRule,
+                                timeZoneId: capturedTzId,
+                                calendarId: capturedCalendarId,
+                                serverId: nil,
+                                isJoinable: true,
+                                shareMode: "shared",
+                                requiresApprovalToJoin: false,
+                                allowGuestsToInvite: false,
+                                allowGuestsToEdit: false
+                            )
+                        )
+                        // Write the API-generated join code and backend _id back to the local event
+                        let descriptor = FetchDescriptor<CalendarEvent>(
+                            predicate: #Predicate { $0.localEventId == capturedLocalEventId }
+                        )
+                        if let local = try? modelContext.fetch(descriptor).first {
+                            local.serverId = response.event.id
+                            local.joinCode = response.event.joinCode
+                            local.attendeeCount = response.event.attendeeCount
+                            local.syncState = .synced
+                            local.lastSyncedAt = Date()
+                            try? modelContext.save()
+                        }
+                        sharedEventServerId = response.event.id
+                        apiAttendees = response.attendees
+                        apiCurrentUserAttendee = response.attendees.first(where: { $0.userId == capturedOwnerId })
+                    } catch {
+                        print("❌ [SharedEvents] createSharedEvent failed: \(error)")
+                    }
+                }
+            }
         }
 
         applyReminderLink(

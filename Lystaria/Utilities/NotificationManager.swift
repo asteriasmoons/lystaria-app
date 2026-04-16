@@ -826,8 +826,17 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
         content: UNMutableNotificationContent,
         baseID: String
     ) {
-        let now      = Date()
-        let fireDate = ReminderCompute.nextRun(after: now, reminder: reminder)
+        let now = Date()
+        // For interval reminders, nextRunAt is already the window-clamped next fire time
+        // set by acknowledgeOneDueHabitReminder. Use it directly instead of recomputing
+        // via nextRun, which has no window awareness.
+        // For non-interval kinds, nextRun recomputes correctly from schedule.
+        let fireDate: Date
+        if schedule.kind == .interval {
+            fireDate = reminder.nextRunAt > now ? reminder.nextRunAt : ReminderCompute.nextRun(after: now, reminder: reminder)
+        } else {
+            fireDate = ReminderCompute.nextRun(after: now, reminder: reminder)
+        }
 
         var cal = Calendar.current
         cal.timeZone = TimeZone(identifier: reminder.timezone) ?? .current

@@ -10,35 +10,62 @@ import SwiftUI
 struct ExerciseLogCard: View {
     let entries: [ExerciseLogEntry]
     var onTap: () -> Void
+    var onAdd: () -> Void
 
     var body: some View {
         GlassCard {
-            Button {
-                onTap()
-            } label: {
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack(alignment: .top, spacing: 14) {
-                        GradientTitle(text: "Exercise Log", size: 20)
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 10) {
+                    GradientTitle(text: "Exercise Log", size: 20)
 
-                        Spacer(minLength: 0)
+                    Spacer(minLength: 0)
 
+                    Button {
+                        onAdd()
+                    } label: {
                         ZStack {
                             Circle()
                                 .fill(Color.white.opacity(0.08))
                                 .overlay(
                                     Circle().stroke(LColors.glassBorder, lineWidth: 1)
                                 )
-                                .frame(width: 44, height: 44)
+                                .frame(width: 34, height: 34)
+
+                            Image("wavyplus")
+                                .renderingMode(.template)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 14, height: 14)
+                                .foregroundStyle(.white)
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        onTap()
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.08))
+                                .overlay(
+                                    Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                                )
+                                .frame(width: 34, height: 34)
 
                             Image("exercisefill")
                                 .renderingMode(.template)
                                 .resizable()
                                 .scaledToFit()
-                                .frame(width: 20, height: 20)
+                                .frame(width: 16, height: 16)
                                 .foregroundStyle(.white)
                         }
                     }
+                    .buttonStyle(.plain)
+                }
 
+                Button {
+                    onTap()
+                } label: {
                     VStack(alignment: .leading, spacing: 12) {
                         if latestDayEntries.isEmpty {
                             Text("Log your exercises to see them here every day. Refreshes automatically at midnight. Tap card to view your history.")
@@ -51,11 +78,12 @@ struct ExerciseLogCard: View {
                             }
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

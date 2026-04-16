@@ -14,6 +14,7 @@ struct HealthPageView: View {
     @StateObject private var bodyStateManager = BodyStateHealthKitManager.shared
     @StateObject private var stepManager = HealthKitManager.shared
     @StateObject private var waterManager = WaterHealthKitManager.shared
+    @StateObject private var sleepManager = SleepHealthKitManager.shared
     @Query(sort: \HealthMetricEntry.date, order: .reverse)
     private var healthEntries: [HealthMetricEntry]
 
@@ -45,6 +46,7 @@ struct HealthPageView: View {
 
                 VStack(alignment: .leading, spacing: 18) {
                     healthStreaksCard
+                    sleepScoreCard
                     dailyCompletionCard
                         .id(completionRefreshTick)
                     bodyStateCard
@@ -52,12 +54,20 @@ struct HealthPageView: View {
                         withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                             showHealthHistoryPopup = true
                         }
+                    } onAdd: {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                            showAddMetricsPopup = true
+                        }
                     }
                     .id(dayRefreshID)
 
                     ExerciseLogCard(entries: exerciseEntries) {
                         withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                             showExerciseHistoryPopup = true
+                        }
+                    } onAdd: {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                            showAddExercisePopup = true
                         }
                     }
                     .id(dayRefreshID)
@@ -205,6 +215,8 @@ struct HealthPageView: View {
             } catch {
                 print("HealthKit authorization error:", error)
             }
+
+            await sleepManager.requestAuthorization()
         }
         .task {
             while !Task.isCancelled {
@@ -225,9 +237,99 @@ struct HealthPageView: View {
                 completionRefreshTick = Date()
                 Task {
                     await bodyStateManager.refreshAndStore(in: modelContext)
+                    await sleepManager.fetchLastNightSleep()
                 }
             }
         }
+    }
+
+    private var sleepScoreCard: some View {
+        let hours = sleepManager.lastNightHours
+        let score = sleepManager.sleepScore
+        let label = sleepManager.sleepLabel
+        let hasData = hours > 0
+
+        // Sync to watch
+        HealthWidgetSync.syncSleep(hours: hours, score: score, label: label)
+
+        return GlassCard {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 12) {
+                    Image(systemName: "moon.zzz.fill")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 22, height: 22)
+
+                    GradientTitle(text: "Sleep Score", size: 24)
+                    Spacer()
+
+                    // Label badge
+                    Text(label)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(
+                            Capsule()
+                                .fill(hasData ? AnyShapeStyle(LGradients.blue) : AnyShapeStyle(Color.white.opacity(0.12)))
+                        )
+                        .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
+                }
+
+                HStack(alignment: .center, spacing: 20) {
+                    // Progress ring
+                    ZStack {
+                        Circle()
+                            .stroke(Color.white.opacity(0.10), lineWidth: 10)
+                            .frame(width: 90, height: 90)
+
+                        Circle()
+                            .trim(from: 0, to: hasData ? score : 0)
+                            .stroke(
+                                AnyShapeStyle(LGradients.blue),
+                                style: StrokeStyle(lineWidth: 10, lineCap: .round)
+                            )
+                            .rotationEffect(.degrees(-90))
+                            .frame(width: 90, height: 90)
+
+                        VStack(spacing: 2) {
+                            Text(hasData ? String(format: "%.1f", hours) : "--")
+                                .font(.system(size: 20, weight: .bold))
+                                .foregroundStyle(.white)
+                            Text("hrs")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(LColors.textSecondary)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        sleepStatRow(label: "Last Night", value: hasData ? String(format: "%.1fh", hours) : "No data")
+                        sleepStatRow(label: "Goal", value: String(format: "%.0fh", sleepManager.sleepGoalHours))
+                        sleepStatRow(label: "Score", value: hasData ? "\(Int((score * 100).rounded()))%" : "--")
+                    }
+
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+    }
+
+    private func sleepStatRow(label: String, value: String) -> some View {
+        HStack {
+            Text(label.uppercased())
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(LColors.textSecondary)
+                .tracking(0.4)
+            Spacer()
+            Text(value)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(.white)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(LColors.glassBorder, lineWidth: 1))
     }
 
     private var dailyCompletionCard: some View {
@@ -236,6 +338,9 @@ struct HealthPageView: View {
             waterToday: waterManager.todayWaterFlOz,
             stepsToday: stepManager.todaySteps,
         )
+
+        // Keep watch complication completion bubble in sync
+        HealthWidgetSync.syncCompletionPct(arcData.percentage)
 
         return GlassCard {
             VStack(alignment: .leading, spacing: 6) {
@@ -333,58 +438,70 @@ struct HealthPageView: View {
                 Spacer()
 
                 HStack(spacing: 8) {
-                    Button {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                            showAddMetricsPopup = true
-                        }
+                    NavigationLink {
+                        WaterTrackingView()
+                            .preferredColorScheme(.dark)
                     } label: {
-                        Text("+ Metrics")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 10)
-                            .frame(height: 30)
-                            .background(LGradients.blue)
-                            .clipShape(Capsule())
-                            .overlay(
-                                Capsule()
-                                    .stroke(LColors.glassBorder, lineWidth: 1),
-                            )
-                    }
-                    .buttonStyle(.plain)
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.08))
+                                .overlay(
+                                    Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                                )
+                                .frame(width: 34, height: 34)
 
-                    Button {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                            showAddExercisePopup = true
+                            Image("glassfill")
+                                .renderingMode(.template)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 16, height: 16)
+                                .foregroundStyle(.white)
                         }
-                    } label: {
-                        Text("+ Exercise")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 10)
-                            .frame(height: 30)
-                            .background(LGradients.blue)
-                            .clipShape(Capsule())
-                            .overlay(
-                                Capsule()
-                                    .stroke(LColors.glassBorder, lineWidth: 1),
-                            )
                     }
                     .buttonStyle(.plain)
+                    .onboardingTarget("waterIcon")
+
+                    NavigationLink {
+                        StepCountView()
+                            .preferredColorScheme(.dark)
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.08))
+                                .overlay(
+                                    Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                                )
+                                .frame(width: 34, height: 34)
+
+                            Image("shoefill")
+                                .renderingMode(.template)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 16, height: 16)
+                                .foregroundStyle(.white)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .onboardingTarget("stepsIcon")
 
                     NavigationLink {
                         MedicationPageView()
                     } label: {
-                        Text("+ Manager")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 10)
-                            .frame(height: 30)
-                            .background(LGradients.blue)
-                            .clipShape(Capsule())
-                            .overlay(
-                                Capsule()
-                                    .stroke(LColors.glassBorder, lineWidth: 1),
-                            )
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.08))
+                                .overlay(
+                                    Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                                )
+                                .frame(width: 34, height: 34)
+
+                            Image("pillfill")
+                                .renderingMode(.template)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 16, height: 16)
+                                .foregroundStyle(.white)
+                        }
                     }
                     .buttonStyle(.plain)
                     .onboardingTarget("medsIcon")

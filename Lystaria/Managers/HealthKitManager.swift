@@ -20,7 +20,7 @@ final class HealthKitManager: ObservableObject {
     private var stepObserverQuery: HKObserverQuery?
     
     @Published var todaySteps: Double = 0
-    private var stepGoalForSync: Double = {
+    private(set) var stepGoalForSync: Double = {
         // Seed from shared UserDefaults so the observer never overwrites
         // the widget with the hardcoded default before StepCountView appears.
         let stored = UserDefaults(suiteName: HealthWidgetSync.appGroupID)

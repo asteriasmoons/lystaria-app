@@ -14,6 +14,25 @@ struct CalendarOverviewSheet: View {
         TimeZone(identifier: NotificationManager.shared.effectiveTimezoneID) ?? .current
     }
 
+    // Temporary local identity until real shared-user identity is wired in.
+    private var currentUserId: String {
+        let key = "LystariaCurrentUserId"
+        if let existing = UserDefaults.standard.string(forKey: key), !existing.isEmpty {
+            return existing
+        }
+        let newId = UUID().uuidString
+        UserDefaults.standard.set(newId, forKey: key)
+        return newId
+    }
+
+    private var currentUserName: String {
+        if let saved = UserDefaults.standard.string(forKey: "LystariaDisplayName"),
+           !saved.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return saved
+        }
+        return UIDevice.current.name
+    }
+
     private var tzCalendar: Calendar {
         var cal = Calendar.current
         cal.timeZone = displayTimeZone

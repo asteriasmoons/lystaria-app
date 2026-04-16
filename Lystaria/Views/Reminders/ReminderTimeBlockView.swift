@@ -8,14 +8,19 @@ struct ReminderTimeBlockView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
-    let allReminders: [LystariaReminder]
+    @Query var allReminders: [LystariaReminder]
     let onMarkDone: (LystariaReminder) -> Void
+
+    @Query var habits: [Habit]
 
     @State private var selectedDate: Date = .init()
     @State private var editingReminder: LystariaReminder? = nil
+    @State private var detailReminder: LystariaReminder? = nil
+    @State private var showingDetailPopup = false
     /// Optimistic local tracking: IDs marked done this session so the circle
     /// flips immediately without waiting for SwiftData to propagate.
     @State private var locallyDoneIDs: Set<PersistentIdentifier> = []
+    @State private var toastMessage: String? = nil
 
     private var tzCalendar: Calendar {
         ReminderCompute.tzCalendar
@@ -34,14 +39,35 @@ struct ReminderTimeBlockView: View {
 
     // MARK: - Done state
 
-    private func reminderIsDone(_ reminder: LystariaReminder) -> Bool {
-        if locallyDoneIDs.contains(reminder.persistentModelID) { return true }
-        // Non-recurring: check acknowledged or completed today
-        if !reminder.isRecurring {
+    /// Whether to show the "Done" status badge.
+    /// For recurring reminders: only show Done if completed today AND nextRunAt has moved past today
+    /// (meaning no more occurrences today). If nextRunAt is still today, an upcoming slot exists.
+    /// For non-recurring (once): done if completed or acknowledged today.
+    private func reminderShowsDoneBadge(_ reminder: LystariaReminder) -> Bool {
+        if reminder.isRecurring {
+            if let completedAt = reminder.lastCompletedAt, Calendar.current.isDateInToday(completedAt) {
+                return !Calendar.current.isDateInToday(reminder.nextRunAt)
+            }
+            return false
+        } else {
             if let completedAt = reminder.lastCompletedAt, Calendar.current.isDateInToday(completedAt) { return true }
             if let ack = reminder.acknowledgedAt, Calendar.current.isDateInToday(ack) { return true }
+            return false
         }
+    }
+
+    /// Whether the circle button should appear filled — only for non-recurring (once) reminders.
+    private func reminderCircleIsFilled(_ reminder: LystariaReminder) -> Bool {
+        if reminder.isRecurring { return false }
+        if locallyDoneIDs.contains(reminder.persistentModelID) { return true }
+        if let completedAt = reminder.lastCompletedAt, Calendar.current.isDateInToday(completedAt) { return true }
+        if let ack = reminder.acknowledgedAt, Calendar.current.isDateInToday(ack) { return true }
         return false
+    }
+
+    /// Used for overdue/dueNow/upcoming logic — a reminder is "done" if its badge shows done.
+    private func reminderIsDone(_ reminder: LystariaReminder) -> Bool {
+        reminderShowsDoneBadge(reminder)
     }
 
     // MARK: - Slot resolution
@@ -155,10 +181,17 @@ struct ReminderTimeBlockView: View {
                     proxy.scrollTo(targetHour, anchor: .top)
                 }
             }
+            toastOverlay
         }
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: toastMessage)
         .fullScreenCover(item: $editingReminder) { r in
             EditReminderSheet(onClose: { editingReminder = nil }, reminder: r)
                 .preferredColorScheme(.dark)
+        }
+        .overlay {
+            if showingDetailPopup, let r = detailReminder {
+                timeBlockDetailPopup(reminder: r)
+            }
         }
         .navigationBarHidden(true)
     }
@@ -272,7 +305,8 @@ struct ReminderTimeBlockView: View {
     private func reminderSlotCard(reminder: LystariaReminder, fireDate: Date) -> some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
             let now = context.date
-            let done = reminderIsDone(reminder)
+            let badgeDone = reminderShowsDoneBadge(reminder)
+            let circleFilled = reminderCircleIsFilled(reminder)
             let overdue = isOverdue(reminder, fireDate: fireDate)
             let dueNow = !overdue && isDueNow(reminder, fireDate: fireDate, now: now)
             let upcoming = !overdue && !dueNow && isUpcoming(reminder, fireDate: fireDate, now: now)
@@ -281,7 +315,7 @@ struct ReminderTimeBlockView: View {
 
             HStack(spacing: 0) {
                 RoundedRectangle(cornerRadius: 2)
-                    .fill(done ? LColors.success : (overdue || dueNow ? accentColor : reminderColor))
+                    .fill(reminderColor)
                     .frame(width: 4)
                     .padding(.vertical, 2)
 
@@ -297,7 +331,7 @@ struct ReminderTimeBlockView: View {
                             .clipShape(Capsule())
                             .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
 
-                        if done {
+                        if badgeDone {
                             TimeBlockStatusBadge(label: "Done", style: .upcoming)
                         } else if overdue {
                             TimeBlockStatusBadge(label: "Overdue", style: .overdue)
@@ -323,7 +357,7 @@ struct ReminderTimeBlockView: View {
 
                     Text(formatTime(fireDate))
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(done ? LColors.success : accentColor.opacity(0.9))
+                        .foregroundStyle(accentColor.opacity(0.9))
                 }
                 .padding(.leading, 10)
 
@@ -334,26 +368,29 @@ struct ReminderTimeBlockView: View {
                     Button {
                         print("[TimeBlock] Circle tapped for: \(reminder.title)")
                         print("[TimeBlock] isRecurring: \(reminder.isRecurring)")
-                        print("[TimeBlock] done: \(done)")
-                        print("[TimeBlock] disabled: \(done)")
+                        print("[TimeBlock] badgeDone: \(badgeDone)")
+                        print("[TimeBlock] circleFilled: \(circleFilled)")
                         if let live = modelContext.model(for: id) as? LystariaReminder {
                             print("[TimeBlock] Got live model: \(live.title)")
                             if !live.isRecurring {
                                 locallyDoneIDs.insert(id)
                             }
+                            logHabitIfLinked(live)
                             onMarkDone(live)
                             // For recurring reminders, clear immediately so circle doesn't stay filled
                             if live.isRecurring {
                                 locallyDoneIDs.remove(id)
                             }
+                            showToast("\(live.title) marked complete")
                         }
                     } label: {
-                        Image(systemName: done ? "checkmark.circle.fill" : "circle")
+                        Image(systemName: circleFilled ? "checkmark.circle.fill" : "circle")
                             .font(.system(size: 22))
-                            .foregroundStyle(done ? LColors.success : LColors.textSecondary)
+                            .foregroundStyle(circleFilled ? LColors.success : LColors.textSecondary)
                     }
                     .buttonStyle(.plain)
-                    .disabled(done)
+                    .disabled(circleFilled)
+
 
                     Button { editingReminder = reminder } label: {
                         Image(systemName: "pencil")
@@ -372,6 +409,224 @@ struct ReminderTimeBlockView: View {
             .background(LColors.glassSurface)
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(LColors.glassBorder, lineWidth: 1))
+            .onTapGesture {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                    detailReminder = reminder
+                    showingDetailPopup = true
+                }
+            }
+        }
+    }
+
+    // MARK: - Helpers
+
+    @ViewBuilder
+    private var toastOverlay: some View {
+        if let msg = toastMessage {
+            VStack {
+                Spacer()
+                HStack(spacing: 10) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(LColors.success)
+                    Text(msg)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(LColors.textPrimary)
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 14)
+                .background(LColors.accentGradient)
+                .clipShape(Capsule())
+                .shadow(color: Color(hex: "#7d19f7").opacity(0.5), radius: 16, y: 4)
+                .padding(.bottom, 110)
+            }
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .zIndex(99)
+        }
+    }
+
+    private func showToast(_ message: String) {
+        withAnimation {
+            toastMessage = message
+        }
+        Task {
+            try? await Task.sleep(for: .seconds(2.5))
+            withAnimation {
+                toastMessage = nil
+            }
+        }
+    }
+
+    private func timeBlockDetailPopup(reminder: LystariaReminder) -> some View {
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            let now = context.date
+            let badgeDone = reminderShowsDoneBadge(reminder)
+            let fireDate = reminder.nextRunAt
+            let overdue = isOverdue(reminder, fireDate: fireDate)
+            let dueNow = !overdue && isDueNow(reminder, fireDate: fireDate, now: now)
+            let upcoming = !overdue && !dueNow && isUpcoming(reminder, fireDate: fireDate, now: now)
+
+            let displayTime: String = {
+                let df = DateFormatter()
+                df.locale = .current
+                df.setLocalizedDateFormatFromTemplate("EEE, MMM d 'at' h:mm a")
+                return df.string(from: fireDate)
+            }()
+
+            LystariaOverlayPopup(
+                onClose: {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                        showingDetailPopup = false
+                        detailReminder = nil
+                    }
+                },
+                width: 520,
+                heightRatio: 0.45,
+            ) {
+                HStack {
+                    GradientTitle(text: "Reminder Details", size: 22)
+                    Spacer()
+                    Button {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                            showingDetailPopup = false
+                            detailReminder = nil
+                        }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(LColors.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            } content: {
+                VStack(alignment: .leading, spacing: 16) {
+
+                    // Badges: schedule kind + status
+                    HStack(spacing: 6) {
+                        let kindLabel = reminder.schedule?.kind.label ?? "Once"
+                        Text(kindLabel.uppercased())
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(LColors.textSecondary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(Capsule())
+                            .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
+
+                        if badgeDone {
+                            TimeBlockStatusBadge(label: "Done", style: .upcoming)
+                        } else if overdue {
+                            TimeBlockStatusBadge(label: "Overdue", style: .overdue)
+                        } else if dueNow {
+                            TimeBlockStatusBadge(label: "Due Now", style: .dueNow)
+                        } else if upcoming {
+                            TimeBlockStatusBadge(label: "Upcoming", style: .upcoming)
+                        }
+                    }
+
+                    // Title
+                    HStack(alignment: .top, spacing: 10) {
+                        Image("pencilwrite")
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 16, height: 16)
+                            .foregroundStyle(.white)
+                            .padding(.top, 2)
+
+                        Text(reminder.title)
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(LColors.textPrimary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    // Description
+                    if let details = reminder.details?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !details.isEmpty
+                    {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image("flipbook")
+                                .renderingMode(.template)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 16, height: 16)
+                                .foregroundStyle(.white)
+                                .padding(.top, 2)
+
+                            Text(details)
+                                .font(.system(size: 14))
+                                .foregroundStyle(LColors.textSecondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+
+                    // Checklist items
+                    let routineItems = reminder.sortedRoutineChecklistItems
+                    let regularItems = reminder.checklistItems
+                    let hasChecklist = reminder.reminderType == .routine
+                        ? !routineItems.isEmpty
+                        : !regularItems.isEmpty
+
+                    if hasChecklist {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image("starlines")
+                                .renderingMode(.template)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 16, height: 16)
+                                .foregroundStyle(.white)
+                                .padding(.top, 2)
+
+                            VStack(alignment: .leading, spacing: 6) {
+                                if reminder.reminderType == .routine {
+                                    ForEach(routineItems) { item in
+                                        HStack(spacing: 6) {
+                                            Image(systemName: reminder.isRoutineItemChecked(item) ? "checkmark.circle.fill" : "circle")
+                                                .font(.system(size: 12))
+                                                .foregroundStyle(reminder.isRoutineItemChecked(item) ? LColors.success : LColors.textSecondary)
+                                            Text(item.title)
+                                                .font(.system(size: 13))
+                                                .foregroundStyle(LColors.textSecondary)
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                        }
+                                    }
+                                } else {
+                                    ForEach(regularItems, id: \.self) { item in
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "circle")
+                                                .font(.system(size: 12))
+                                                .foregroundStyle(LColors.textSecondary)
+                                            Text(item)
+                                                .font(.system(size: 13))
+                                                .foregroundStyle(LColors.textSecondary)
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                        }
+                                    }
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+
+                    // Next run time
+                    HStack(alignment: .center, spacing: 10) {
+                        Image("fillalarm")
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 16, height: 16)
+                            .foregroundStyle(.white)
+
+                        Text(displayTime)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(LColors.textPrimary)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            } footer: {
+                EmptyView()
+            }
         }
     }
 
@@ -402,6 +657,46 @@ struct ReminderTimeBlockView: View {
         df.locale = .current
         df.setLocalizedDateFormatFromTemplate("h:mm a")
         return df.string(from: date)
+    }
+
+    // MARK: - Habit Logging
+
+    private func logHabitIfLinked(_ reminder: LystariaReminder) {
+        // Only habit-linked reminders should affect habit logs.
+        guard reminder.linkedKind == .habit,
+              let hid = reminder.linkedHabitId,
+              let habit = habits.first(where: { $0.id == hid }) else { return }
+
+        let cal = Calendar.current
+        let todayStart = cal.startOfDay(for: Date())
+        let cap = max(1, habit.timesPerDay)
+
+        // Match HabitsView behavior: if today was marked skipped, remove that skip
+        // when the user completes the habit from a linked reminder.
+        let todaysSkips = (habit.skips ?? []).filter {
+            cal.isDate($0.dayStart, inSameDayAs: todayStart)
+        }
+        for skip in todaysSkips {
+            modelContext.delete(skip)
+        }
+        if !todaysSkips.isEmpty {
+            habit.skips = (habit.skips ?? []).filter {
+                !cal.isDate($0.dayStart, inSameDayAs: todayStart)
+            }
+        }
+
+        if let existing = (habit.logs ?? []).first(where: { cal.isDate($0.dayStart, inSameDayAs: todayStart) }) {
+            if existing.count < cap {
+                existing.count += 1
+                existing.updatedAt = Date()
+            }
+        } else {
+            let newLog = HabitLog(habit: habit, dayStart: todayStart, count: 1)
+            modelContext.insert(newLog)
+        }
+
+        habit.updatedAt = Date()
+        habit.logs = habit.logs
     }
 
     // MARK: - Time Block Status Badge (smaller, matches schedule kind badge size)

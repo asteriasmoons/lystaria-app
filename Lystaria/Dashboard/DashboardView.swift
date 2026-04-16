@@ -941,7 +941,13 @@ struct DashboardView: View {
     private var selfCareLevelProgress: Double {
         let progress = SelfCarePointsManager.progressInCurrentLevel(for: selfCareCurrentPoints)
         let threshold = max(SelfCarePointsManager.pointsPerLevel, 1)
-        return min(max(Double(progress) / Double(threshold), 0), 1)
+        let computed = Double(progress) / Double(threshold)
+        // If exactly on a level boundary (progress == 0) and level > 0,
+        // show the ring as full rather than empty.
+        if computed == 0 && selfCareLevel > 0 {
+            return 1.0
+        }
+        return min(max(computed, 0), 1)
     }
 
     private var consistencyAreaScores: [ConsistencyAreaScore] {
@@ -2356,7 +2362,7 @@ private struct DashboardSelfCareCard: View {
                         .renderingMode(.template)
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 20, height: 20)
+                        .frame(width: 24, height: 24)
                         .foregroundStyle(.white)
                         .opacity(1)
 

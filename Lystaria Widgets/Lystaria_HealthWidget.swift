@@ -12,34 +12,14 @@ private enum HealthWidgetShared {
     static let appGroupID = "group.com.asteriasmoons.LystariaDev"
 
     static let stepsTodayKey = "healthWidget.stepsToday"
-    static let stepGoalKey = "healthWidget.stepGoal"
+    static let stepGoalKey   = "healthWidget.stepGoal"
     static let waterTodayKey = "healthWidget.waterToday"
-    static let waterGoalKey = "healthWidget.waterGoal"
-
-    static var defaults: UserDefaults? {
-        UserDefaults(suiteName: appGroupID)
-    }
+    static let waterGoalKey  = "healthWidget.waterGoal"
 
     static func readDouble(for key: String, fallback: Double) -> Double {
-        guard let defaults else { return fallback }
-        let value = defaults.double(forKey: key)
-        return value == 0 ? fallbackIfNeeded(for: key, value: value, fallback: fallback) : value
-    }
-
-    private static func fallbackIfNeeded(for key: String, value: Double, fallback: Double) -> Double {
-        // If no value exists yet, UserDefaults returns 0. For "today" values, 0 is valid.
-        // For goal values, fall back to defaults if the key hasn't been written yet.
-        guard let defaults else { return fallback }
-
-        switch key {
-        case stepGoalKey, waterGoalKey:
-            if defaults.object(forKey: key) == nil {
-                return fallback
-            }
-            return value
-        default:
-            return value
-        }
+        guard let d = UserDefaults(suiteName: appGroupID) else { return fallback }
+        if d.object(forKey: key) == nil { return fallback }
+        return d.double(forKey: key)
     }
 }
 
@@ -94,7 +74,7 @@ struct LystariaHealthWidgetProvider: TimelineProvider {
             fallback: 80
         )
 
-        print("🔵 HealthWidget makeEntry — suite: \(HealthWidgetShared.appGroupID)  defaults nil: \(HealthWidgetShared.defaults == nil)  steps: \(stepsToday)/\(stepGoal)  water: \(waterToday)/\(waterGoal)")
+        print("🔵 HealthWidget makeEntry — steps: \(stepsToday)/\(stepGoal)  water: \(waterToday)/\(waterGoal)")
 
         return LystariaHealthWidgetEntry(
             date: Date(),

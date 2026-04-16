@@ -82,5 +82,6 @@ class OnboardingManager: ObservableObject {
         defaults.removeObject(forKey: "onboarding_dashboard")
         defaults.removeObject(forKey: "onboarding_reading")
         defaults.removeObject(forKey: "onboarding_health")
+        defaults.removeObject(forKey: "onboarding_medicine")
     }
 }

@@ -92,6 +92,17 @@
 		CF29FC9D2F70AC7300EC47F8 /* DailyLenormandRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF29FC9C2F70AC6800EC47F8 /* DailyLenormandRecord.swift */; };
 		CF29FC9F2F70AC9300EC47F8 /* Lenormand.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF29FC9E2F70AC9300EC47F8 /* Lenormand.swift */; };
 		CF29FCA12F718C8100EC47F8 /* DividerStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF29FCA02F718C7B00EC47F8 /* DividerStyle.swift */; };
+		CF6E9D632F8EA3B400140B17 /* MedicationDoseScheduleGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF6E9D622F8EA3B400140B17 /* MedicationDoseScheduleGrid.swift */; };
+		CF6E9D652F8F1C6600140B17 /* BookmarkAssetAndSymbolPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF6E9D642F8F1C5900140B17 /* BookmarkAssetAndSymbolPicker.swift */; };
+		CF822EBD2F9039B000CC5B80 /* EventAttendee.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF822EBC2F9039AA00CC5B80 /* EventAttendee.swift */; };
+		CF822EBF2F90552200CC5B80 /* SharedEventDTO.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF822EBE2F90551900CC5B80 /* SharedEventDTO.swift */; };
+		CF822EC12F90555100CC5B80 /* SharedEventsAPIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF822EC02F90554800CC5B80 /* SharedEventsAPIService.swift */; };
+		CF822EC42F90605000CC5B80 /* JoinSharedEventView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF822EC22F90605000CC5B80 /* JoinSharedEventView.swift */; };
+		CF822EC52F90605000CC5B80 /* SharedEventDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF822EC32F90605000CC5B80 /* SharedEventDetailView.swift */; };
+		CF822ECF2F90764000CC5B80 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CF29FC5F2F6D8C3600EC47F8 /* WidgetKit.framework */; };
+		CF822ED02F90764000CC5B80 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CF29FC612F6D8C3600EC47F8 /* SwiftUI.framework */; };
+		CF822EDF2F90764100CC5B80 /* Lystaria Watch WidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CF822ECE2F90764000CC5B80 /* Lystaria Watch WidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		CF822EE92F9141A800CC5B80 /* SleepHealthKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF822EE82F9141A800CC5B80 /* SleepHealthKitManager.swift */; };
 		CF84216D2F5F57520069F12F /* AuthUser.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83222F50A4940092FC98 /* AuthUser.swift */; };
 		CF84217C2F5FA7580069F12F /* HealthKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84217B2F5FA7480069F12F /* HealthKitManager.swift */; };
 		CF84217D2F5FA7580069F12F /* HealthKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84217B2F5FA7480069F12F /* HealthKitManager.swift */; };
@@ -190,7 +201,6 @@
 		CF8D836C2F53AA600092FC98 /* DailyIntention.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D836B2F53AA600092FC98 /* DailyIntention.swift */; };
 		CF8D836E2F53B1170092FC98 /* ReadingStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D836D2F53B1170092FC98 /* ReadingStats.swift */; };
 		CF8D83702F53C36A0092FC98 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = CF8D836F2F53C36A0092FC98 /* GoogleService-Info.plist */; };
-		CF8D83732F53C5120092FC98 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = CF8D83722F53C5120092FC98 /* FirebaseAuth */; };
 		CF8D837C2F53E1E60092FC98 /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D837B2F53E1D70092FC98 /* SignInView.swift */; };
 		CF8D83822F548EAC0092FC98 /* ProfileTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83812F548EAC0092FC98 /* ProfileTabView.swift */; };
 		CF8D83862F54C4A10092FC98 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83852F54C4A10092FC98 /* NotificationManager.swift */; };
@@ -253,6 +263,13 @@
 			remoteGlobalIDString = CF29FC5D2F6D8C3600EC47F8;
 			remoteInfo = "Lystaria WidgetsExtension";
 		};
+		CF822EDD2F90764100CC5B80 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CF41A58B2F4DF57000C96018 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CF822ECD2F90764000CC5B80;
+			remoteInfo = "Lystaria Watch WidgetsExtension";
+		};
 		CF8B7FA92F6C70EC006A7D3B /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = CF41A58B2F4DF57000C96018 /* Project object */;
@@ -272,6 +289,17 @@
 				CF0A09EA2F5F14B400401658 /* Lystaria Watch Watch App.app in Embed Watch Content */,
 			);
 			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CF822EE42F90764100CC5B80 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				CF822EDF2F90764100CC5B80 /* Lystaria Watch WidgetsExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		CF8B7FB02F6C70EC006A7D3B /* Embed Foundation Extensions */ = {
@@ -360,6 +388,16 @@
 		CF29FC9E2F70AC9300EC47F8 /* Lenormand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Lenormand.swift; sourceTree = "<group>"; };
 		CF29FCA02F718C7B00EC47F8 /* DividerStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DividerStyle.swift; sourceTree = "<group>"; };
 		CF41A5932F4DF57000C96018 /* Lystaria.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Lystaria.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		CF6E9D622F8EA3B400140B17 /* MedicationDoseScheduleGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MedicationDoseScheduleGrid.swift; sourceTree = "<group>"; };
+		CF6E9D642F8F1C5900140B17 /* BookmarkAssetAndSymbolPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarkAssetAndSymbolPicker.swift; sourceTree = "<group>"; };
+		CF822EBC2F9039AA00CC5B80 /* EventAttendee.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventAttendee.swift; sourceTree = "<group>"; };
+		CF822EBE2F90551900CC5B80 /* SharedEventDTO.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedEventDTO.swift; sourceTree = "<group>"; };
+		CF822EC02F90554800CC5B80 /* SharedEventsAPIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedEventsAPIService.swift; sourceTree = "<group>"; };
+		CF822EC22F90605000CC5B80 /* JoinSharedEventView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JoinSharedEventView.swift; sourceTree = "<group>"; };
+		CF822EC32F90605000CC5B80 /* SharedEventDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedEventDetailView.swift; sourceTree = "<group>"; };
+		CF822ECE2F90764000CC5B80 /* Lystaria Watch WidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Lystaria Watch WidgetsExtension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		CF822EE52F90790700CC5B80 /* Lystaria Watch WidgetsExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Lystaria Watch WidgetsExtension.entitlements"; sourceTree = "<group>"; };
+		CF822EE82F9141A800CC5B80 /* SleepHealthKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepHealthKitManager.swift; sourceTree = "<group>"; };
 		CF84217B2F5FA7480069F12F /* HealthKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitManager.swift; sourceTree = "<group>"; };
 		CF8421812F5FBD820069F12F /* WaterHealthKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaterHealthKitManager.swift; sourceTree = "<group>"; };
 		CF8421882F6079E60069F12F /* OnboardingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingManager.swift; sourceTree = "<group>"; };
@@ -501,6 +539,13 @@
 			);
 			target = CF29FC5D2F6D8C3600EC47F8 /* Lystaria WidgetsExtension */;
 		};
+		CF822EE32F90764100CC5B80 /* Exceptions for "Lystaria Watch Widgets" folder in "Lystaria Watch WidgetsExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = CF822ECD2F90764000CC5B80 /* Lystaria Watch WidgetsExtension */;
+		};
 		CF8B7FAF2F6C70EC006A7D3B /* Exceptions for "Lystaria Share" folder in "Lystaria Share" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -542,6 +587,14 @@
 			path = "Lystaria Widgets";
 			sourceTree = "<group>";
 		};
+		CF822ED12F90764000CC5B80 /* Lystaria Watch Widgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				CF822EE32F90764100CC5B80 /* Exceptions for "Lystaria Watch Widgets" folder in "Lystaria Watch WidgetsExtension" target */,
+			);
+			path = "Lystaria Watch Widgets";
+			sourceTree = "<group>";
+		};
 		CF8B7FA22F6C70EC006A7D3B /* Lystaria Share */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -573,7 +626,15 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				CF8D83732F53C5120092FC98 /* FirebaseAuth in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CF822ECB2F90764000CC5B80 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CF822ED02F90764000CC5B80 /* SwiftUI.framework in Frameworks */,
+				CF822ECF2F90764000CC5B80 /* WidgetKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -650,11 +711,13 @@
 		CF41A58A2F4DF57000C96018 = {
 			isa = PBXGroup;
 			children = (
+				CF822EE52F90790700CC5B80 /* Lystaria Watch WidgetsExtension.entitlements */,
 				CFB0B17A2F83368100B42AB3 /* Lystaria WidgetsExtension.entitlements */,
 				CF8D833A2F50A60F0092FC98 /* Lystaria */,
 				CF0A09E12F5F14B200401658 /* Lystaria Watch Watch App */,
 				CF8B7FA22F6C70EC006A7D3B /* Lystaria Share */,
 				CF29FC632F6D8C3600EC47F8 /* Lystaria Widgets */,
+				CF822ED12F90764000CC5B80 /* Lystaria Watch Widgets */,
 				CF41A5942F4DF57000C96018 /* Products */,
 				CF8D837D2F54855C0092FC98 /* GoogleSignInShim.h */,
 				CF84214C2F5F4EEB0069F12F /* Frameworks */,
@@ -668,6 +731,7 @@
 				CF0A09E02F5F14B200401658 /* Lystaria Watch Watch App.app */,
 				CF8B7FA12F6C70EC006A7D3B /* Lystaria Share.appex */,
 				CF29FC5E2F6D8C3600EC47F8 /* Lystaria WidgetsExtension.appex */,
+				CF822ECE2F90764000CC5B80 /* Lystaria Watch WidgetsExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -675,6 +739,7 @@
 		CF4790AD2F5B676E0026696B /* Managers */ = {
 			isa = PBXGroup;
 			children = (
+				CF822EE82F9141A800CC5B80 /* SleepHealthKitManager.swift */,
 				CFB0B1812F897BBF00B42AB3 /* VoiceTranscriptionManager.swift */,
 				CF92D5612F7591FD00174F04 /* DailyCompletionArcHelper.swift */,
 				CF8B7F822F6B738D006A7D3B /* SelfCarePointsManager.swift */,
@@ -767,6 +832,7 @@
 		CF8B7F8C2F6C4A7E006A7D3B /* Bookmark */ = {
 			isa = PBXGroup;
 			children = (
+				CF6E9D642F8F1C5900140B17 /* BookmarkAssetAndSymbolPicker.swift */,
 				CF8B7FC12F6C7975006A7D3B /* SharedFolderExportManager.swift */,
 				CF8B7FBD2F6C78E1006A7D3B /* SharedFolderStore.swift */,
 				CF8B7FBB2F6C7893006A7D3B /* SharedFolderOption.swift */,
@@ -796,6 +862,10 @@
 		CF8D83052F50A4640092FC98 /* Calendar */ = {
 			isa = PBXGroup;
 			children = (
+				CF822EC22F90605000CC5B80 /* JoinSharedEventView.swift */,
+				CF822EC32F90605000CC5B80 /* SharedEventDetailView.swift */,
+				CF822EC02F90554800CC5B80 /* SharedEventsAPIService.swift */,
+				CF822EBE2F90551900CC5B80 /* SharedEventDTO.swift */,
 				CFB0B17B2F85630500B42AB3 /* CalendarOverviewSheet.swift */,
 				CFB0B16F2F806DBA00B42AB3 /* CalendarDayView.swift */,
 				CF13B63F2F65CEC2008D3CE9 /* CalendarEventDetailOverlay.swift */,
@@ -933,6 +1003,7 @@
 		CF8D832C2F50A4940092FC98 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				CF822EBC2F9039AA00CC5B80 /* EventAttendee.swift */,
 				CFB0B17F2F8944E500B42AB3 /* JournalStats.swift */,
 				CFB0B1732F82FE3000B42AB3 /* ReadingPointsEntry.swift */,
 				CFB0B1712F80B78100B42AB3 /* NotesTab.swift */,
@@ -1049,6 +1120,7 @@
 		CF8D83482F5123B30092FC98 /* Components */ = {
 			isa = PBXGroup;
 			children = (
+				CF6E9D622F8EA3B400140B17 /* MedicationDoseScheduleGrid.swift */,
 				CF8D83492F5124C70092FC98 /* LystariaComponents.swift */,
 			);
 			path = Components;
@@ -1080,10 +1152,12 @@
 				CF0A09DC2F5F14B200401658 /* Sources */,
 				CF0A09DD2F5F14B200401658 /* Frameworks */,
 				CF0A09DE2F5F14B200401658 /* Resources */,
+				CF822EE42F90764100CC5B80 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				CF822EDE2F90764100CC5B80 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				CF0A09E12F5F14B200401658 /* Lystaria Watch Watch App */,
@@ -1136,11 +1210,32 @@
 			);
 			name = Lystaria;
 			packageProductDependencies = (
-				CF8D83722F53C5120092FC98 /* FirebaseAuth */,
 			);
 			productName = Lystaria;
 			productReference = CF41A5932F4DF57000C96018 /* Lystaria.app */;
 			productType = "com.apple.product-type.application";
+		};
+		CF822ECD2F90764000CC5B80 /* Lystaria Watch WidgetsExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CF822EE02F90764100CC5B80 /* Build configuration list for PBXNativeTarget "Lystaria Watch WidgetsExtension" */;
+			buildPhases = (
+				CF822ECA2F90764000CC5B80 /* Sources */,
+				CF822ECB2F90764000CC5B80 /* Frameworks */,
+				CF822ECC2F90764000CC5B80 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				CF822ED12F90764000CC5B80 /* Lystaria Watch Widgets */,
+			);
+			name = "Lystaria Watch WidgetsExtension";
+			packageProductDependencies = (
+			);
+			productName = "Lystaria Watch WidgetsExtension";
+			productReference = CF822ECE2F90764000CC5B80 /* Lystaria Watch WidgetsExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 		CF8B7FA02F6C70EC006A7D3B /* Lystaria Share */ = {
 			isa = PBXNativeTarget;
@@ -1171,7 +1266,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2630;
+				LastSwiftUpdateCheck = 2640;
 				LastUpgradeCheck = 2640;
 				TargetAttributes = {
 					CF0A09DF2F5F14B200401658 = {
@@ -1182,6 +1277,9 @@
 					};
 					CF41A5922F4DF57000C96018 = {
 						CreatedOnToolsVersion = 26.2;
+					};
+					CF822ECD2F90764000CC5B80 = {
+						CreatedOnToolsVersion = 26.4;
 					};
 					CF8B7FA02F6C70EC006A7D3B = {
 						CreatedOnToolsVersion = 26.3;
@@ -1198,7 +1296,6 @@
 			mainGroup = CF41A58A2F4DF57000C96018;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				CF8D83712F53C5110092FC98 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = CF41A5942F4DF57000C96018 /* Products */;
@@ -1209,6 +1306,7 @@
 				CF0A09DF2F5F14B200401658 /* Lystaria Watch Watch App */,
 				CF8B7FA02F6C70EC006A7D3B /* Lystaria Share */,
 				CF29FC5D2F6D8C3600EC47F8 /* Lystaria WidgetsExtension */,
+				CF822ECD2F90764000CC5B80 /* Lystaria Watch WidgetsExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -1239,6 +1337,13 @@
 				CF92D51B2F756D4100174F04 /* Lystaria.storekit in Resources */,
 				CF8D836A2F535F810092FC98 /* Assets.xcassets in Resources */,
 				CF8D83702F53C36A0092FC98 /* GoogleService-Info.plist in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CF822ECC2F90764000CC5B80 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1306,6 +1411,7 @@
 				CF8B7F942F6C4EAE006A7D3B /* AddEditBookmarkView.swift in Sources */,
 				CF13B6682F69B1CA008D3CE9 /* ExerciseHealthKitManager.swift in Sources */,
 				CF8B7FB92F6C7441006A7D3B /* SharedBookmarkImportManager.swift in Sources */,
+				CF822EC12F90555100CC5B80 /* SharedEventsAPIService.swift in Sources */,
 				CF29FC882F6F603000EC47F8 /* EventCalendar.swift in Sources */,
 				CF8B7F922F6C4DAF006A7D3B /* BookmarkDetailView.swift in Sources */,
 				CF8421892F6079EC0069F12F /* OnboardingManager.swift in Sources */,
@@ -1317,6 +1423,7 @@
 				CF8421B82F6266380069F12F /* DashboardView.swift in Sources */,
 				CF13B6312F65AE5C008D3CE9 /* CheckInReadingIntent.swift in Sources */,
 				CF8D835C2F5129B10092FC98 /* CalendarTabView.swift in Sources */,
+				CF822EBF2F90552200CC5B80 /* SharedEventDTO.swift in Sources */,
 				CF8421C42F632DCB0069F12F /* HoroscopeService.swift in Sources */,
 				CF13B6182F63B996008D3CE9 /* MoodIntentEnum.swift in Sources */,
 				CF8B7FBC2F6C789C006A7D3B /* SharedFolderOption.swift in Sources */,
@@ -1349,6 +1456,7 @@
 				CF8B7F602F6B058E006A7D3B /* BodyStateHealthKitManager.swift in Sources */,
 				CFDD11AB2F7F22BF0067B262 /* Note.swift in Sources */,
 				CF13B6462F675D8A008D3CE9 /* DashboardConsistencyModels.swift in Sources */,
+				CF6E9D632F8EA3B400140B17 /* MedicationDoseScheduleGrid.swift in Sources */,
 				CF8B7F632F6B3402006A7D3B /* JournalBlockRow.swift in Sources */,
 				CF8D837C2F53E1E60092FC98 /* SignInView.swift in Sources */,
 				CF13B65F2F68BE6E008D3CE9 /* JournalPrompt.swift in Sources */,
@@ -1383,6 +1491,7 @@
 				CF84219C2F607B6D0069F12F /* OnboardingModels.swift in Sources */,
 				CF8D834A2F5124C70092FC98 /* LystariaComponents.swift in Sources */,
 				CF2051402F5788CE006B71AA /* JournalBookEditorSheet.swift in Sources */,
+				CF822EBD2F9039B000CC5B80 /* EventAttendee.swift in Sources */,
 				CF20514C2F578E11006B71AA /* JournalPreviewSheet.swift in Sources */,
 				CF8D83862F54C4A10092FC98 /* NotificationManager.swift in Sources */,
 				CF13B6792F69B75F008D3CE9 /* HealthMetricsCard.swift in Sources */,
@@ -1456,6 +1565,7 @@
 				CF13B67D2F69B7CB008D3CE9 /* HealthFormatting.swift in Sources */,
 				CF84219A2F607B2D0069F12F /* OnboardingTarget.swift in Sources */,
 				CF8B7F7F2F6B7309006A7D3B /* SelfCarePointsProfile.swift in Sources */,
+				CF6E9D652F8F1C6600140B17 /* BookmarkAssetAndSymbolPicker.swift in Sources */,
 				CF13B6292F6442F5008D3CE9 /* JournalEntryIntent.swift in Sources */,
 				CF8B7F9A2F6C5F6D006A7D3B /* BookmarkFolderDetailView.swift in Sources */,
 				CF13B67B2F69B779008D3CE9 /* ExerciseLogCard.swift in Sources */,
@@ -1463,12 +1573,15 @@
 				CF0A09D12F5C8C7400401658 /* BookSummarySheet.swift in Sources */,
 				CF8B7FB62F6C73AE006A7D3B /* SharedBookmarkInbox.swift in Sources */,
 				CF8B7F792F6B3ADD006A7D3B /* JournalBlockPreviewPage.swift in Sources */,
+				CF822EC42F90605000CC5B80 /* JoinSharedEventView.swift in Sources */,
+				CF822EC52F90605000CC5B80 /* SharedEventDetailView.swift in Sources */,
 				CF0B8E672F6CBD1500D5D2C8 /* LogExerciseIntent.swift in Sources */,
 				CFAF69042F7708D900E74833 /* BookSeries.swift in Sources */,
 				CF8B7F692F6B34DF006A7D3B /* RichBlockTextView.swift in Sources */,
 				CF8B7F6B2F6B3501006A7D3B /* JournalBlockDisplayView.swift in Sources */,
 				CF8B7F902F6C4C1A006A7D3B /* BookmarkCard.swift in Sources */,
 				CF8B7F812F6B732E006A7D3B /* SelfCarePointEntry.swift in Sources */,
+				CF822EE92F9141A800CC5B80 /* SleepHealthKitManager.swift in Sources */,
 				CF13B6202F63BADA008D3CE9 /* LystariaShortcuts.swift in Sources */,
 				CF8421BA2F631BE90069F12F /* DailyTarot.swift in Sources */,
 				CF8421BE2F6320590069F12F /* Tarot.swift in Sources */,
@@ -1482,6 +1595,13 @@
 				CF8B7F8E2F6C4BE2006A7D3B /* BookmarksView.swift in Sources */,
 				CFB0B1852F8AC14500B42AB3 /* InfoTabView.swift in Sources */,
 				CFAF69182F7AA67800E74833 /* SymptomLog.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CF822ECA2F90764000CC5B80 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1508,6 +1628,11 @@
 			isa = PBXTargetDependency;
 			target = CF29FC5D2F6D8C3600EC47F8 /* Lystaria WidgetsExtension */;
 			targetProxy = CF29FC712F6D8C3700EC47F8 /* PBXContainerItemProxy */;
+		};
+		CF822EDE2F90764100CC5B80 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CF822ECD2F90764000CC5B80 /* Lystaria Watch WidgetsExtension */;
+			targetProxy = CF822EDD2F90764100CC5B80 /* PBXContainerItemProxy */;
 		};
 		CF8B7FAA2F6C70EC006A7D3B /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -1611,6 +1736,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Lystaria Widgets/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Lystaria Widgets";
+				INFOPLIST_KEY_NSHealthClinicalHealthRecordsShareUsageDescription = "To read your body state ";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Apple requests to read your health data to update the app and widget";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
@@ -1625,6 +1751,10 @@
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
@@ -1648,6 +1778,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Lystaria Widgets/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Lystaria Widgets";
+				INFOPLIST_KEY_NSHealthClinicalHealthRecordsShareUsageDescription = "To read your body state ";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Apple requests to read your health data to update the app and widget";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
@@ -1662,6 +1793,10 @@
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
@@ -1950,6 +2085,76 @@
 			};
 			name = Release;
 		};
+		CF822EE12F90764100CC5B80 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = "Lystaria Watch WidgetsExtension.entitlements";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Lystaria Watch Widgets/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Lystaria Watch Widgets";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.asteriasmoons.LystariaDev.watchkitapp.Lystaria-Watch-Widgets";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 26.3;
+			};
+			name = Debug;
+		};
+		CF822EE22F90764100CC5B80 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = "Lystaria Watch WidgetsExtension.entitlements";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Lystaria Watch Widgets/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Lystaria Watch Widgets";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.asteriasmoons.LystariaDev.watchkitapp.Lystaria-Watch-Widgets";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 26.3;
+			};
+			name = Release;
+		};
 		CF8B7FAD2F6C70EC006A7D3B /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -2055,6 +2260,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		CF822EE02F90764100CC5B80 /* Build configuration list for PBXNativeTarget "Lystaria Watch WidgetsExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CF822EE12F90764100CC5B80 /* Debug */,
+				CF822EE22F90764100CC5B80 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		CF8B7FAC2F6C70EC006A7D3B /* Build configuration list for PBXNativeTarget "Lystaria Share" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -2065,25 +2279,6 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
-/* Begin XCRemoteSwiftPackageReference section */
-		CF8D83712F53C5110092FC98 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 12.10.0;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		CF8D83722F53C5120092FC98 /* FirebaseAuth */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = CF8D83712F53C5110092FC98 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
-			productName = FirebaseAuth;
-		};
-/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = CF41A58B2F4DF57000C96018 /* Project object */;
 }

@@ -1,8 +1,6 @@
 // Habit.swift
 // Lystaria
 //
-// SwiftData model — mirrors the MongoDB Habit schema
-
 
 import Foundation
 import SwiftData
@@ -11,12 +9,16 @@ enum HabitReminderKind: String, Codable, CaseIterable {
     case none = "none"
     case daily = "daily"
     case weekly = "weekly"
+    case everyXHours = "everyXHours"
+    case everyXMinutes = "everyXMinutes"
 
     var label: String {
         switch self {
         case .none: return "None"
         case .daily: return "Daily"
         case .weekly: return "Weekly"
+        case .everyXHours: return "Every Xh"
+        case .everyXMinutes: return "Every Xm"
         }
     }
 }
@@ -51,6 +53,18 @@ final class Habit {
 
     /// Optional: first day this habit reminder becomes active. If nil, scheduling can treat it as "today".
     var reminderStartDate: Date?
+
+    /// everyXHours kind: fire every N hours (e.g. 2 = every 2 hours).
+    var reminderIntervalHours: Int = 0
+
+    /// everyXMinutes kind: fire every N minutes (e.g. 30 = every 30 minutes).
+    var reminderIntervalMinutes: Int = 0
+
+    /// everyXHours/everyXMinutes: window start time as "HH:mm". Empty = no window.
+    var reminderIntervalWindowStart: String = ""
+
+    /// everyXHours/everyXMinutes: window end time as "HH:mm". Empty = no window.
+    var reminderIntervalWindowEnd: String = ""
 
     var reminderKind: HabitReminderKind {
         get { HabitReminderKind(rawValue: reminderKindRaw) ?? .none }
@@ -135,6 +149,10 @@ final class Habit {
         self.reminderTimeOfDay = computedTime
         self.reminderDaysOfWeekStorage = "[]"
         self.reminderStartDate = reminderStartDate
+        self.reminderIntervalHours = 0
+        self.reminderIntervalMinutes = 0
+        self.reminderIntervalWindowStart = ""
+        self.reminderIntervalWindowEnd = ""
 
         self.isArchived = isArchived
         self.statsResetAt = statsResetAt

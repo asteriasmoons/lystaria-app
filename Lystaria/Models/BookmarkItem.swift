@@ -2,8 +2,6 @@
 //  BookmarkItem.swift
 //  Lystaria
 //
-//  Created by Asteria Moon on 3/19/26.
-//
 
 import Foundation
 import SwiftData

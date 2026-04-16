@@ -105,8 +105,11 @@ enum SelfCarePointsManager {
     static func startOfWeekSunday(from date: Date = Date(), calendar: Calendar = .current) -> Date {
         let startOfDay = calendar.startOfDay(for: date)
         let weekday = calendar.component(.weekday, from: startOfDay)
-        let daysFromSunday = weekday - 1
-        return calendar.date(byAdding: .day, value: -daysFromSunday, to: startOfDay) ?? startOfDay
+        // Anchor to Monday so Sunday stays in the current week all day.
+        // weekday: 1=Sun, 2=Mon, ... 7=Sat
+        // Days back to Monday: Sun=6, Mon=0, Tue=1, Wed=2, Thu=3, Fri=4, Sat=5
+        let daysFromMonday = (weekday + 5) % 7
+        return calendar.date(byAdding: .day, value: -daysFromMonday, to: startOfDay) ?? startOfDay
     }
 
     static func weekStartDayKey(from date: Date = Date(), calendar: Calendar = .current) -> String {

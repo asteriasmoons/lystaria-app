@@ -16,6 +16,7 @@ struct CalendarEventDetailOverlay: View {
     @Environment(\.openURL) private var openURL
     @Query(sort: \CalendarEvent.startDate) private var allEvents: [CalendarEvent]
     @State private var showingOverview = false
+    @State private var showingSharedDetail = false
 
     private var displayTimeZone: TimeZone {
         TimeZone(identifier: NotificationManager.shared.effectiveTimezoneID) ?? .current
@@ -166,7 +167,62 @@ struct CalendarEventDetailOverlay: View {
                     if let trimmedDescription {
                         DetailRow(icon: .asset("stickyfill"), title: "Description", primaryText: trimmedDescription, multiline: true)
                     }
-                }
+
+                    if event.isSharedEvent {
+                        // Shared event row — icon + capsule badge + tap to open full detail
+                        Button {
+                            showingSharedDetail = true
+                        } label: {
+                            HStack(alignment: .top, spacing: 12) {
+                                Image(systemName: "person.2.fill")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 18, height: 18)
+                                    .foregroundStyle(LColors.accent)
+                                    .padding(.top, 2)
+
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("SHARED EVENT")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundStyle(LColors.textSecondary)
+                                        .tracking(0.6)
+
+                                    HStack(spacing: 8) {
+                                        Text("Shared")
+                                            .font(.system(size: 13, weight: .bold))
+                                            .foregroundStyle(LColors.accent)
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 5)
+                                            .background(LColors.accent.opacity(0.12))
+                                            .clipShape(Capsule())
+                                            .overlay(Capsule().stroke(LColors.accent.opacity(0.3), lineWidth: 1))
+
+                                        if event.attendeeCount > 0 {
+                                            Text("\(event.attendeeCount) attendee\(event.attendeeCount == 1 ? "" : "s")")
+                                                .font(.system(size: 12, weight: .semibold))
+                                                .foregroundStyle(LColors.textSecondary)
+                                                .padding(.horizontal, 10)
+                                                .padding(.vertical, 5)
+                                                .background(Color.white.opacity(0.08))
+                                                .clipShape(Capsule())
+                                                .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
+                                        }
+
+                                        Spacer()
+
+                                        Image(systemName: "chevron.right")
+                                            .font(.system(size: 11, weight: .semibold))
+                                            .foregroundStyle(LColors.textSecondary)
+                                    }
+                                }
+
+                                Spacer(minLength: 0)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                } // end detail rows VStack
 
                 // Overview button
                 Button { showingOverview = true } label: {
@@ -201,6 +257,10 @@ struct CalendarEventDetailOverlay: View {
             .shadow(color: .black.opacity(0.25), radius: 24, x: 0, y: 10)
             .sheet(isPresented: $showingOverview) {
                 CalendarOverviewSheet(allEvents: allEvents)
+                    .preferredColorScheme(.dark)
+            }
+            .sheet(isPresented: $showingSharedDetail) {
+                SharedEventDetailView(event: event)
                     .preferredColorScheme(.dark)
             }
         }

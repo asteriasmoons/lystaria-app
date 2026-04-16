@@ -402,44 +402,40 @@ struct NotesView: View {
             .padding(.horizontal, LSpacing.pageHorizontal)
         } else {
             VStack(alignment: .leading, spacing: 14) {
-                GeometryReader { geo in
-                    let cardWidth = (geo.size.width - 14) / 2
-                    let gridColumns = [
-                        GridItem(.fixed(cardWidth), spacing: 14, alignment: .top),
-                        GridItem(.fixed(cardWidth), spacing: 14, alignment: .top)
-                    ]
-
-                    LazyVGrid(columns: gridColumns, spacing: 14) {
-                        ForEach(visibleNotes) { note in
-                            NoteStickyCard(
-                                note: note,
-                                stickyColor: color(from: note.colorHex),
-                                availableTabs: notesTabs,
-                                isCollapsed: note.isPinned
-                                    ? Binding(
-                                        get: { collapsedPinnedIDs.contains(collapseID(for: note)) },
-                                        set: { collapsed in
-                                            let id = collapseID(for: note)
-                                            if collapsed {
-                                                collapsedPinnedIDs.insert(id)
-                                            } else {
-                                                collapsedPinnedIDs.remove(id)
-                                            }
+                LazyVGrid(
+                    columns: [
+                        GridItem(.flexible(), spacing: 14, alignment: .top),
+                        GridItem(.flexible(), spacing: 14, alignment: .top)
+                    ],
+                    spacing: 14
+                ) {
+                    ForEach(visibleNotes) { note in
+                        NoteStickyCard(
+                            note: note,
+                            stickyColor: color(from: note.colorHex),
+                            availableTabs: notesTabs,
+                            isCollapsed: note.isPinned
+                                ? Binding(
+                                    get: { collapsedPinnedIDs.contains(collapseID(for: note)) },
+                                    set: { collapsed in
+                                        let id = collapseID(for: note)
+                                        if collapsed {
+                                            collapsedPinnedIDs.insert(id)
+                                        } else {
+                                            collapsedPinnedIDs.remove(id)
                                         }
-                                    )
-                                    : .constant(false),
-                                action: {
-                                    open(note)
-                                },
-                                onMoveToTab: { tab in
-                                    move(note, to: tab)
-                                }
-                            )
-                            .frame(width: cardWidth, alignment: .topLeading)
-                        }
+                                    }
+                                )
+                                : .constant(false),
+                            action: {
+                                open(note)
+                            },
+                            onMoveToTab: { tab in
+                                move(note, to: tab)
+                            }
+                        )
                     }
                 }
-                .frame(height: gridHeight)
 
                 if filteredNotes.count > visibleCount {
                     HStack {
@@ -777,28 +773,6 @@ struct NotesView: View {
 
         let effectiveCount = visibleCount + (collapsedPinnedCount * 2)
         return Array(filteredNotes.prefix(effectiveCount))
-    }
-
-    private var gridHeight: CGFloat {
-        let rowCount = CGFloat((visibleNotes.count + 1) / 2)
-        guard rowCount > 0 else { return 0 }
-
-        let rowHeights: [CGFloat] = stride(from: 0, to: visibleNotes.count, by: 2).map { index in
-            let left = visibleNotes[index]
-            let right = index + 1 < visibleNotes.count ? visibleNotes[index + 1] : nil
-
-            let leftHeight: CGFloat = left.isPinned && collapsedPinnedIDs.contains(collapseID(for: left)) ? 96 : 190
-            let rightHeight: CGFloat = {
-                guard let right else { return 0 }
-                return right.isPinned && collapsedPinnedIDs.contains(collapseID(for: right)) ? 96 : 190
-            }()
-
-            return max(leftHeight, rightHeight)
-        }
-
-        let totalCardHeight = rowHeights.reduce(0, +)
-        let totalSpacing = max(0, rowCount - 1) * 14
-        return totalCardHeight + totalSpacing
     }
 
     private var filteredNotes: [Note] {
@@ -1274,7 +1248,8 @@ private struct NoteStickyCard: View {
                                 stickyBadge(text: badge)
                             }
                         }
-                        .fixedSize(horizontal: true, vertical: false)
+                        .frame(maxWidth: 92, alignment: .trailing)
+                        .layoutPriority(0)
                     }
 
                     Text(previewText)
@@ -1282,6 +1257,7 @@ private struct NoteStickyCard: View {
                         .foregroundStyle(Color.black.opacity(0.82))
                         .lineSpacing(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .layoutPriority(1)
                         .lineLimit(previewLineLimit)
 
                     Spacer(minLength: 0)
@@ -1344,7 +1320,9 @@ private struct NoteStickyCard: View {
             .font(.system(size: fontSize, weight: .bold))
             .foregroundStyle(.white)
             .lineLimit(1)
-            .fixedSize(horizontal: true, vertical: true)
+            .minimumScaleFactor(0.65)
+            .allowsTightening(true)
+            .frame(maxWidth: 78, alignment: .center)
             .padding(.horizontal, horizontalPadding)
             .padding(.vertical, verticalPadding)
             .background(
@@ -1355,7 +1333,6 @@ private struct NoteStickyCard: View {
                             .stroke(Color.white.opacity(0.18), lineWidth: 1)
                     )
             )
-            .fixedSize(horizontal: true, vertical: true)
     }
 
     private func shortDateTime(_ date: Date) -> String {

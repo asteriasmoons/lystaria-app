@@ -7,6 +7,7 @@
 import SwiftUI
 import SwiftData
 import PhotosUI
+import EventKit
 #if os(macOS)
 import AppKit
 import UniformTypeIdentifiers
@@ -17,7 +18,10 @@ struct ProfileTabView: View {
     @EnvironmentObject private var appState: AppState
     @Query private var authUsers: [AuthUser]
     @Query private var userSettings: [UserSettings]
+    @Query(sort: \CalendarEvent.startDate, order: .forward) private var appEvents: [CalendarEvent]
+    @Query(sort: [SortDescriptor(\EventCalendar.sortOrder), SortDescriptor(\EventCalendar.name)]) private var calendars: [EventCalendar]
 
+    // MARK: - Profile state
 
 #if os(macOS)
     @State private var profileImage: NSImage? = nil
@@ -30,7 +34,6 @@ struct ProfileTabView: View {
 #endif
 
     @AppStorage("profileImagePath") private var profileImagePathDefaults: String = ""
-
     @State private var selectedTimezoneIdentifier: String = TimeZone.current.identifier
     @State private var useSystemTimezone: Bool = true
     @State private var showTimezonePicker: Bool = false
@@ -39,9 +42,21 @@ struct ProfileTabView: View {
     @AppStorage("isAdminMode") private var isAdminMode: Bool = false
     @AppStorage("isPremiumDevBypass") private var isPremiumDevBypass: Bool = false
 
-    // Cached list of IANA timezones
-    private let allTimezones: [String] = TimeZone.knownTimeZoneIdentifiers.sorted()
+    // MARK: - Settings state
 
+    @State private var calendarManager = CalendarSyncManager()
+    @State private var editingCalendar: EventCalendar? = nil
+    @State private var editedName: String = ""
+    @State private var editedColor: Color = Color(ly_hex: "#5b8def")
+
+    @AppStorage("settings.calendarSyncEnabled") private var calendarSyncEnabled: Bool = false
+    @AppStorage("settings.selectedCalendarIdentifier") private var selectedCalendarIdentifier: String = ""
+    @AppStorage("settings.showOnboardingNextLaunch") private var showOnboardingNextLaunch: Bool = false
+    @AppStorage("hasSeenWelcome") private var hasSeenWelcome: Bool = true
+
+    // MARK: - Computed
+
+    private let allTimezones: [String] = TimeZone.knownTimeZoneIdentifiers.sorted()
     private var currentUser: AuthUser? { authUsers.first }
     private var isAdminUser: Bool {
         currentUser?.appleUserId == "001664.f2fefbb84f024544b98e865fa6c6b49e.1524"
@@ -70,11 +85,12 @@ struct ProfileTabView: View {
         s.useSystemTimezone = useSystemTimezone
         s.timezoneIdentifier = selectedTimezoneIdentifier
         s.updatedAt = Date()
-        
         let defaults = UserDefaults.standard
         defaults.set(useSystemTimezone, forKey: "lystaria.useSystemTimezone")
         defaults.set(selectedTimezoneIdentifier, forKey: "lystaria.timezoneIdentifier")
     }
+
+    // MARK: - Body
 
     var body: some View {
         NavigationStack {
@@ -84,6 +100,42 @@ struct ProfileTabView: View {
                 ScrollView {
                     mainContent
                 }
+
+                if let calendar = editingCalendar {
+                    LystariaOverlayPopup(
+                        onClose: { editingCalendar = nil },
+                        width: 420,
+                        heightRatio: 0.40,
+                        header: {
+                            GradientTitle(text: "Edit Calendar", font: .title2.bold())
+                        },
+                        content: {
+                            VStack(alignment: .leading, spacing: 12) {
+                                CalendarLabeledGlassField(label: "NAME") {
+                                    TextField("Calendar name", text: $editedName)
+                                        .textFieldStyle(.plain)
+                                        .foregroundStyle(LColors.textPrimary)
+                                }
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("COLOR")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(LColors.textSecondary)
+                                    ColorPicker("", selection: $editedColor, supportsOpacity: false)
+                                        .labelsHidden()
+                                }
+                            }
+                        },
+                        footer: {
+                            Button {
+                                saveCalendarEdit(calendar)
+                            } label: {
+                                Text("Save Changes")
+                                    .frame(maxWidth: .infinity)
+                            }
+                        }
+                    )
+                    .zIndex(50)
+                }
             }
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarHidden(true)
@@ -91,13 +143,48 @@ struct ProfileTabView: View {
                 SelfCarePointsView()
             }
         }
+        .task {
+            calendarManager.refreshAuthorizationStatus()
+            if calendarManager.hasFullAccess {
+                calendarManager.loadCalendars()
+                if calendarSyncEnabled,
+                   selectedCalendarIdentifier.isEmpty,
+                   let first = calendarManager.calendars.first {
+                    selectedCalendarIdentifier = first.calendarIdentifier
+                }
+            }
+        }
+        .onChange(of: calendarSyncEnabled) { _, isEnabled in
+            Task {
+                if isEnabled {
+                    if calendarManager.authorizationStatus != .fullAccess {
+                        await calendarManager.requestAccess()
+                    }
+                    if calendarManager.hasFullAccess {
+                        calendarManager.loadCalendars()
+                        if selectedCalendarIdentifier.isEmpty,
+                           let first = calendarManager.calendars.first {
+                            selectedCalendarIdentifier = first.calendarIdentifier
+                        }
+                    } else {
+                        calendarSyncEnabled = false
+                    }
+                }
+            }
+        }
     }
+
+    // MARK: - Main content
 
     private var mainContent: some View {
         VStack(spacing: 14) {
             headerSection
             profileSection
             actionsSection
+            calendarSyncSection
+            manageCalendarsSection
+            watchComplicationSection
+            onboardingSection
             Spacer(minLength: 80)
         }
         .frame(maxWidth: 680)
@@ -114,45 +201,27 @@ struct ProfileTabView: View {
             let defaults = UserDefaults.standard
             defaults.set(self.useSystemTimezone, forKey: "lystaria.useSystemTimezone")
             defaults.set(self.selectedTimezoneIdentifier, forKey: "lystaria.timezoneIdentifier")
-
-            #if os(iOS)
-            if let dir = appSupportURL() {
-                let url = dir.appendingPathComponent("profile.png")
-                let exists = FileManager.default.fileExists(atPath: url.path)
-                print("[ProfileTabView] DEBUG profile.png exists at launch:", exists, "->", url.path)
-            }
-            #endif
-
             loadProfileImage()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                if self.profileImage == nil {
-                    print("[ProfileTabView] Retrying profile image load after delay")
-                    loadProfileImage()
-                }
+                if self.profileImage == nil { loadProfileImage() }
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) {
-                if self.profileImage == nil {
-                    print("[ProfileTabView] Retrying profile image load after second delay")
-                    loadProfileImage()
-                }
+                if self.profileImage == nil { loadProfileImage() }
             }
         }
-        .onChange(of: currentUser?.profileImagePath) {
-            loadProfileImage()
-        }
-        .onChange(of: profileImagePathDefaults) {
-            loadProfileImage()
-        }
+        .onChange(of: currentUser?.profileImagePath) { loadProfileImage() }
+        .onChange(of: profileImagePathDefaults) { loadProfileImage() }
     }
+
+    // MARK: - Profile sections
 
     private var headerSection: some View {
         VStack(spacing: 0) {
             HStack {
                 Spacer()
-                GradientTitle(text: "Profile", font: .system(size: 28, weight: .bold))
+                GradientTitle(text: "Profile & Settings", font: .system(size: 28, weight: .bold))
                 Spacer()
             }
-
             Rectangle()
                 .fill(LColors.glassBorder)
                 .frame(height: 1)
@@ -174,47 +243,30 @@ struct ProfileTabView: View {
         ZStack {
             if let img = profileImage {
                 #if os(macOS)
-                Image(nsImage: img)
-                    .resizable()
-                    .scaledToFill()
+                Image(nsImage: img).resizable().scaledToFill()
                 #else
-                Image(uiImage: img)
-                    .resizable()
-                    .scaledToFill()
+                Image(uiImage: img).resizable().scaledToFill()
                 #endif
             } else {
                 if let path = currentUser?.profileImagePath, let url = URL(string: path) {
                     #if os(macOS)
                     if let img = NSImage(contentsOf: url) {
-                        Image(nsImage: img)
-                            .resizable()
-                            .scaledToFill()
+                        Image(nsImage: img).resizable().scaledToFill()
                     } else {
-                        Image(systemName: "person.crop.circle")
-                            .resizable()
-                            .scaledToFit()
-                            .foregroundStyle(LColors.textSecondary)
-                            .padding(14)
+                        Image(systemName: "person.crop.circle").resizable().scaledToFit()
+                            .foregroundStyle(LColors.textSecondary).padding(14)
                     }
                     #else
                     if let data = try? Data(contentsOf: url), let img = UIImage(data: data) {
-                        Image(uiImage: img)
-                            .resizable()
-                            .scaledToFill()
+                        Image(uiImage: img).resizable().scaledToFill()
                     } else {
-                        Image(systemName: "person.crop.circle")
-                            .resizable()
-                            .scaledToFit()
-                            .foregroundStyle(LColors.textSecondary)
-                            .padding(14)
+                        Image(systemName: "person.crop.circle").resizable().scaledToFit()
+                            .foregroundStyle(LColors.textSecondary).padding(14)
                     }
                     #endif
                 } else {
-                    Image(systemName: "person.crop.circle")
-                        .resizable()
-                        .scaledToFit()
-                        .foregroundStyle(LColors.textSecondary)
-                        .padding(14)
+                    Image(systemName: "person.crop.circle").resizable().scaledToFit()
+                        .foregroundStyle(LColors.textSecondary).padding(14)
                 }
             }
         }
@@ -253,18 +305,14 @@ struct ProfileTabView: View {
         .onChange(of: selectedPhoto) { _, newItem in
             guard let newItem else { return }
             Task {
-                if let data = try? await newItem.loadTransferable(type: Data.self), let uiImage = UIImage(data: data) {
+                if let data = try? await newItem.loadTransferable(type: Data.self),
+                   let uiImage = UIImage(data: data) {
                     self.profileImage = uiImage
                     if saveUIImageToAppSupport(uiImage) != nil {
                         self.profileImagePathDefaults = "profile.png"
                         if let user = currentUser {
                             user.profileImagePath = "profile.png"
-                            do {
-                                try modelContext.save()
-                                print("[ProfileTabView] Saved profileImagePath as filename after iOS pick")
-                            } catch {
-                                print("[ProfileTabView] Failed to save profileImagePath after iOS pick: \(error)")
-                            }
+                            try? modelContext.save()
                         }
                     }
                 }
@@ -329,8 +377,7 @@ struct ProfileTabView: View {
                     }))
                     .labelsHidden()
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
+                .padding(.horizontal, 12).padding(.vertical, 10)
                 .background(Color.white.opacity(0.08))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(LColors.glassBorder, lineWidth: 1))
@@ -361,14 +408,11 @@ struct ProfileTabView: View {
                                         saveTimezoneSettings()
                                     }) {
                                         HStack {
-                                            Text(tz)
-                                                .font(.system(size: 13))
-                                                .foregroundStyle(LColors.textPrimary)
+                                            Text(tz).font(.system(size: 13)).foregroundStyle(LColors.textPrimary)
                                             Spacer()
                                             if on { Image(systemName: "checkmark").foregroundStyle(LColors.accent) }
                                         }
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 6)
+                                        .padding(.horizontal, 8).padding(.vertical, 6)
                                         .background(on ? Color.white.opacity(0.08) : Color.clear)
                                         .clipShape(RoundedRectangle(cornerRadius: 8))
                                     }
@@ -385,16 +429,11 @@ struct ProfileTabView: View {
                 }
 
                 HStack(spacing: 8) {
-                    Image(systemName: "globe")
-                        .font(.caption)
-                        .foregroundStyle(LColors.textSecondary)
-                    Text(effectiveTimezoneLabel)
-                        .font(.subheadline)
-                        .foregroundStyle(LColors.textSecondary)
+                    Image(systemName: "globe").font(.caption).foregroundStyle(LColors.textSecondary)
+                    Text(effectiveTimezoneLabel).font(.subheadline).foregroundStyle(LColors.textSecondary)
                 }
             }
-            .padding(.horizontal, 2)
-            .padding(.vertical, 2)
+            .padding(.horizontal, 2).padding(.vertical, 2)
         }
         .frame(maxWidth: .infinity)
     }
@@ -408,133 +447,423 @@ struct ProfileTabView: View {
 
                 Button(action: { showSelfCarePointsPage = true }) {
                     HStack(spacing: 10) {
-                        Image("balloonheart")
-                            .renderingMode(.template)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 18, height: 18)
-                            .foregroundStyle(.white)
-                        Text("Self Care Points")
-                            .font(.system(size: 16, weight: .semibold))
+                        Image("balloonheart").renderingMode(.template).resizable()
+                            .scaledToFit().frame(width: 18, height: 18).foregroundStyle(.white)
+                        Text("Self Care Points").font(.system(size: 16, weight: .semibold))
                         Spacer()
                     }
                     .foregroundStyle(LColors.textPrimary)
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: 56)
-                    .padding(.horizontal, 14)
+                    .frame(maxWidth: .infinity).frame(minHeight: 56).padding(.horizontal, 14)
                     .background(Color.white.opacity(0.08))
                     .clipShape(RoundedRectangle(cornerRadius: 14))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14)
-                            .stroke(LColors.glassBorder, lineWidth: 1)
-                    )
+                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
                 }
                 .buttonStyle(.plain)
-
 
                 if isAdminUser {
                     Toggle(isOn: $isAdminMode) {
                         HStack(spacing: 10) {
-                            Image("shieldstar")
-                                .renderingMode(.template)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 18, height: 18)
-                                .foregroundStyle(.white)
-                            Text("Admin Mode")
-                                .font(.system(size: 16, weight: .semibold))
+                            Image("shieldstar").renderingMode(.template).resizable()
+                                .scaledToFit().frame(width: 18, height: 18).foregroundStyle(.white)
+                            Text("Admin Mode").font(.system(size: 16, weight: .semibold))
                         }
                         .foregroundStyle(LColors.textPrimary)
                     }
-                    .tint(LColors.accent)
-                    .padding(.horizontal, 14)
-                    .frame(minHeight: 56)
+                    .tint(LColors.accent).padding(.horizontal, 14).frame(minHeight: 56)
                     .background(Color.white.opacity(0.08))
                     .clipShape(RoundedRectangle(cornerRadius: 14))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14)
-                            .stroke(LColors.glassBorder, lineWidth: 1)
-                    )
-                }
+                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
 
-                if isAdminUser {
                     Toggle(isOn: $isPremiumDevBypass) {
                         HStack(spacing: 10) {
-                            Image(systemName: "crown.fill")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(.white)
-                            Text("Premium Dev Bypass")
-                                .font(.system(size: 16, weight: .semibold))
+                            Image(systemName: "crown.fill").font(.system(size: 16, weight: .semibold)).foregroundStyle(.white)
+                            Text("Premium Dev Bypass").font(.system(size: 16, weight: .semibold))
                         }
                         .foregroundStyle(LColors.textPrimary)
                     }
-                    .tint(LColors.accent)
-                    .padding(.horizontal, 14)
-                    .frame(minHeight: 56)
+                    .tint(LColors.accent).padding(.horizontal, 14).frame(minHeight: 56)
                     .background(Color.white.opacity(0.08))
                     .clipShape(RoundedRectangle(cornerRadius: 14))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14)
-                            .stroke(LColors.glassBorder, lineWidth: 1)
-                    )
+                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
                 }
 
                 Button(action: { signOut() }) {
                     HStack(spacing: 8) {
                         Image(systemName: "rectangle.portrait.and.arrow.right")
-                        Text("Sign Out")
-                            .font(.system(size: 16, weight: .semibold))
+                        Text("Sign Out").font(.system(size: 16, weight: .semibold))
                     }
                     .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: 56)
-                    .background(
-                        LinearGradient(
-                            colors: [Color(red: 0.86, green: 0.12, blue: 0.74), Color(red: 1.0, green: 0.20, blue: 0.78)],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
+                    .frame(maxWidth: .infinity).frame(minHeight: 56)
+                    .background(LinearGradient(
+                        colors: [Color(red: 0.86, green: 0.12, blue: 0.74), Color(red: 1.0, green: 0.20, blue: 0.78)],
+                        startPoint: .leading, endPoint: .trailing
+                    ))
                     .clipShape(RoundedRectangle(cornerRadius: 14))
                 }
                 .buttonStyle(.plain)
                 .disabled(currentUser == nil)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 2)
-            .padding(.vertical, 2)
+            .padding(.horizontal, 2).padding(.vertical, 2)
         }
         .frame(maxWidth: .infinity)
     }
 
-    private func signInProviderLabel(for user: AuthUser) -> String {
-        switch user.authProvider {
-        case .google:
-            return "Signed in with Google"
-        case .email:
-            return "Signed in with Email"
-        case .apple:
-            return "Signed in with Apple"
+    // MARK: - Settings sections
+
+    private var calendarSyncSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            SectionHeader(title: "Calendar Sync", icon: "calendar")
+
+            GlassCard {
+                VStack(spacing: 12) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Sync with Apple Calendar")
+                                .font(.subheadline).fontWeight(.medium).foregroundStyle(LColors.textPrimary)
+                            Text("Export Lystaria events to your calendar")
+                                .font(.caption).foregroundStyle(LColors.textSecondary)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $calendarSyncEnabled).labelsHidden().tint(LColors.accent)
+                    }
+
+                    Divider().background(LColors.glassBorder)
+
+                    HStack {
+                        Label("Status", systemImage: "antenna.radiowaves.left.and.right")
+                            .font(.subheadline).foregroundStyle(LColors.textSecondary)
+                        Spacer()
+                        LBadge(
+                            text: calendarManager.statusText,
+                            color: calendarManager.hasFullAccess ? LColors.success : LColors.textSecondary
+                        )
+                    }
+
+                    if calendarSyncEnabled {
+                        Divider().background(LColors.glassBorder)
+                        expandedCalendarContent
+                    }
+                }
+            }
+
+            if calendarSyncEnabled && calendarManager.hasFullAccess {
+                HStack {
+                    Spacer()
+                    LButton(
+                        title: calendarManager.isSyncing ? "Syncing…" : "Sync Now",
+                        icon: calendarManager.isSyncing ? nil : "arrow.triangle.2.circlepath",
+                        style: .gradient
+                    ) {
+                        Task {
+                            if selectedCalendarIdentifier.isEmpty,
+                               let first = calendarManager.calendars.first {
+                                selectedCalendarIdentifier = first.calendarIdentifier
+                            }
+                            await calendarManager.syncEvents(
+                                appEvents: appEvents,
+                                modelContext: modelContext,
+                                selectedCalendarIdentifier: selectedCalendarIdentifier
+                            )
+                        }
+                    }
+                    .disabled(calendarManager.isSyncing || selectedCalendarIdentifier.isEmpty)
+                    Spacer()
+                }
+            }
+
+            if let syncMessage = calendarManager.syncStatusMessage, !syncMessage.isEmpty {
+                Text(syncMessage).font(.footnote).foregroundStyle(LColors.textSecondary).padding(.horizontal, 4)
+            }
         }
     }
+
+    @ViewBuilder
+    private var expandedCalendarContent: some View {
+        if calendarManager.authorizationStatus == .notDetermined {
+            HStack {
+                Spacer()
+                LButton(
+                    title: calendarManager.isRequestingAccess ? "Connecting…" : "Connect Calendar",
+                    icon: calendarManager.isRequestingAccess ? nil : "calendar.badge.plus",
+                    style: .gradient
+                ) {
+                    Task {
+                        await calendarManager.requestAccess()
+                        if calendarManager.hasFullAccess {
+                            calendarManager.loadCalendars()
+                        } else {
+                            calendarSyncEnabled = false
+                        }
+                    }
+                }
+                .disabled(calendarManager.isRequestingAccess)
+                Spacer()
+            }
+        }
+
+        if calendarManager.authorizationStatus == .denied || calendarManager.authorizationStatus == .restricted {
+            HStack(spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(LColors.warning)
+                Text("Calendar access is unavailable. Enable it in iPhone Settings.")
+                    .font(.footnote).foregroundStyle(LColors.textSecondary)
+            }
+            .padding(10)
+            .background(LColors.warning.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: LSpacing.inputRadius))
+            .overlay(RoundedRectangle(cornerRadius: LSpacing.inputRadius).stroke(LColors.warning.opacity(0.2), lineWidth: 1))
+        }
+
+        if calendarManager.hasFullAccess {
+            if calendarManager.calendars.isEmpty {
+                HStack(spacing: 10) {
+                    Image(systemName: "calendar.badge.exclamationmark").foregroundStyle(LColors.textSecondary)
+                    Text("No writable calendars found.").font(.footnote).foregroundStyle(LColors.textSecondary)
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Target Calendar").font(.caption).foregroundStyle(LColors.textSecondary)
+                    Menu {
+                        ForEach(calendarManager.calendars, id: \.calendarIdentifier) { cal in
+                            Button {
+                                selectedCalendarIdentifier = cal.calendarIdentifier
+                            } label: {
+                                HStack {
+                                    Text(cal.title)
+                                    if cal.calendarIdentifier == selectedCalendarIdentifier {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack {
+                            Text(
+                                calendarManager.calendars
+                                    .first(where: { $0.calendarIdentifier == selectedCalendarIdentifier })?
+                                    .title ?? "Select a calendar"
+                            )
+                            .font(.subheadline).foregroundStyle(LColors.textPrimary)
+                            Spacer()
+                            Image(systemName: "chevron.up.chevron.down").font(.caption).foregroundStyle(LColors.textSecondary)
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 10)
+                        .background(LColors.glassSurface2)
+                        .clipShape(RoundedRectangle(cornerRadius: LSpacing.inputRadius))
+                        .overlay(RoundedRectangle(cornerRadius: LSpacing.inputRadius).stroke(LColors.glassBorder, lineWidth: 1))
+                    }
+                }
+            }
+        }
+
+        if let error = calendarManager.errorMessage, !error.isEmpty {
+            HStack(spacing: 10) {
+                Image(systemName: "xmark.circle.fill").foregroundStyle(LColors.danger)
+                Text(error).font(.footnote).foregroundStyle(LColors.danger)
+            }
+        }
+
+        if let lastSyncDate = calendarManager.lastSyncDate {
+            Text("Last synced \(lastSyncDate.formatted(date: .abbreviated, time: .shortened))")
+                .font(.caption).foregroundStyle(LColors.textSecondary)
+        }
+    }
+
+    private var manageCalendarsSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            SectionHeader(title: "Manage Calendars", icon: "calendar")
+
+            GlassCard {
+                VStack(spacing: 12) {
+                    if calendars.isEmpty {
+                        Text("No calendars available.")
+                            .font(.footnote).foregroundStyle(LColors.textSecondary)
+                    } else {
+                        ForEach(calendars) { calendar in
+                            HStack(spacing: 10) {
+                                Circle().fill(Color(ly_hex: calendar.color)).frame(width: 10, height: 10)
+                                Text(calendar.name).font(.subheadline).foregroundStyle(LColors.textPrimary)
+                                Spacer()
+                                if calendar.isDefault {
+                                    Text("Default").font(.caption2).foregroundStyle(LColors.textSecondary)
+                                }
+                                Button {
+                                    editingCalendar = calendar
+                                    editedName = calendar.name
+                                    editedColor = Color(ly_hex: calendar.color)
+                                } label: {
+                                    Image(systemName: "pencil")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(LColors.textSecondary)
+                                }
+                                .buttonStyle(.plain)
+                                Button {
+                                    deleteCalendar(calendar)
+                                } label: {
+                                    Image("trashfill").renderingMode(.template).resizable()
+                                        .scaledToFit().frame(width: 14, height: 14).foregroundStyle(LColors.danger)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var watchComplicationSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            SectionHeader(title: "Watch Complication", icon: "applewatch")
+
+            GlassCard {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(spacing: 12) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.08))
+                                .overlay(Circle().stroke(LColors.glassBorder, lineWidth: 1))
+                                .frame(width: 40, height: 40)
+                            Image("sparklefill")
+                                .renderingMode(.template)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 18, height: 18)
+                                .foregroundStyle(.white)
+                        }
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Lystaria Complication")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(LColors.textPrimary)
+                            Text("Flow state, steps, and water on your watch face.")
+                                .font(.caption)
+                                .foregroundStyle(LColors.textSecondary)
+                        }
+                    }
+
+                    Divider().background(LColors.glassBorder)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        watchStep(number: 1, text: "Open the Watch app on your iPhone.")
+                        watchStep(number: 2, text: "Tap \"My Watch\" → \"Face Gallery\" and choose a face, or long-press your current face on your watch and tap \"Edit\".")
+                        watchStep(number: 3, text: "Tap any rectangular complication slot.")
+                        watchStep(number: 4, text: "Scroll down and select \"Lystaria\".")
+                    }
+
+                    Button {
+                        if let url = URL(string: "itms-watchface://") {
+                            UIApplication.shared.open(url)
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "applewatch")
+                                .font(.system(size: 14, weight: .semibold))
+                            Text("Open Watch App")
+                                .font(.system(size: 14, weight: .bold))
+                        }
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(LGradients.blue)
+                        .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+
+                    Text("The Lystaria complication works on Modular, Modular Duo, Infograph Modular, and Smart Stack watch faces — any face that has a rectangular slot.")
+                        .font(.caption)
+                        .foregroundStyle(LColors.textSecondary)
+                }
+                .padding(.horizontal, 2)
+                .padding(.vertical, 2)
+            }
+        }
+    }
+
+    private func watchStep(number: Int, text: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(LGradients.blue)
+                    .frame(width: 20, height: 20)
+                Text("\(number)")
+                    .font(.system(size: 10, weight: .black))
+                    .foregroundStyle(.white)
+            }
+            .padding(.top, 1)
+
+            Text(text)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(LColors.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var onboardingSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            SectionHeader(title: "App Guides", icon: "sparkles")
+
+            GlassCard {
+                VStack(spacing: 12) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Run Feature Tour Again")
+                                .font(.subheadline).fontWeight(.medium).foregroundStyle(LColors.textPrimary)
+                            Text("Show icon explanations again the next time you open each page.")
+                                .font(.caption).foregroundStyle(LColors.textSecondary)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $showOnboardingNextLaunch).labelsHidden().tint(LColors.accent)
+                    }
+
+                    Divider().background(LColors.glassBorder)
+
+                    HStack {
+                        Spacer()
+                        LButton(title: "View Welcome Screens", icon: "sparkles", style: .gradient) {
+                            hasSeenWelcome = false
+                        }
+                        Spacer()
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Helpers
 
     private func labeledRow(label: String, value: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(label.uppercased())
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(LColors.textSecondary)
-                .tracking(0.5)
-            Text(value)
-                .font(.system(size: 14))
-                .foregroundStyle(LColors.textPrimary)
+                .font(.system(size: 11, weight: .bold)).foregroundStyle(LColors.textSecondary).tracking(0.5)
+            Text(value).font(.system(size: 14)).foregroundStyle(LColors.textPrimary)
         }
     }
 
-
     private func signOut() {
-        print("[signOut] called, appState.status = \(appState.status)")
         appState.signOut()
-        print("[signOut] done, appState.status = \(appState.status)")
+    }
+
+    private func deleteCalendar(_ calendar: EventCalendar) {
+        guard !calendar.isDefault else { return }
+        if let defaultCal = calendars.first(where: { $0.isDefault }) {
+            for event in appEvents where event.calendarId == calendar.serverId {
+                event.calendarId = defaultCal.serverId
+                event.calendar = defaultCal
+            }
+        }
+        modelContext.delete(calendar)
+        try? modelContext.save()
+    }
+
+    private func saveCalendarEdit(_ calendar: EventCalendar) {
+        let trimmed = editedName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        calendar.name = trimmed
+        calendar.color = editedColor.toHexString()
+        try? modelContext.save()
+        editingCalendar = nil
     }
 
     private func pickProfileImage() {
@@ -554,118 +883,55 @@ struct ProfileTabView: View {
                 if let user = currentUser {
                     user.profileImagePath = url.absoluteString
                     self.profileImagePathDefaults = url.absoluteString
-                    do {
-                        try modelContext.save()
-                        print("[ProfileTabView] Saved profileImagePath after macOS pick")
-                    } catch {
-                        print("[ProfileTabView] Failed to save profileImagePath after macOS pick: \(error)")
-                    }
+                    try? modelContext.save()
                 }
-                // TODO: Persist image URL or data to your model if desired.
             }
         }
-        #else
-        // TODO: Implement PhotosPicker for iOS if needed.
         #endif
     }
 
     private func removeProfileImage() {
-        #if os(macOS)
         self.profileImage = nil
         if let user = currentUser {
             user.profileImagePath = nil
             self.profileImagePathDefaults = ""
-            do {
-                try modelContext.save()
-                print("[ProfileTabView] Saved profileImagePath removal")
-            } catch {
-                print("[ProfileTabView] Failed to save profileImagePath removal: \(error)")
-            }
+            try? modelContext.save()
         }
-        #else
-        self.profileImage = nil
-        // If you persist on iOS later, also clear the stored path here.
-        if let user = currentUser {
-            user.profileImagePath = nil
-            self.profileImagePathDefaults = ""
-            do {
-                try modelContext.save()
-                print("[ProfileTabView] Saved profileImagePath removal")
-            } catch {
-                print("[ProfileTabView] Failed to save profileImagePath removal: \(error)")
-            }
-        }
-        #endif
     }
 
     private func loadProfileImage() {
         #if os(macOS)
-        // Try SwiftData path first
         if let path = currentUser?.profileImagePath, let url = URL(string: path), let img = NSImage(contentsOf: url) {
-            self.profileImage = img
-            print("[ProfileTabView] Loaded profile image from SwiftData path: \(path)")
-            return
+            self.profileImage = img; return
         }
-        // Fallback to AppStorage path
         if !self.profileImagePathDefaults.isEmpty, let url = URL(string: self.profileImagePathDefaults), let img = NSImage(contentsOf: url) {
-            self.profileImage = img
-            print("[ProfileTabView] Loaded profile image from AppStorage path: \(self.profileImagePathDefaults)")
-            return
+            self.profileImage = img; return
         }
         self.profileImage = nil
-        print("[ProfileTabView] No profile image could be loaded (macOS)")
         #elseif os(iOS)
-        print("[ProfileTabView] DEBUG currentUser?.profileImagePath =", currentUser?.profileImagePath ?? "nil")
-        print("[ProfileTabView] DEBUG AppStorage profileImagePathDefaults =", profileImagePathDefaults.isEmpty ? "(empty)" : profileImagePathDefaults)
-        // 1) Try AppStorage filename first
         if !self.profileImagePathDefaults.isEmpty, let dir = appSupportURL() {
             let url = dir.appendingPathComponent(self.profileImagePathDefaults)
-            let exists = FileManager.default.fileExists(atPath: url.path)
-            print("[ProfileTabView] DEBUG Trying AppStorage filename:", self.profileImagePathDefaults, "exists:", exists, "->", url.path)
             if let data = try? Data(contentsOf: url), let img = UIImage(data: data) {
                 self.profileImage = img
-                print("[ProfileTabView] Loaded profile image from AppStorage filename")
-                // Backfill SwiftData with filename if missing or absolute URL
                 if let user = currentUser, (user.profileImagePath == nil || user.profileImagePath!.hasPrefix("file://")) {
                     user.profileImagePath = self.profileImagePathDefaults
-                    do {
-                        try modelContext.save()
-                        print("[ProfileTabView] Backfilled SwiftData filename from AppStorage")
-                    } catch {
-                        print("[ProfileTabView] Failed to backfill SwiftData filename: \(error)")
-                    }
+                    try? modelContext.save()
                 }
                 return
-            } else {
-                print("[ProfileTabView] DEBUG AppStorage filename failed to load")
             }
         }
-        // 2) Try SwiftData stored value (filename preferred, legacy absolute tolerated)
         if let stored = currentUser?.profileImagePath, !stored.isEmpty {
-            if stored.hasPrefix("file://"), let legacyURL = URL(string: stored) {
-                print("[ProfileTabView] DEBUG Trying legacy SwiftData absolute URL:", legacyURL.absoluteString)
-                if let data = try? Data(contentsOf: legacyURL), let img = UIImage(data: data) {
-                    self.profileImage = img
-                    print("[ProfileTabView] Loaded profile image from legacy SwiftData URL")
-                    return
-                } else {
-                    print("[ProfileTabView] DEBUG Legacy SwiftData URL failed to load")
-                }
+            if stored.hasPrefix("file://"), let legacyURL = URL(string: stored),
+               let data = try? Data(contentsOf: legacyURL), let img = UIImage(data: data) {
+                self.profileImage = img; return
             } else if let dir = appSupportURL() {
                 let url = dir.appendingPathComponent(stored)
-                let exists = FileManager.default.fileExists(atPath: url.path)
-                print("[ProfileTabView] DEBUG Trying SwiftData filename:", stored, "exists:", exists, "->", url.path)
                 if let data = try? Data(contentsOf: url), let img = UIImage(data: data) {
-                    self.profileImage = img
-                    print("[ProfileTabView] Loaded profile image from SwiftData filename")
-                    return
-                } else {
-                    print("[ProfileTabView] DEBUG SwiftData filename failed to load")
+                    self.profileImage = img; return
                 }
             }
         }
         self.profileImage = nil
-        print("[ProfileTabView] No profile image could be loaded (iOS)")
         #endif
     }
 
@@ -688,7 +954,7 @@ struct ProfileTabView: View {
             try data.write(to: stableURL, options: .atomic)
             return stableURL
         } catch {
-            print("❌ Failed to save image (stable): \(error)")
+            print("❌ Failed to save image: \(error)")
             return nil
         }
     }

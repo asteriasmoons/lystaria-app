@@ -125,8 +125,18 @@ struct StepCountView: View {
 
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 18) {
-                    GradientTitle(text: "Steps", font: .title.bold())
-                        .padding(.top, 24)
+                    VStack(spacing: 0) {
+                        HStack {
+                            GradientTitle(text: "Steps", font: .title2.bold())
+                            Spacer()
+                        }
+                        .padding(.top, 20)
+
+                        Rectangle()
+                            .fill(LColors.glassBorder)
+                            .frame(height: 1)
+                            .padding(.top, 6)
+                    }
 
                     GlassCard {
                         VStack(alignment: .leading, spacing: 16) {

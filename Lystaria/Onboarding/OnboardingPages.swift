@@ -13,15 +13,10 @@ struct OnboardingPages {
         pageID: "onboarding_reminders",
         steps: [
             OnboardingStep(
-                targetID: "stepsIcon",
-                title: "Steps Tracker",
-                message: "Tap here to view your step progress. You can track how many steps you have for the day and see your monthly progress as well."
-            ),
-            OnboardingStep(
-                targetID: "waterIcon",
-                title: "Water Tracker",
-                message: "Track how much water you've logged, add water, and see your monthly progress as well."
-            ),
+                targetID: "clockIcon",
+                title: "Time Blocking",
+                message: "Tap here to view your reminders in time blocking view. You can edit reminders from here and mark them as complete. Auto scrolls to the current time it is."
+             ),
             OnboardingStep(
                 targetID: "boardIcon",
                 title: "Kanban View",
@@ -35,8 +30,8 @@ struct OnboardingPages {
         steps: [
             OnboardingStep(
                 targetID: "calendarSettingsIcon",
-                title: "Calendar Settings",
-                message: "Open calendar settings here. This is for things like syncing your local calendar and other cool settings."
+                title: "Settings",
+                message: "Open calendar settings here. This is for things like syncing your local calendar and other app settings like onboarding reruns."
             )
         ]
     )
@@ -99,6 +94,16 @@ struct OnboardingPages {
                 targetID: "medsIcon",
                 title: "Medications",
                 message: "Manage all of your medications in this tab. Includes adding dosing and other metrics for each medication and see your inventory at a glance with progress wheels."
+            ),
+            OnboardingStep(
+                targetID: "stepsIcon",
+                title: "Steps Tracker",
+                message: "Tap here to view your step progress. You can track how many steps you have for the day and see your monthly progress as well."
+            ),
+            OnboardingStep(
+                targetID: "waterIcon",
+                title: "Water Tracker",
+                message: "Track how much water you've logged, add water, and see your monthly progress as well."
             )
         ]
     )

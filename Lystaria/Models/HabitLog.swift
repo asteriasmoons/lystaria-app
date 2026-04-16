@@ -1,7 +1,6 @@
 // HabitLog.swift
 // Lystaria
 //
-// SwiftData model — mirrors the MongoDB HabitLog schema
 
 import Foundation
 import SwiftData

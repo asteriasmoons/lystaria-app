@@ -82,6 +82,10 @@ struct AddEditBookmarkView: View {
                 label("Folder")
                 folderPicker
             }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                dismissKeyboard()
+            }
         } footer: {
             actionRow
         }
@@ -376,4 +380,8 @@ private extension AddEditBookmarkView {
 
         return "" // Keep simple here; your main view already handles full detection
     }
+}
+
+fileprivate func dismissKeyboard() {
+    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
 }

@@ -3,6 +3,7 @@
 
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct RemindersView: View {
     @Environment(\.modelContext) private var modelContext
@@ -24,6 +25,10 @@ struct RemindersView: View {
 
     /// Editing
     @State private var editingReminder: LystariaReminder? = nil
+
+    /// Detail popup
+    @State private var detailReminder: LystariaReminder? = nil
+    @State private var showingDetailPopup = false
 
     /// Completion toast
     @State private var toastMessage: String? = nil
@@ -162,6 +167,11 @@ struct RemindersView: View {
                 mainContent
                 toastOverlay
 
+                if showingDetailPopup, let r = detailReminder {
+                    detailPopup(reminder: r)
+                        .zIndex(100)
+                }
+
                 // Floating action button
                 VStack {
                     Spacer()
@@ -220,7 +230,7 @@ struct RemindersView: View {
                     .preferredColorScheme(.dark)
             }
             .navigationDestination(isPresented: $showTimeBlock) {
-                ReminderTimeBlockView(allReminders: allReminders, onMarkDone: { reminder in
+                ReminderTimeBlockView(onMarkDone: { reminder in
                                 markDoneFromTimeBlock(reminder)
                             })
                             .preferredColorScheme(.dark)
@@ -262,7 +272,7 @@ struct RemindersView: View {
     }
 
     private var mainContent: some View {
-        GeometryReader { geo in
+        GeometryReader { proxy in
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 18) {
                     headerSection
@@ -273,8 +283,9 @@ struct RemindersView: View {
                 }
                 .padding(.horizontal, 24)
                 .padding(.bottom, 96)
-                .frame(width: geo.size.width, alignment: .leading)
+                .frame(width: proxy.size.width, alignment: .topLeading)
             }
+            .clipped()
         }
     }
 
@@ -305,52 +316,7 @@ struct RemindersView: View {
                         }
                     }
                     .buttonStyle(.plain)
-
-                    NavigationLink {
-                        StepCountView()
-                            .preferredColorScheme(.dark)
-                    } label: {
-                        ZStack {
-                            Circle()
-                                .fill(Color.white.opacity(0.08))
-                                .overlay(
-                                    Circle().stroke(LColors.glassBorder, lineWidth: 1),
-                                )
-                                .frame(width: 34, height: 34)
-
-                            Image("shoefill")
-                                .renderingMode(.template)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 16, height: 16)
-                                .foregroundColor(.white)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .onboardingTarget("stepsIcon")
-
-                    NavigationLink {
-                        WaterTrackingView()
-                            .preferredColorScheme(.dark)
-                    } label: {
-                        ZStack {
-                            Circle()
-                                .fill(Color.white.opacity(0.08))
-                                .overlay(
-                                    Circle().stroke(LColors.glassBorder, lineWidth: 1),
-                                )
-                                .frame(width: 34, height: 34)
-
-                            Image("glassfill")
-                                .renderingMode(.template)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 16, height: 16)
-                                .foregroundColor(.white)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .onboardingTarget("waterIcon")
+                    .onboardingTarget("clockIcon")
 
                     Button {
                         showKanban = true
@@ -473,13 +439,19 @@ struct RemindersView: View {
                         },
                         onSnooze: {
                             if let live = modelContext.model(for: id) as? LystariaReminder {
-                                snooze(live)
+                                snooze(live, minutes: $0)
                             }
                         },
                         onEdit: { editingReminder = reminder },
                         onDelete: {
                             if let live = modelContext.model(for: id) as? LystariaReminder {
                                 delete(live)
+                            }
+                        },
+                        onTap: {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                                detailReminder = reminder
+                                showingDetailPopup = true
                             }
                         },
                     )
@@ -536,10 +508,25 @@ struct RemindersView: View {
               let hid = reminder.linkedHabitId,
               let habit = habits.first(where: { $0.id == hid }) else { return }
 
-        let todayStart = Calendar.current.startOfDay(for: Date())
+        let cal = Calendar.current
+        let todayStart = cal.startOfDay(for: Date())
         let cap = max(1, habit.timesPerDay)
 
-        if let existing = (habit.logs ?? []).first(where: { Calendar.current.isDate($0.dayStart, inSameDayAs: todayStart) }) {
+        // Match HabitsView behavior: if today was marked skipped, remove that skip
+        // when the user completes the habit from a linked reminder.
+        let todaysSkips = (habit.skips ?? []).filter {
+            cal.isDate($0.dayStart, inSameDayAs: todayStart)
+        }
+        for skip in todaysSkips {
+            modelContext.delete(skip)
+        }
+        if !todaysSkips.isEmpty {
+            habit.skips = (habit.skips ?? []).filter {
+                !cal.isDate($0.dayStart, inSameDayAs: todayStart)
+            }
+        }
+
+        if let existing = (habit.logs ?? []).first(where: { cal.isDate($0.dayStart, inSameDayAs: todayStart) }) {
             if existing.count < cap {
                 existing.count += 1
                 existing.updatedAt = Date()
@@ -550,6 +537,7 @@ struct RemindersView: View {
         }
 
         habit.updatedAt = Date()
+        habit.logs = habit.logs
     }
 
     private func logMedicationIfLinked(_ reminder: LystariaReminder) {
@@ -561,7 +549,7 @@ struct RemindersView: View {
                     continue
                 }
 
-                let quantity = max(1, link.quantity)
+                let quantity = max(1, link.effectiveQuantity())
                 let previousAmount = medication.currentAmount
 
                 if medication.currentAmount > 0 {
@@ -636,37 +624,6 @@ struct RemindersView: View {
         }
     }
 
-    private func resetTodayHabitProgressIfNeeded(for reminder: LystariaReminder, now: Date) {
-        guard reminder.linkedKind == .habit,
-              let habitID = reminder.linkedHabitId,
-              let habit = habits.first(where: { $0.id == habitID }) else { return }
-
-        let cal = Calendar.current
-        let todaysLogs = (habit.logs ?? []).filter { log in
-            cal.isDate(log.dayStart, inSameDayAs: now)
-        }
-
-        let todaysCount = todaysLogs.reduce(0) { $0 + $1.count }
-        let completionTarget = max(1, habit.timesPerDay)
-        let isCompletedForToday = todaysCount >= completionTarget
-
-        // Only reset if:
-        // 1) the habit is currently considered completed for today, AND
-        // 2) after marking this reminder done, it advanced to another occurrence later TODAY.
-        guard isCompletedForToday,
-              cal.isDate(reminder.nextRunAt, inSameDayAs: now),
-              reminder.nextRunAt > now else { return }
-
-        for log in todaysLogs {
-            modelContext.delete(log)
-        }
-
-        habit.logs = (habit.logs ?? []).filter { log in
-            !cal.isDate(log.dayStart, inSameDayAs: now)
-        }
-
-        habit.updatedAt = now
-    }
 
     private func incrementCompletionsToday(_ reminder: LystariaReminder, occurrenceDate: Date) {
         let cal = Calendar.current
@@ -725,10 +682,6 @@ struct RemindersView: View {
             incrementCompletionsToday(reminder, occurrenceDate: completedOccurrenceDate)
             reminder.updatedAt = Date()
 
-            // If this is a habit-linked reminder and another same-day reminder is still due later,
-            // fully reset today's habit progress so the next same-day occurrence starts fresh.
-            resetTodayHabitProgressIfNeeded(for: reminder, now: now)
-
             // Persist immediately — this triggers SwiftData to diff and re-render the card,
             // which is what actually unchecks the circle in the UI.
             try? modelContext.save()
@@ -776,7 +729,6 @@ struct RemindersView: View {
             reminder.lastCompletedAt = Date()
             incrementCompletionsToday(reminder, occurrenceDate: completedOccurrenceDate)
             reminder.updatedAt = Date()
-            resetTodayHabitProgressIfNeeded(for: reminder, now: now)
             try? modelContext.save()
             awardPointsForReminderCompletion(reminder, occurrenceDate: completedOccurrenceDate)
             NotificationManager.shared.cancelReminder(reminder)
@@ -805,14 +757,254 @@ struct RemindersView: View {
         }
     }
 
-    private func snooze(_ reminder: LystariaReminder) {
-        print("[RemindersView] snooze id=\(reminder.id) old nextRunAt=\(reminder.nextRunAt)")
+    private func snooze(_ reminder: LystariaReminder, minutes: Int) {
+        print("[RemindersView] snooze id=\(reminder.id) minutes=\(minutes) old nextRunAt=\(reminder.nextRunAt)")
         let cal = ReminderCompute.tzCalendar
-        reminder.nextRunAt = cal.date(byAdding: .minute, value: 10, to: reminder.nextRunAt) ?? reminder.nextRunAt
+        reminder.nextRunAt = cal.date(byAdding: .minute, value: minutes, to: reminder.nextRunAt) ?? reminder.nextRunAt
         reminder.updatedAt = Date()
         try? modelContext.save()
         print("[RemindersView] snoozed new nextRunAt=\(reminder.nextRunAt)")
         NotificationManager.shared.snoozeReminder(reminder)
+    }
+
+    private func detailPopup(reminder: LystariaReminder) -> some View {
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            let now = context.date
+            let cal = ReminderCompute.tzCalendar
+            let todayStart = cal.startOfDay(for: now)
+            let dueDate = reminder.nextRunAt
+            let completed: Bool = {
+                if let c = reminder.lastCompletedAt, cal.isDate(c, inSameDayAs: dueDate) { return true }
+                if !reminder.isRecurring, let a = reminder.acknowledgedAt, cal.isDate(a, inSameDayAs: dueDate) { return true }
+                return false
+            }()
+            let overdue = dueDate < todayStart && !completed
+            let dueNow = !overdue && !completed && dueDate >= todayStart && dueDate <= now
+            let upcoming = !overdue && !completed && dueDate > now
+
+            let schedLabel: String = {
+                guard let s = reminder.schedule else { return "Once" }
+                if (s.interval ?? 1) > 1, s.kind != .interval, s.kind != .once { return "Custom" }
+                return s.kind.label
+            }()
+            let schedColor: Color = {
+                if let s = reminder.schedule, (s.interval ?? 1) > 1, s.kind != .interval, s.kind != .once {
+                    return Color(red: 201/255, green: 44/255, blue: 194/255)
+                }
+                switch reminder.schedule?.kind ?? .once {
+                case .once:     return LColors.badgeOnce
+                case .daily:    return LColors.badgeDaily
+                case .weekly:   return LColors.badgeWeekly
+                case .monthly:  return .yellow
+                case .yearly:   return LColors.gradientPurple
+                case .interval: return LColors.badgeInterval
+                }
+            }()
+            let kindLabel: String = {
+                switch reminder.linkedKindRaw?.lowercased() {
+                case "habit":      return "Habit"
+                case "event":      return "Event"
+                case "medication": return "Medication"
+                default:           return "General"
+                }
+            }()
+            let kindColor: Color = {
+                switch reminder.linkedKindRaw?.lowercased() {
+                case "habit":      return Color(red: 0.14, green: 0.63, blue: 0.56).opacity(0.82)
+                case "event":      return Color(red: 0.95, green: 0.56, blue: 0.20).opacity(0.82)
+                case "medication": return Color(red: 0.86, green: 0.28, blue: 0.58).opacity(0.82)
+                default:           return Color.white.opacity(0.9)
+                }
+            }()
+            let displayTZ = TimeZone(identifier: NotificationManager.shared.effectiveTimezoneID) ?? .current
+            let timeText: String = {
+                let df = DateFormatter()
+                df.timeZone = displayTZ
+                df.locale = .current
+                df.setLocalizedDateFormatFromTemplate("EEE, MMM d 'at' h:mm a")
+                return df.string(from: dueDate)
+            }()
+            let scheduledTimes: [String] = {
+                guard let s = reminder.schedule, s.kind != .interval else { return [] }
+                let raw = (s.timesOfDay?.isEmpty == false) ? (s.timesOfDay ?? []) : (s.timeOfDay != nil ? [s.timeOfDay!] : [])
+                let parsed = raw.compactMap { ReminderCompute.parseHHMM($0) }.sorted { ($0.0, $0.1) < ($1.0, $1.1) }
+                guard !parsed.isEmpty else { return [] }
+                let df = DateFormatter()
+                df.timeZone = displayTZ
+                df.locale = .current
+                df.timeStyle = .short
+                df.dateStyle = .none
+                return parsed.map { t in df.string(from: ReminderCompute.merge(day: now, hour: t.0, minute: t.1, in: displayTZ)) }
+            }()
+
+            LystariaOverlayPopup(
+                onClose: {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                        showingDetailPopup = false
+                        detailReminder = nil
+                    }
+                },
+                width: min(UIScreen.main.bounds.width - 32, 520),
+                heightRatio: 0.55,
+            ) {
+                HStack {
+                    GradientTitle(text: "Reminder Details", size: 22)
+                    Spacer()
+                    Button {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                            showingDetailPopup = false
+                            detailReminder = nil
+                        }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(LColors.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            } content: {
+                VStack(alignment: .leading, spacing: 16) {
+
+                    // Badges row 1: schedule kind + linked kind + routine
+                    HStack(spacing: 6) {
+                        LBadge(text: schedLabel, color: schedColor)
+                        LBadge(text: kindLabel, color: kindColor)
+                        if reminder.reminderType == .routine {
+                            LBadge(text: "Routine", color: Color(red: 0.36, green: 0.48, blue: 0.95).opacity(0.88))
+                        }
+                    }
+
+                    // Badges row 2: status
+                    if overdue || dueNow || upcoming {
+                        HStack(spacing: 6) {
+                            if overdue {
+                                LBadge(text: "OVERDUE", color: Color.red.opacity(0.42))
+                            } else if dueNow {
+                                LBadge(text: "DUE NOW", color: LColors.accent.opacity(0.48))
+                            } else if upcoming {
+                                LBadge(text: "UPCOMING", color: Color.yellow.opacity(0.48))
+                            }
+                        }
+                    }
+
+                    // Time pills
+                    if !scheduledTimes.isEmpty {
+                        LazyVGrid(
+                            columns: [GridItem(.adaptive(minimum: 64), spacing: 4)],
+                            alignment: .leading,
+                            spacing: 4,
+                        ) {
+                            ForEach(scheduledTimes, id: \.self) { t in
+                                Text(t)
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(Color.white.opacity(0.14))
+                                    .clipShape(Capsule())
+                                    .overlay(Capsule().stroke(Color.white.opacity(0.18), lineWidth: 1))
+                            }
+                        }
+                    }
+
+                    // Title
+                    HStack(alignment: .top, spacing: 10) {
+                        Image("pencilwrite")
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 16, height: 16)
+                            .foregroundStyle(.white)
+                            .padding(.top, 2)
+                        Text(reminder.title)
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(LColors.textPrimary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    // Description
+                    if let details = reminder.details,
+                       !details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image("flipbook")
+                                .renderingMode(.template)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 16, height: 16)
+                                .foregroundStyle(.white)
+                                .padding(.top, 2)
+                            Text(details)
+                                .font(.system(size: 14))
+                                .foregroundStyle(LColors.textSecondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+
+                    // Checklist items
+                    let routineItems = reminder.sortedRoutineChecklistItems
+                    let regularItems = reminder.checklistItems
+                    let hasChecklist = reminder.reminderType == .routine ? !routineItems.isEmpty : !regularItems.isEmpty
+                    if hasChecklist {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image("starlines")
+                                .renderingMode(.template)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 16, height: 16)
+                                .foregroundStyle(.white)
+                                .padding(.top, 2)
+                            VStack(alignment: .leading, spacing: 6) {
+                                if reminder.reminderType == .routine {
+                                    ForEach(routineItems) { item in
+                                        HStack(spacing: 6) {
+                                            Image(systemName: reminder.isRoutineItemChecked(item) ? "checkmark.circle.fill" : "circle")
+                                                .font(.system(size: 12))
+                                                .foregroundStyle(reminder.isRoutineItemChecked(item) ? LColors.success : LColors.textSecondary)
+                                            Text(item.title)
+                                                .font(.system(size: 13))
+                                                .foregroundStyle(LColors.textSecondary)
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                        }
+                                    }
+                                } else {
+                                    ForEach(regularItems, id: \.self) { item in
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "circle")
+                                                .font(.system(size: 12))
+                                                .foregroundStyle(LColors.textSecondary)
+                                            Text(item)
+                                                .font(.system(size: 13))
+                                                .foregroundStyle(LColors.textSecondary)
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                        }
+                                    }
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+
+                    // Next run time
+                    HStack(alignment: .center, spacing: 10) {
+                        Image("fillalarm")
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 16, height: 16)
+                            .foregroundStyle(.white)
+                        Text(timeText)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(LColors.textPrimary)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            } footer: {
+                EmptyView()
+            }
+        }
     }
 
     private func delete(_ reminder: LystariaReminder) {
@@ -860,10 +1052,13 @@ struct ReminderCard: View {
     @State private var showingDeleteConfirm = false
     @State private var showingReschedulePopup = false
     @State private var rescheduleDateTime = Date()
+    @State private var showingSnoozePopup = false
+    @State private var snoozeMinutesText = "10"
     let onDone: () -> Void
-    let onSnooze: () -> Void
+    let onSnooze: (Int) -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
+    let onTap: () -> Void
 
     private var scheduleLabel: String {
         guard let schedule = reminder.schedule else { return "Once" }
@@ -1144,6 +1339,96 @@ struct ReminderCard: View {
         }
     }
 
+    private var snoozePopup: some View {
+        LystariaOverlayPopup(
+            onClose: {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                    showingSnoozePopup = false
+                }
+            },
+            width: 480,
+            heightRatio: 0.60,
+        ) {
+            HStack {
+                GradientTitle(text: "Snooze Reminder", font: .title2.bold())
+                Spacer()
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                        showingSnoozePopup = false
+                    }
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(LColors.textSecondary)
+                }
+                .buttonStyle(.plain)
+            }
+        } content: {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("How many minutes do you want to snooze?")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(LColors.textSecondary)
+
+                LystariaControlRow(label: "Minutes") {
+                    TextField("10", text: $snoozeMinutesText)
+                        .textFieldStyle(.plain)
+                        .keyboardType(.numberPad)
+                        .foregroundStyle(LColors.textPrimary)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 64)
+                        .onChange(of: snoozeMinutesText) { _, newValue in
+                            let filtered = newValue.filter { $0.isNumber }
+                            if filtered != newValue { snoozeMinutesText = filtered }
+                        }
+                }
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach([5, 10, 15, 20, 30, 60], id: \.self) { preset in
+                            let label = preset < 60 ? "\(preset) min" : "1 hr"
+                            Button {
+                                snoozeMinutesText = "\(preset)"
+                            } label: {
+                                Text(label)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(snoozeMinutesText == "\(preset)" ? .white : LColors.textPrimary)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 8)
+                                    .background(snoozeMinutesText == "\(preset)" ? LColors.accent : Color.white.opacity(0.08))
+                                    .clipShape(Capsule())
+                                    .overlay(Capsule().stroke(snoozeMinutesText == "\(preset)" ? LColors.accent : LColors.glassBorder, lineWidth: 1))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        } footer: {
+            GlassCard(padding: 14) {
+                Button {
+                    let minutes = max(1, Int(snoozeMinutesText.filter { $0.isNumber }) ?? 10)
+                    onSnooze(minutes)
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                        showingSnoozePopup = false
+                    }
+                } label: {
+                    Text("Snooze")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(AnyShapeStyle(LGradients.blue))
+                        .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
+                }
+                .buttonStyle(.plain)
+                .disabled((Int(snoozeMinutesText.filter { $0.isNumber }) ?? 0) < 1)
+            }
+        }
+    }
+
     private var reschedulePopup: some View {
         LystariaOverlayPopup(
             onClose: {
@@ -1273,6 +1558,7 @@ struct ReminderCard: View {
             let dueNow = isDueNow(now: now)
             let upcoming = isUpcoming(now: now)
 
+            ZStack {
             GlassCard {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(alignment: .top, spacing: 10) {
@@ -1340,7 +1626,7 @@ struct ReminderCard: View {
 
                     VStack(alignment: .leading, spacing: 10) {
                         HStack(spacing: 10) {
-                            LButton(title: "Snooze", icon: "clock.arrow.circlepath", style: .secondary) { onSnooze() }
+                            LButton(title: "Snooze", icon: "clock.arrow.circlepath", style: .secondary) { showingSnoozePopup = true }
                             LButton(title: "Reschedule", icon: "calendar.badge.clock", style: .secondary) { openReschedulePopup() }
                         }
 
@@ -1353,6 +1639,12 @@ struct ReminderCard: View {
                     }
                 }
             }
+            .onTapGesture {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                    onTap()
+                }
+            }
+            } // ZStack
             .lystariaAlertConfirm(
                 isPresented: $showingDeleteConfirm,
                 title: "Delete Reminder?",
@@ -1367,6 +1659,14 @@ struct ReminderCard: View {
                     Color.clear
                         .ignoresSafeArea()
                     reschedulePopup
+                }
+                .presentationBackground(.clear)
+            }
+            .fullScreenCover(isPresented: $showingSnoozePopup) {
+                ZStack {
+                    Color.clear
+                        .ignoresSafeArea()
+                    snoozePopup
                 }
                 .presentationBackground(.clear)
             }
@@ -1406,7 +1706,8 @@ struct NewReminderSheet: View {
     @State private var yearlyMode: ReminderScheduleForm.YearlyMode = .sameDay
     @State private var selectedMedicationId: UUID? = nil
     @State private var linkedMedicationQuantity: Int = 1
-    @State private var routineMedicationRows: [(id: UUID, medicationId: UUID?, quantity: Int)] = []
+    @State private var linkedMedicationQuantityOverrides: [Int: Int] = [:]
+    @State private var routineMedicationRows: [(id: UUID, medicationId: UUID?, quantity: Int, quantityOverrides: [Int: Int])] = []
 
     private var canSave: Bool {
         if titleTrimmed.isEmpty { return false }
@@ -1624,56 +1925,10 @@ struct NewReminderSheet: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
 
                             if selectedMedicationId != nil {
-                                LystariaControlRow(label: nil) {
-                                    HStack(spacing: 12) {
-                                        Text("Subtract")
-                                            .font(.system(size: 14, weight: .semibold))
-                                            .foregroundStyle(LColors.textPrimary)
-
-                                        Button {
-                                            if linkedMedicationQuantity > 1 {
-                                                linkedMedicationQuantity -= 1
-                                            }
-                                        } label: {
-                                            Image(systemName: "minus")
-                                                .font(.system(size: 12, weight: .bold))
-                                                .foregroundStyle(linkedMedicationQuantity <= 1 ? LColors.textSecondary.opacity(0.5) : .white)
-                                                .frame(width: 32, height: 32)
-                                                .background(linkedMedicationQuantity <= 1 ? Color.white.opacity(0.05) : LColors.accent.opacity(0.85))
-                                                .clipShape(Circle())
-                                        }
-                                        .buttonStyle(.plain)
-                                        .disabled(linkedMedicationQuantity <= 1)
-
-                                        Text("\(linkedMedicationQuantity)")
-                                            .font(.system(size: 14, weight: .bold))
-                                            .foregroundStyle(LColors.textPrimary)
-                                            .padding(.horizontal, 16)
-                                            .padding(.vertical, 8)
-                                            .background(Color.white.opacity(0.08))
-                                            .clipShape(Capsule())
-                                            .overlay(
-                                                Capsule()
-                                                    .stroke(LColors.glassBorder, lineWidth: 1),
-                                            )
-
-                                        Button {
-                                            if linkedMedicationQuantity < 100 {
-                                                linkedMedicationQuantity += 1
-                                            }
-                                        } label: {
-                                            Image(systemName: "plus")
-                                                .font(.system(size: 12, weight: .bold))
-                                                .foregroundStyle(.white)
-                                                .frame(width: 32, height: 32)
-                                                .background(LColors.accent.opacity(0.85))
-                                                .clipShape(Circle())
-                                        }
-                                        .buttonStyle(.plain)
-
-                                        Spacer()
-                                    }
-                                }
+                                MedicationDoseScheduleGrid(
+                                    defaultQuantity: $linkedMedicationQuantity,
+                                    overrides: $linkedMedicationQuantityOverrides
+                                )
                             }
                         }
                     }
@@ -1778,7 +2033,7 @@ struct NewReminderSheet: View {
                             }
 
                             Button {
-                                routineMedicationRows.append((id: UUID(), medicationId: nil, quantity: 1))
+                                routineMedicationRows.append((id: UUID(), medicationId: nil, quantity: 1, quantityOverrides: [:]))
                             } label: {
                                 Label("Add Medication", systemImage: "plus.circle.fill")
                                     .font(.system(size: 13, weight: .semibold))
@@ -1809,6 +2064,7 @@ struct NewReminderSheet: View {
                 anchorDay: $anchorDay,
             )
         }
+        .modifier(ReminderFormKeyboardDismissModifier())
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -1895,6 +2151,15 @@ struct NewReminderSheet: View {
                     newReminder.linkedMedicationId = selectedMedicationId
                     newReminder.linkedMedicationQuantity = max(1, linkedMedicationQuantity)
                     newReminder.linkedHabitId = nil
+                    // Store per-day overrides on a dedicated link object
+                    let link = ReminderMedicationLink(
+                        reminder: newReminder,
+                        medicationId: selectedMedicationId,
+                        quantity: max(1, linkedMedicationQuantity),
+                        sortOrder: 0,
+                        quantityOverrides: linkedMedicationQuantityOverrides
+                    )
+                    newReminder.medicationLinks = [link]
                 } else {
                     newReminder.linkedKindRaw = nil
                     newReminder.linkedMedicationId = nil
@@ -1933,6 +2198,7 @@ struct NewReminderSheet: View {
                         medicationId: row.medicationId,
                         quantity: max(1, row.quantity),
                         sortOrder: idx,
+                        quantityOverrides: row.quantityOverrides
                     )
                 }
             } else {
@@ -1982,7 +2248,8 @@ struct EditReminderSheet: View {
     @State private var yearlyMode: ReminderScheduleForm.YearlyMode = .sameDay
     @State private var selectedMedicationId: UUID? = nil
     @State private var linkedMedicationQuantity: Int = 1
-    @State private var routineMedicationRows: [(id: UUID, medicationId: UUID?, quantity: Int)] = []
+    @State private var linkedMedicationQuantityOverrides: [Int: Int] = [:]
+    @State private var routineMedicationRows: [(id: UUID, medicationId: UUID?, quantity: Int, quantityOverrides: [Int: Int])] = []
 
     private var canSave: Bool {
         if titleTrimmed.isEmpty { return false }
@@ -2209,56 +2476,10 @@ struct EditReminderSheet: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
 
                             if selectedMedicationId != nil {
-                                LystariaControlRow(label: nil) {
-                                    HStack(spacing: 12) {
-                                        Text("Subtract")
-                                            .font(.system(size: 14, weight: .semibold))
-                                            .foregroundStyle(LColors.textPrimary)
-
-                                        Button {
-                                            if linkedMedicationQuantity > 1 {
-                                                linkedMedicationQuantity -= 1
-                                            }
-                                        } label: {
-                                            Image(systemName: "minus")
-                                                .font(.system(size: 12, weight: .bold))
-                                                .foregroundStyle(linkedMedicationQuantity <= 1 ? LColors.textSecondary.opacity(0.5) : .white)
-                                                .frame(width: 32, height: 32)
-                                                .background(linkedMedicationQuantity <= 1 ? Color.white.opacity(0.05) : LColors.accent.opacity(0.85))
-                                                .clipShape(Circle())
-                                        }
-                                        .buttonStyle(.plain)
-                                        .disabled(linkedMedicationQuantity <= 1)
-
-                                        Text("\(linkedMedicationQuantity)")
-                                            .font(.system(size: 14, weight: .bold))
-                                            .foregroundStyle(LColors.textPrimary)
-                                            .padding(.horizontal, 16)
-                                            .padding(.vertical, 8)
-                                            .background(Color.white.opacity(0.08))
-                                            .clipShape(Capsule())
-                                            .overlay(
-                                                Capsule()
-                                                    .stroke(LColors.glassBorder, lineWidth: 1),
-                                            )
-
-                                        Button {
-                                            if linkedMedicationQuantity < 100 {
-                                                linkedMedicationQuantity += 1
-                                            }
-                                        } label: {
-                                            Image(systemName: "plus")
-                                                .font(.system(size: 12, weight: .bold))
-                                                .foregroundStyle(.white)
-                                                .frame(width: 32, height: 32)
-                                                .background(LColors.accent.opacity(0.85))
-                                                .clipShape(Circle())
-                                        }
-                                        .buttonStyle(.plain)
-
-                                        Spacer()
-                                    }
-                                }
+                                MedicationDoseScheduleGrid(
+                                    defaultQuantity: $linkedMedicationQuantity,
+                                    overrides: $linkedMedicationQuantityOverrides
+                                )
                             }
                         }
                     }
@@ -2292,66 +2513,25 @@ struct EditReminderSheet: View {
                                     .tint(LColors.accent)
                                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                                    HStack(spacing: 12) {
-                                        Text("Subtract")
-                                            .font(.system(size: 14, weight: .semibold))
-                                            .foregroundStyle(LColors.textPrimary)
+                                    MedicationDoseScheduleGrid(
+                                        defaultQuantity: Binding(
+                                            get: { routineMedicationRows[idx].quantity },
+                                            set: { routineMedicationRows[idx].quantity = $0 }
+                                        ),
+                                        overrides: Binding(
+                                            get: { routineMedicationRows[idx].quantityOverrides },
+                                            set: { routineMedicationRows[idx].quantityOverrides = $0 }
+                                        )
+                                    )
 
-                                        Button {
-                                            if routineMedicationRows[idx].quantity > 1 {
-                                                routineMedicationRows[idx].quantity -= 1
-                                            }
-                                        } label: {
-                                            Image(systemName: "minus")
-                                                .font(.system(size: 12, weight: .bold))
-                                                .foregroundStyle(routineMedicationRows[idx].quantity <= 1 ? LColors.textSecondary.opacity(0.5) : .white)
-                                                .frame(width: 32, height: 32)
-                                                .background(routineMedicationRows[idx].quantity <= 1 ? Color.white.opacity(0.05) : LColors.accent.opacity(0.85))
-                                                .clipShape(Circle())
-                                        }
-                                        .buttonStyle(.plain)
-                                        .disabled(routineMedicationRows[idx].quantity <= 1)
-
-                                        Text("\(routineMedicationRows[idx].quantity)")
-                                            .font(.system(size: 14, weight: .bold))
-                                            .foregroundStyle(LColors.textPrimary)
-                                            .padding(.horizontal, 16)
-                                            .padding(.vertical, 8)
-                                            .background(Color.white.opacity(0.08))
-                                            .clipShape(Capsule())
-                                            .overlay(
-                                                Capsule()
-                                                    .stroke(LColors.glassBorder, lineWidth: 1),
-                                            )
-
-                                        Button {
-                                            if routineMedicationRows[idx].quantity < 100 {
-                                                routineMedicationRows[idx].quantity += 1
-                                            }
-                                        } label: {
-                                            Image(systemName: "plus")
-                                                .font(.system(size: 12, weight: .bold))
-                                                .foregroundStyle(.white)
-                                                .frame(width: 32, height: 32)
-                                                .background(LColors.accent.opacity(0.85))
-                                                .clipShape(Circle())
-                                        }
-                                        .buttonStyle(.plain)
-
-                                        Spacer()
-
-                                        Button {
-                                            routineMedicationRows.remove(at: idx)
-                                        } label: {
-                                            Image(systemName: "trash")
-                                                .font(.system(size: 12, weight: .bold))
-                                                .foregroundStyle(.white)
-                                                .frame(width: 32, height: 32)
-                                                .background(Color.red.opacity(0.75))
-                                                .clipShape(Circle())
-                                        }
-                                        .buttonStyle(.plain)
+                                    Button {
+                                        routineMedicationRows.remove(at: idx)
+                                    } label: {
+                                        Label("Remove", systemImage: "trash")
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundStyle(LColors.textSecondary)
                                     }
+                                    .buttonStyle(.plain)
                                 }
                                 .padding(12)
                                 .background(Color.white.opacity(0.04))
@@ -2363,7 +2543,7 @@ struct EditReminderSheet: View {
                             }
 
                             Button {
-                                routineMedicationRows.append((id: UUID(), medicationId: nil, quantity: 1))
+                                routineMedicationRows.append((id: UUID(), medicationId: nil, quantity: 1, quantityOverrides: [:]))
                             } label: {
                                 Label("Add Medication", systemImage: "plus.circle.fill")
                                     .font(.system(size: 13, weight: .semibold))
@@ -2394,6 +2574,7 @@ struct EditReminderSheet: View {
                 anchorDay: $anchorDay,
             )
         }
+        .modifier(ReminderFormKeyboardDismissModifier())
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -2408,12 +2589,19 @@ struct EditReminderSheet: View {
         routineItemEntries = storedRoutineItems.isEmpty ? [""] : storedRoutineItems
         selectedMedicationId = reminder.linkedMedicationId
         linkedMedicationQuantity = max(1, reminder.linkedMedicationQuantity)
+        // Restore per-day overrides for regular reminders from the stored link object
+        if let regularLink = _reminder.wrappedValue.sortedMedicationLinks.first(where: { $0.medicationId == reminder.linkedMedicationId }) {
+            linkedMedicationQuantityOverrides = regularLink.quantityOverrides
+        } else {
+            linkedMedicationQuantityOverrides = [:]
+        }
         let storedMedicationLinks = _reminder.wrappedValue.sortedMedicationLinks
         routineMedicationRows = storedMedicationLinks.map { link in
             (
                 id: link.id,
                 medicationId: link.medicationId,
                 quantity: max(1, link.quantity),
+                quantityOverrides: link.quantityOverrides
             )
         }
 
@@ -2524,6 +2712,7 @@ struct EditReminderSheet: View {
                         medicationId: row.medicationId,
                         quantity: max(1, row.quantity),
                         sortOrder: idx,
+                        quantityOverrides: row.quantityOverrides
                     )
                 }
             } else {
@@ -2537,6 +2726,15 @@ struct EditReminderSheet: View {
                     currentReminder.linkedMedicationId = selectedMedicationId
                     currentReminder.linkedMedicationQuantity = max(1, linkedMedicationQuantity)
                     currentReminder.linkedHabitId = nil
+                    // Update overrides on the dedicated link object
+                    let link = ReminderMedicationLink(
+                        reminder: currentReminder,
+                        medicationId: selectedMedicationId,
+                        quantity: max(1, linkedMedicationQuantity),
+                        sortOrder: 0,
+                        quantityOverrides: linkedMedicationQuantityOverrides
+                    )
+                    currentReminder.medicationLinks = [link]
                 } else {
                     currentReminder.linkedKindRaw = nil
                     currentReminder.linkedMedicationId = nil
@@ -2621,6 +2819,20 @@ struct EditReminderSheet: View {
             onClose()
         }
     }
+}
+
+private struct ReminderFormKeyboardDismissModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .contentShape(Rectangle())
+            .onTapGesture {
+                dismissKeyboard()
+            }
+    }
+}
+
+fileprivate func dismissKeyboard() {
+    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
 }
 
 // MARK: - Shared Schedule Form
@@ -3750,6 +3962,40 @@ enum ReminderCompute {
 
             day = cal.date(byAdding: .day, value: 1, to: day) ?? day
         }
+    }
+
+    /// Window-aware interval next run for habit reminders.
+    /// After adding intervalMinutes to now, if the result falls outside [windowStartHHMM, windowEndHHMM],
+    /// it clamps to the window start on the next day.
+    static func nextRunInterval(
+        after now: Date,
+        intervalMinutes: Int,
+        windowStart: String,
+        windowEnd: String
+    ) -> Date {
+        let cal = tzCalendar
+        let base = cal.date(bySetting: .second, value: 0, of: now) ?? now
+        let candidate = cal.date(byAdding: .minute, value: intervalMinutes, to: base) ?? base
+
+        guard
+            let (wsH, wsM) = parseHHMM(windowStart),
+            let (weH, weM) = parseHHMM(windowEnd)
+        else {
+            return candidate
+        }
+
+        let candidateMinutes = cal.component(.hour, from: candidate) * 60 + cal.component(.minute, from: candidate)
+        let windowStartMinutes = wsH * 60 + wsM
+        let windowEndMinutes = weH * 60 + weM
+
+        // If within the window, return as-is.
+        if candidateMinutes >= windowStartMinutes && candidateMinutes <= windowEndMinutes {
+            return candidate
+        }
+
+        // Otherwise, schedule at window start the next day.
+        let tomorrow = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: candidate)) ?? candidate
+        return merge(day: tomorrow, hour: wsH, minute: wsM)
     }
 }
 

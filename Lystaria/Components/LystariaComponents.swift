@@ -468,6 +468,7 @@ struct GlassCard<Content: View>: View {
 struct SectionHeader: View {
     let title: String
     let icon: String
+    var isAsset: Bool = false
     var onAdd: (() -> Void)? = nil
     
     var body: some View {
@@ -477,8 +478,17 @@ struct SectionHeader: View {
                     .font(.headline)
                     .foregroundStyle(LColors.textPrimary)
             } icon: {
-                Image(systemName: icon)
-                    .foregroundStyle(LColors.accent)
+                if isAsset {
+                    Image(icon)
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 16, height: 16)
+                        .foregroundStyle(.white)
+                } else {
+                    Image(systemName: icon)
+                        .foregroundStyle(LColors.accent)
+                }
             }
             
             Spacer()

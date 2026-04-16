@@ -21,17 +21,17 @@ struct MedicationPageView: View {
 
     @State private var showAddMedicationPopup = false
     @State private var newMedicationName = ""
-    @State private var newMedicationDosage = ""
     @State private var newMedicationCurrentAmount = ""
     @State private var newMedicationSupplyAmount = ""
+    @State private var newMedicationDaysSupply = ""
     @State private var newMedicationRefillDate = Date()
     @State private var includeRefillDate = false
     @State private var selectedMedication: Medication? = nil
     @State private var showEditMedicationPopup = false
     @State private var editMedicationName = ""
-    @State private var editMedicationDosage = ""
     @State private var editMedicationCurrentAmount = ""
     @State private var editMedicationSupplyAmount = ""
+    @State private var editMedicationDaysSupply = ""
     @State private var editMedicationRefillDate = Date()
     @State private var editIncludeRefillDate = false
     @State private var showDeleteMedicationConfirm = false
@@ -141,6 +141,9 @@ struct MedicationPageView: View {
 
             deleteMedicationConfirm
             deleteHistoryConfirm
+        }
+        .onAppear {
+            processRefills()
         }
         .overlayPreferenceValue(OnboardingTargetKey.self) { anchors in
             ZStack {
@@ -296,13 +299,6 @@ struct MedicationPageView: View {
                         }
 
                         HStack(spacing: 8) {
-                            if !med.dosage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                cardInfoPill(
-                                    text: med.dosage,
-                                    fill: Color(red: 0.03, green: 0.86, blue: 0.99).opacity(0.14)
-                                )
-                            }
-
                             if let refill = med.refillDate {
                                 cardInfoPill(
                                     text: "Refill \(refill.formatted(date: .abbreviated, time: .omitted))",
@@ -312,6 +308,12 @@ struct MedicationPageView: View {
                                 cardInfoPill(
                                     text: "No refill date",
                                     fill: Color.white.opacity(0.08)
+                                )
+                            }
+                            if med.daysSupply > 0 {
+                                cardInfoPill(
+                                    text: "\(med.daysSupply)d supply",
+                                    fill: Color(red: 0.03, green: 0.86, blue: 0.99).opacity(0.14)
                                 )
                             }
                         }
@@ -474,9 +476,9 @@ struct MedicationPageView: View {
             content: {
                 VStack(alignment: .leading, spacing: 14) {
                     popupField(title: "Medication Name", text: $newMedicationName, keyboard: .default)
-                    popupField(title: "Dosing", text: $newMedicationDosage, keyboard: .default)
                     popupField(title: "Current Amount", text: $newMedicationCurrentAmount, keyboard: .numberPad)
                     popupField(title: "Supply Amount", text: $newMedicationSupplyAmount, keyboard: .numberPad)
+                    popupField(title: "Days Supply", text: $newMedicationDaysSupply, keyboard: .numberPad)
 
                     VStack(alignment: .leading, spacing: 10) {
                         Toggle(isOn: $includeRefillDate) {
@@ -555,9 +557,9 @@ struct MedicationPageView: View {
 
     private func saveMedication() {
         let trimmedName = newMedicationName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedDosage = newMedicationDosage.trimmingCharacters(in: .whitespacesAndNewlines)
-        let currentAmount = Int(newMedicationCurrentAmount) ?? 0
-        let supplyAmount = Int(newMedicationSupplyAmount) ?? 0
+        let currentAmount = Int(newMedicationCurrentAmount.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+        let supplyAmount = Int(newMedicationSupplyAmount.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+        let daysSupply = Int(newMedicationDaysSupply.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
 
         guard !trimmedName.isEmpty else { return }
         let decision = limits.canCreate(.medicationCardsTotal, currentCount: medications.count)
@@ -565,18 +567,18 @@ struct MedicationPageView: View {
 
         let medication = Medication(
             name: trimmedName,
-            dosage: trimmedDosage,
             currentAmount: currentAmount,
             supplyAmount: supplyAmount,
+            daysSupply: daysSupply,
             refillDate: includeRefillDate ? newMedicationRefillDate : nil
         )
 
         modelContext.insert(medication)
 
         newMedicationName = ""
-        newMedicationDosage = ""
         newMedicationCurrentAmount = ""
         newMedicationSupplyAmount = ""
+        newMedicationDaysSupply = ""
         newMedicationRefillDate = Date()
         includeRefillDate = false
 
@@ -601,9 +603,9 @@ struct MedicationPageView: View {
             content: {
                 VStack(alignment: .leading, spacing: 14) {
                     popupField(title: "Medication Name", text: $editMedicationName, keyboard: .default)
-                    popupField(title: "Dosing", text: $editMedicationDosage, keyboard: .default)
                     popupField(title: "Current Amount", text: $editMedicationCurrentAmount, keyboard: .numberPad)
                     popupField(title: "Supply Amount", text: $editMedicationSupplyAmount, keyboard: .numberPad)
+                    popupField(title: "Days Supply", text: $editMedicationDaysSupply, keyboard: .numberPad)
 
                     VStack(alignment: .leading, spacing: 10) {
                         Toggle(isOn: $editIncludeRefillDate) {
@@ -666,9 +668,9 @@ struct MedicationPageView: View {
     private func openEditPopup(for medication: Medication) {
         selectedMedication = medication
         editMedicationName = medication.name
-        editMedicationDosage = medication.dosage
         editMedicationCurrentAmount = String(medication.currentAmount)
         editMedicationSupplyAmount = String(medication.supplyAmount)
+        editMedicationDaysSupply = medication.daysSupply > 0 ? String(medication.daysSupply) : ""
 
         if let refillDate = medication.refillDate {
             editIncludeRefillDate = true
@@ -687,18 +689,22 @@ struct MedicationPageView: View {
         guard let medication = selectedMedication else { return }
 
         let trimmedName = editMedicationName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedDosage = editMedicationDosage.trimmingCharacters(in: .whitespacesAndNewlines)
-        let currentAmount = Int(editMedicationCurrentAmount) ?? 0
-        let supplyAmount = Int(editMedicationSupplyAmount) ?? 0
+        let currentAmount = Int(editMedicationCurrentAmount.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+        let supplyAmount = Int(editMedicationSupplyAmount.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+        let daysSupply = Int(editMedicationDaysSupply.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
 
         guard !trimmedName.isEmpty else { return }
 
         medication.name = trimmedName
-        medication.dosage = trimmedDosage
         medication.currentAmount = currentAmount
         medication.supplyAmount = supplyAmount
+        medication.daysSupply = daysSupply
         medication.refillDate = editIncludeRefillDate ? editMedicationRefillDate : nil
+        medication.lastAutoRefillDayKey = ""
         medication.updatedAt = Date()
+
+        try? modelContext.save()
+        processRefills()
 
         withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
             showEditMedicationPopup = false
@@ -773,9 +779,9 @@ struct MedicationPageView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     if let medication = selectedMedication {
                         detailRow(icon: "pilldrop", title: "Medication", value: medication.name)
-                        detailRow(icon: "medicon", title: "Dosing", value: medication.dosage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Not set" : medication.dosage)
                         detailRow(icon: "hashtag", title: "Current Amount", value: "\(medication.currentAmount)")
                         detailRow(icon: "hashtag", title: "Supply Amount", value: "\(medication.supplyAmount)")
+                        detailRow(icon: "hashtag", title: "Days Supply", value: medication.daysSupply > 0 ? "\(medication.daysSupply) days" : "Not set")
                         detailRow(icon: "handpill", title: "Refill Date", value: medication.refillDate.map { DateFormatter.localizedString(from: $0, dateStyle: .medium, timeStyle: .none) } ?? "Not set")
                     }
                 }
@@ -953,6 +959,46 @@ struct MedicationPageView: View {
         reminders.filter {
             $0.linkedKind == .medication
         }.count
+    }
+
+    private func processRefills() {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd"
+        let todayKey = fmt.string(from: today)
+
+        for medication in medications {
+            guard medication.isActive,
+                  let refillDate = medication.refillDate,
+                  cal.startOfDay(for: refillDate) <= today,
+                  medication.lastAutoRefillDayKey != todayKey
+            else { continue }
+
+            let previousAmount = medication.currentAmount
+            medication.currentAmount = max(0, medication.supplyAmount)
+            medication.lastAutoRefillDayKey = todayKey
+            medication.updatedAt = Date()
+
+            if medication.daysSupply > 0 {
+                medication.refillDate = cal.date(
+                    byAdding: .day,
+                    value: medication.daysSupply,
+                    to: cal.startOfDay(for: refillDate)
+                )
+            }
+
+            let historyEntry = MedicationHistoryEntry(
+                type: .refilled,
+                amountText: "\(previousAmount) \u{2192} \(medication.currentAmount)",
+                details: medication.daysSupply > 0
+                    ? "Auto-refilled on refill date. Next refill in \(medication.daysSupply) days."
+                    : "Auto-refilled on refill date.",
+                createdAt: Date(),
+                medication: medication
+            )
+            modelContext.insert(historyEntry)
+        }
     }
 
     private var deleteMedicationConfirm: some View {

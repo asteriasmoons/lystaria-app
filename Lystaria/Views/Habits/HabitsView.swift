@@ -138,31 +138,14 @@ struct HabitsView: View {
                 .padding(.trailing, 24)
                 .padding(.bottom, 90)
         }
-        .overlay {
-            if showNewHabit {
-                NewHabitSheet(onClose: {
-                    showNewHabit = false
-                })
+        .fullScreenCover(isPresented: $showNewHabit) {
+            NewHabitSheet(onClose: { showNewHabit = false })
                 .preferredColorScheme(.dark)
-                .transition(.opacity.combined(with: .scale(scale: 0.96)))
-                .zIndex(50)
-            }
         }
-        .overlay {
-            if let h = editingHabit {
-                EditHabitSheet(
-                    habit: h,
-                    onClose: {
-                        editingHabit = nil
-                    }
-                )
+        .fullScreenCover(item: $editingHabit) { h in
+            EditHabitSheet(habit: h, onClose: { editingHabit = nil })
                 .preferredColorScheme(.dark)
-                .transition(.opacity.combined(with: .scale(scale: 0.96)))
-                .zIndex(60)
-            }
         }
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showNewHabit)
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: editingHabit != nil)
         .overlay {
             if let habit = historyHabit {
                 HabitHistoryPopup(
@@ -226,6 +209,33 @@ private struct HabitSummaryRow: View {
 
     private var target: Int {
         max(1, habit.timesPerDay)
+    }
+
+    /// For interval habits, derive the expected daily fire count from the window and interval.
+    /// For all other kinds, falls back to timesPerDay.
+    private var intervalDailyTarget: Int {
+        let kind = habit.reminderKind
+        guard kind == .everyXHours || kind == .everyXMinutes else {
+            return max(1, habit.timesPerDay)
+        }
+        let intervalMins: Int
+        if kind == .everyXHours {
+            intervalMins = max(1, habit.reminderIntervalHours) * 60
+        } else {
+            intervalMins = max(1, habit.reminderIntervalMinutes)
+        }
+        guard
+            !habit.reminderIntervalWindowStart.isEmpty,
+            !habit.reminderIntervalWindowEnd.isEmpty,
+            let (wsH, wsM) = ReminderCompute.parseHHMM(habit.reminderIntervalWindowStart),
+            let (weH, weM) = ReminderCompute.parseHHMM(habit.reminderIntervalWindowEnd)
+        else {
+            // No window set — treat as 1 per day.
+            return 1
+        }
+        let windowMins = (weH * 60 + weM) - (wsH * 60 + wsM)
+        guard windowMins > 0 else { return 1 }
+        return max(1, (windowMins / intervalMins) + 1)
     }
 
     private func includeLogInCurrentStats(_ log: HabitLog) -> Bool {
@@ -420,13 +430,35 @@ struct HabitCard: View {
         max(1, habit.timesPerDay)
     }
 
+    private var intervalDailyTarget: Int {
+        let kind = habit.reminderKind
+        guard kind == .everyXHours || kind == .everyXMinutes else {
+            return max(1, habit.timesPerDay)
+        }
+        let intervalMins: Int
+        if kind == .everyXHours {
+            intervalMins = max(1, habit.reminderIntervalHours) * 60
+        } else {
+            intervalMins = max(1, habit.reminderIntervalMinutes)
+        }
+        guard
+            !habit.reminderIntervalWindowStart.isEmpty,
+            !habit.reminderIntervalWindowEnd.isEmpty,
+            let (wsH, wsM) = ReminderCompute.parseHHMM(habit.reminderIntervalWindowStart),
+            let (weH, weM) = ReminderCompute.parseHHMM(habit.reminderIntervalWindowEnd)
+        else { return 1 }
+        let windowMins = (weH * 60 + weM) - (wsH * 60 + wsM)
+        guard windowMins > 0 else { return 1 }
+        return max(1, (windowMins / intervalMins) + 1)
+    }
+
     private var dotIndices: [Int] {
-        Array(0..<target)
+        Array(0..<intervalDailyTarget)
     }
 
     private var progress: Double {
-        guard target > 0 else { return 0 }
-        return min(Double(todaysCount) / Double(target), 1.0)
+        guard intervalDailyTarget > 0 else { return 0 }
+        return min(Double(todaysCount) / Double(intervalDailyTarget), 1.0)
     }
 
     private func includeLogInCurrentStats(_ log: HabitLog) -> Bool {
@@ -562,6 +594,30 @@ struct HabitCard: View {
     }
 
     private var reminderTimePills: [String] {
+        // For interval-based habits, show a single descriptive pill instead of time-of-day pills.
+        switch habit.reminderKind {
+        case .everyXHours:
+            let n = max(1, habit.reminderIntervalHours)
+            var label = "Every \(n)h"
+            if !habit.reminderIntervalWindowStart.isEmpty, !habit.reminderIntervalWindowEnd.isEmpty,
+               let ws = hhmm(toShortTime: habit.reminderIntervalWindowStart),
+               let we = hhmm(toShortTime: habit.reminderIntervalWindowEnd) {
+                label += " \u{00b7} \(ws)\u{2013}\(we)"
+            }
+            return [label]
+        case .everyXMinutes:
+            let n = max(1, habit.reminderIntervalMinutes)
+            var label = "Every \(n)min"
+            if !habit.reminderIntervalWindowStart.isEmpty, !habit.reminderIntervalWindowEnd.isEmpty,
+               let ws = hhmm(toShortTime: habit.reminderIntervalWindowStart),
+               let we = hhmm(toShortTime: habit.reminderIntervalWindowEnd) {
+                label += " \u{00b7} \(ws)\u{2013}\(we)"
+            }
+            return [label]
+        default:
+            break
+        }
+
         let formatter = DateFormatter()
         formatter.locale = .current
         formatter.timeZone = .current
@@ -586,6 +642,17 @@ struct HabitCard: View {
         return sorted.compactMap { item in
             seen.insert(item.label).inserted ? item.label : nil
         }
+    }
+
+    private func hhmm(toShortTime hhmm: String) -> String? {
+        guard let (hh, mm) = ReminderCompute.parseHHMM(hhmm) else { return nil }
+        let date = ReminderCompute.merge(day: Date(), hour: hh, minute: mm)
+        let df = DateFormatter()
+        df.locale = .current
+        df.timeZone = .current
+        df.dateStyle = .none
+        df.timeStyle = .short
+        return df.string(from: date)
     }
 
     private func reminderTimesOfDay(for reminder: LystariaReminder) -> [String] {
@@ -679,6 +746,38 @@ struct HabitCard: View {
 
     private func fallbackNextRunAtFromHabitModel(now: Date) -> Date? {
         guard habit.reminderEnabled else { return nil }
+
+        // Interval kinds: compute next fire directly from now + interval.
+        switch habit.reminderKind {
+        case .everyXHours:
+            let minutes = max(1, habit.reminderIntervalHours) * 60
+            return ReminderCompute.firstRun(
+                kind: .interval,
+                startDay: now,
+                timesOfDay: [],
+                daysOfWeek: nil,
+                intervalMinutes: minutes,
+                recurrenceInterval: 1,
+                dayOfMonth: nil,
+                anchorMonth: nil,
+                anchorDay: nil
+            )
+        case .everyXMinutes:
+            let minutes = max(1, habit.reminderIntervalMinutes)
+            return ReminderCompute.firstRun(
+                kind: .interval,
+                startDay: now,
+                timesOfDay: [],
+                daysOfWeek: nil,
+                intervalMinutes: minutes,
+                recurrenceInterval: 1,
+                dayOfMonth: nil,
+                anchorMonth: nil,
+                anchorDay: nil
+            )
+        default:
+            break
+        }
 
         let timesOfDay = fallbackTimesFromHabitModel()
         guard !timesOfDay.isEmpty else { return nil }
@@ -815,7 +914,7 @@ struct HabitCard: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 6) {
                             LBadge(text: "\(habit.daysPerWeek)/7", color: LColors.accent)
-                            LBadge(text: "\(habit.timesPerDay)x/day", color: LColors.warning)
+                            LBadge(text: "\(intervalDailyTarget)x/day", color: LColors.warning)
                             if todaysSkip != nil {
                                 LBadge(text: "SKIPPED", color: LColors.textSecondary)
                             }
@@ -866,7 +965,7 @@ struct HabitCard: View {
                     // Progress
                     VStack(spacing: 6) {
                         HStack {
-                            Text("\(todaysCount) / \(target) today")
+                            Text("\(todaysCount) / \(intervalDailyTarget) today")
                                 .font(.system(size: 13))
                                 .foregroundStyle(LColors.textSecondary)
                             Spacer()
@@ -1021,6 +1120,27 @@ struct HabitCard: View {
         // for the *next* occurrence, so we clear `acknowledgedAt` after advancing.
         r.updatedAt = now
 
+        // Interval-based kinds advance purely by their minute interval from now.
+        if habit.reminderKind == .everyXHours || habit.reminderKind == .everyXMinutes {
+            let intervalMins: Int
+            if habit.reminderKind == .everyXHours {
+                intervalMins = max(1, habit.reminderIntervalHours) * 60
+            } else {
+                intervalMins = max(1, habit.reminderIntervalMinutes)
+            }
+            let next = ReminderCompute.nextRunInterval(
+                after: now.addingTimeInterval(91),
+                intervalMinutes: intervalMins,
+                windowStart: habit.reminderIntervalWindowStart,
+                windowEnd: habit.reminderIntervalWindowEnd
+            )
+            r.nextRunAt = next
+            r.acknowledgedAt = nil
+            NotificationManager.shared.cancelReminder(r)
+            NotificationManager.shared.scheduleReminder(r)
+            return
+        }
+
         let scheduleKind: ReminderScheduleKind
         switch habit.reminderKind {
         case .weekly:
@@ -1085,7 +1205,7 @@ struct HabitCard: View {
 
     private func quickLog() {
         // Cap logs at timesPerDay so progress stays meaningful.
-        let cap = max(1, habit.timesPerDay)
+        let cap = max(1, intervalDailyTarget)
 
         if let existingSkip = todaysSkip {
             modelContext.delete(existingSkip)
@@ -1578,6 +1698,10 @@ struct NewHabitSheet: View {
     @State private var reminderTimes: [Date] = [Date()]
     @State private var weeklyDays: Set<Int> = []
     @State private var reminderStartDate: Date = Date()
+    @State private var intervalValue: Int = 1
+    @State private var intervalValueText: String = "1"
+    @State private var intervalWindowStart: Date = Calendar.current.date(bySettingHour: 8, minute: 0, second: 0, of: Date()) ?? Date()
+    @State private var intervalWindowEnd: Date = Calendar.current.date(bySettingHour: 22, minute: 0, second: 0, of: Date()) ?? Date()
     
     private let weekdays = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]
     
@@ -1589,8 +1713,13 @@ struct NewHabitSheet: View {
     
     private var canSave: Bool {
         if titleTrimmed.isEmpty { return false }
-        if reminderEnabled, reminderKind == .weekly {
-            return weeklyDays.count == daysPerWeek
+        if reminderEnabled {
+            if reminderKind == .weekly {
+                return weeklyDays.count == daysPerWeek
+            }
+            if reminderKind == .everyXHours || reminderKind == .everyXMinutes {
+                return intervalValue >= 1
+            }
         }
         return true
     }
@@ -1601,25 +1730,116 @@ struct NewHabitSheet: View {
     }
     
     var body: some View {
-        LystariaOverlayPopup(
-            onClose: {
-                closeAction()
-            },
-            width: 720,
-            heightRatio: 0.70,
-            header: {
-                HStack {
-                    GradientTitle(text: "New Habit", size: 26)
-                    Spacer()
-                    Button { closeAction() } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(LColors.textSecondary)
-                    }
-                    .buttonStyle(.plain)
+        LystariaFullScreenForm(
+            title: "New Habit",
+            cancelLabel: "Cancel",
+            onCancel: { closeAction() },
+            saveLabel: "Create",
+            canSave: canSave,
+            onSave: {
+                let descriptor = FetchDescriptor<Habit>()
+                let existing = (try? modelContext.fetch(descriptor)) ?? []
+                let decision = limits.canCreate(.habitsTotal, currentCount: existing.count)
+                guard decision.allowed else { return }
+                if reminderEnabled && reminderKind == .daily {
+                    daysPerWeek = 7
+                    weeklyDays = []
                 }
-            },
-            content: {
+
+                let habit = Habit(
+                    title: titleTrimmed,
+                    details: details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : details,
+                    daysPerWeek: daysPerWeek,
+                    timesPerDay: timesPerDay,
+                    reminderEnabled: reminderEnabled,
+                    reminderKind: reminderEnabled ? reminderKind : .none,
+                    reminderTimeOfDay: reminderEnabled ? timeStr24(from: reminderTimes.first ?? Date()) : nil,
+                    reminderDaysOfWeek: reminderEnabled && reminderKind == .weekly ? Array(weeklyDays).sorted() : [],
+                    reminderStartDate: reminderEnabled ? Calendar.current.startOfDay(for: reminderStartDate) : nil
+                )
+                modelContext.insert(habit)
+
+                if reminderEnabled {
+                    if reminderKind == .everyXHours || reminderKind == .everyXMinutes {
+                        let intervalMinutes = reminderKind == .everyXHours
+                            ? max(1, intervalValue) * 60
+                            : max(1, intervalValue)
+                        habit.reminderIntervalHours = reminderKind == .everyXHours ? max(1, intervalValue) : 0
+                        habit.reminderIntervalMinutes = reminderKind == .everyXMinutes ? max(1, intervalValue) : 0
+                        let (wsH, wsM) = ReminderCompute.hourMinute(from: intervalWindowStart)
+                        let (weH, weM) = ReminderCompute.hourMinute(from: intervalWindowEnd)
+                        habit.reminderIntervalWindowStart = String(format: "%02d:%02d", wsH, wsM)
+                        habit.reminderIntervalWindowEnd = String(format: "%02d:%02d", weH, weM)
+
+                        let cal = Calendar.current
+                        let now = Date()
+                        let selectedStartDay = cal.startOfDay(for: reminderStartDate)
+                        let todayStart = cal.startOfDay(for: now)
+                        let todayWindowStart = ReminderCompute.merge(day: now, hour: wsH, minute: wsM)
+                        let todayWindowEnd = ReminderCompute.merge(day: now, hour: weH, minute: weM)
+
+                        let firstRun: Date
+                        if selectedStartDay > todayStart {
+                            firstRun = ReminderCompute.merge(day: selectedStartDay, hour: wsH, minute: wsM)
+                        } else if now < todayWindowStart {
+                            firstRun = todayWindowStart
+                        } else if now <= todayWindowEnd {
+                            firstRun = ReminderCompute.nextRunInterval(
+                                after: now,
+                                intervalMinutes: intervalMinutes,
+                                windowStart: habit.reminderIntervalWindowStart,
+                                windowEnd: habit.reminderIntervalWindowEnd
+                            )
+                        } else {
+                            let tomorrow = cal.date(byAdding: .day, value: 1, to: todayStart) ?? todayStart
+                            firstRun = ReminderCompute.merge(day: tomorrow, hour: wsH, minute: wsM)
+                        }
+
+                        let schedule = ReminderSchedule(
+                            kind: .interval, timeOfDay: nil, timesOfDay: nil, interval: nil,
+                            daysOfWeek: nil, dayOfMonth: nil, anchorMonth: nil, anchorDay: nil,
+                            intervalMinutes: intervalMinutes
+                        )
+                        let r = LystariaReminder(
+                            title: habit.title, details: habit.details, nextRunAt: firstRun,
+                            schedule: schedule, timezone: TimeZone.current.identifier,
+                            linkedKind: .habit, linkedHabitId: habit.id
+                        )
+                        modelContext.insert(r)
+                        NotificationManager.shared.scheduleReminder(r)
+                    } else {
+                        let scheduleKind: ReminderScheduleKind = (reminderKind == .weekly) ? .weekly : .daily
+                        let selectedDays = Array(weeklyDays).sorted()
+                        for (idx, t) in reminderTimes.enumerated() {
+                            let (hh, mm) = ReminderCompute.hourMinute(from: t)
+                            let timeStr = String(format: "%02d:%02d", hh, mm)
+                            let schedule = ReminderSchedule(
+                                kind: scheduleKind, timeOfDay: timeStr, timesOfDay: [timeStr],
+                                interval: nil, daysOfWeek: scheduleKind == .weekly ? selectedDays : nil,
+                                dayOfMonth: nil, anchorMonth: nil, anchorDay: nil, intervalMinutes: nil
+                            )
+                            let firstRun = ReminderCompute.firstRun(
+                                kind: scheduleKind,
+                                startDay: Calendar.current.startOfDay(for: reminderStartDate),
+                                timesOfDay: [timeStr],
+                                daysOfWeek: scheduleKind == .weekly ? selectedDays : nil,
+                                intervalMinutes: nil, recurrenceInterval: 1,
+                                dayOfMonth: nil, anchorMonth: nil, anchorDay: nil
+                            )
+                            let suffix = reminderTimes.count > 1 ? " (\(idx + 1)/\(reminderTimes.count))" : ""
+                            let r = LystariaReminder(
+                                title: habit.title + suffix, details: habit.details, nextRunAt: firstRun,
+                                schedule: schedule, timezone: TimeZone.current.identifier,
+                                linkedKind: .habit, linkedHabitId: habit.id
+                            )
+                            modelContext.insert(r)
+                            NotificationManager.shared.scheduleReminder(r)
+                        }
+                    }
+                }
+                closeAction()
+            }
+        ) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("TITLE")
                         .font(.system(size: 13, weight: .semibold))
@@ -1643,24 +1863,26 @@ struct NewHabitSheet: View {
                             .disabled(reminderEnabled && reminderKind == .daily)
                             .opacity((reminderEnabled && reminderKind == .daily) ? 0.6 : 1.0)
                         
-                        Stepper("Times per day: \(timesPerDay)", value: $timesPerDay, in: 1...20)
-                            .foregroundStyle(LColors.textPrimary)
-                            .onChange(of: timesPerDay) { _, newValue in
-                                if reminderTimes.isEmpty { reminderTimes = [Date()] }
-                                
-                                if reminderTimes.count < newValue {
-                                    while reminderTimes.count < newValue {
-                                        reminderTimes.append(reminderTimes.last ?? Date())
+                        if !(reminderEnabled && (reminderKind == .everyXHours || reminderKind == .everyXMinutes)) {
+                            Stepper("Times per day: \(timesPerDay)", value: $timesPerDay, in: 1...20)
+                                .foregroundStyle(LColors.textPrimary)
+                                .onChange(of: timesPerDay) { _, newValue in
+                                    if reminderTimes.isEmpty { reminderTimes = [Date()] }
+                                    
+                                    if reminderTimes.count < newValue {
+                                        while reminderTimes.count < newValue {
+                                            reminderTimes.append(reminderTimes.last ?? Date())
+                                        }
+                                    } else if reminderTimes.count > newValue {
+                                        reminderTimes = Array(reminderTimes.prefix(newValue))
                                     }
-                                } else if reminderTimes.count > newValue {
-                                    reminderTimes = Array(reminderTimes.prefix(newValue))
+                                    
+                                    if reminderEnabled && reminderKind == .daily {
+                                        daysPerWeek = 7
+                                        weeklyDays = []
+                                    }
                                 }
-                                
-                                if reminderEnabled && reminderKind == .daily {
-                                    daysPerWeek = 7
-                                    weeklyDays = []
-                                }
-                            }
+                        }
                     }
                 }
                 
@@ -1709,7 +1931,7 @@ struct NewHabitSheet: View {
                             }
                             
                             HStack(spacing: 8) {
-                                ForEach([HabitReminderKind.daily, HabitReminderKind.weekly], id: \.self) { k in
+                                ForEach([HabitReminderKind.daily, HabitReminderKind.weekly, HabitReminderKind.everyXHours, HabitReminderKind.everyXMinutes], id: \..self) { k in
                                     let on = reminderKind == k
                                     Button {
                                         reminderKind = k
@@ -1734,20 +1956,93 @@ struct NewHabitSheet: View {
                                 }
                             }
                             
-                            VStack(alignment: .leading, spacing: 10) {
-                                ForEach(Array(reminderTimes.indices), id: \.self) { idx in
-                                    LystariaControlRow(label: idx == 0 ? "Time" : "Time \(idx + 1)") {
-                                        DatePicker(
-                                            "",
-                                            selection: Binding(
-                                                get: { reminderTimes[idx] },
-                                                set: { reminderTimes[idx] = $0 }
-                                            ),
-                                            displayedComponents: .hourAndMinute
-                                        )
+                            if reminderKind == .everyXHours || reminderKind == .everyXMinutes {
+                                let unit = reminderKind == .everyXHours ? "hours" : "minutes"
+                                LystariaControlRow(label: "Every") {
+                                    HStack(spacing: 8) {
+                                        Button {
+                                            let v = max(1, intervalValue - 1)
+                                            intervalValue = v
+                                            intervalValueText = "\(v)"
+                                        } label: {
+                                            Image(systemName: "minus")
+                                                .font(.system(size: 13, weight: .semibold))
+                                                .frame(width: 28, height: 28)
+                                                .background(Color.white.opacity(0.08))
+                                                .clipShape(RoundedRectangle(cornerRadius: 7))
+                                                .overlay(RoundedRectangle(cornerRadius: 7).stroke(LColors.glassBorder, lineWidth: 1))
+                                                .foregroundStyle(LColors.textPrimary)
+                                        }
+                                        .buttonStyle(.plain)
+
+                                        TextField("", text: $intervalValueText)
+                                            .keyboardType(.numberPad)
+                                            .multilineTextAlignment(.center)
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundStyle(LColors.textPrimary)
+                                            .frame(width: 48)
+                                            .padding(.vertical, 6)
+                                            .background(Color.white.opacity(0.08))
+                                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(LColors.glassBorder, lineWidth: 1))
+                                            .onChange(of: intervalValueText) { _, newText in
+                                                if let parsed = Int(newText.filter(\.isNumber)), parsed >= 1 {
+                                                    intervalValue = parsed
+                                                }
+                                            }
+
+                                        Button {
+                                            let v = intervalValue + 1
+                                            intervalValue = v
+                                            intervalValueText = "\(v)"
+                                        } label: {
+                                            Image(systemName: "plus")
+                                                .font(.system(size: 13, weight: .semibold))
+                                                .frame(width: 28, height: 28)
+                                                .background(Color.white.opacity(0.08))
+                                                .clipShape(RoundedRectangle(cornerRadius: 7))
+                                                .overlay(RoundedRectangle(cornerRadius: 7).stroke(LColors.glassBorder, lineWidth: 1))
+                                                .foregroundStyle(LColors.textPrimary)
+                                        }
+                                        .buttonStyle(.plain)
+
+                                        Text(unit)
+                                            .font(.system(size: 13, weight: .semibold))
+                                            .foregroundStyle(LColors.textSecondary)
+                                    }
+                                }
+
+                                LystariaControlRow(label: "From") {
+                                    DatePicker("", selection: $intervalWindowStart, displayedComponents: .hourAndMinute)
                                         .labelsHidden()
                                         .datePickerStyle(.compact)
                                         .tint(LColors.accent)
+                                }
+
+                                LystariaControlRow(label: "Until") {
+                                    DatePicker("", selection: $intervalWindowEnd, displayedComponents: .hourAndMinute)
+                                        .labelsHidden()
+                                        .datePickerStyle(.compact)
+                                        .tint(LColors.accent)
+                                }
+                            }
+                            
+                            if reminderKind != .everyXHours && reminderKind != .everyXMinutes {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    ForEach(Array(reminderTimes.indices), id: \.self) { idx in
+                                        LystariaControlRow(label: idx == 0 ? "Time" : "Time \(idx + 1)") {
+                                            DatePicker(
+                                                "",
+                                                selection: Binding(
+                                                    get: { reminderTimes[idx] },
+                                                    set: { reminderTimes[idx] = $0 }
+                                                ),
+                                                displayedComponents: .hourAndMinute
+                                            )
+                                            .labelsHidden()
+                                            .datePickerStyle(.compact)
+                                            .tint(LColors.accent)
+                                        }
                                     }
                                 }
                             }
@@ -1795,99 +2090,9 @@ struct NewHabitSheet: View {
                         }
                     }
                     .contentShape(Rectangle())
-                    .onTapGesture {
-                        dismissKeyboard()
-                    }
+                    .onTapGesture { dismissKeyboard() }
                 }
-            },
-            footer: {
-                Button {
-                    // Enforce habit limit (3 total for free users)
-                    let descriptor = FetchDescriptor<Habit>()
-                    let existing = (try? modelContext.fetch(descriptor)) ?? []
-                    let decision = limits.canCreate(.habitsTotal, currentCount: existing.count)
-                    guard decision.allowed else { return }
-                    if reminderEnabled && reminderKind == .daily {
-                        daysPerWeek = 7
-                        weeklyDays = []
-                    }
-                    
-                    let habit = Habit(
-                        title: titleTrimmed,
-                        details: details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : details,
-                        daysPerWeek: daysPerWeek,
-                        timesPerDay: timesPerDay,
-                        reminderEnabled: reminderEnabled,
-                        reminderKind: reminderEnabled ? reminderKind : .none,
-                        reminderTimeOfDay: reminderEnabled ? timeStr24(from: reminderTimes.first ?? Date()) : nil,
-                        reminderDaysOfWeek: reminderEnabled && reminderKind == .weekly ? Array(weeklyDays).sorted() : [],
-                        reminderStartDate: reminderEnabled ? Calendar.current.startOfDay(for: reminderStartDate) : nil
-                    )
-                    modelContext.insert(habit)
-                    
-                    if reminderEnabled {
-                        let scheduleKind: ReminderScheduleKind = (reminderKind == .weekly) ? .weekly : .daily
-                        let selectedDays = Array(weeklyDays).sorted()
-                        
-                        for (idx, t) in reminderTimes.enumerated() {
-                            let (hh, mm) = ReminderCompute.hourMinute(from: t)
-                            let timeStr = String(format: "%02d:%02d", hh, mm)
-                            
-                            let schedule = ReminderSchedule(
-                                kind: scheduleKind,
-                                timeOfDay: timeStr,
-                                timesOfDay: [timeStr],
-                                interval: nil,
-                                daysOfWeek: scheduleKind == .weekly ? selectedDays : nil,
-                                dayOfMonth: nil,
-                                anchorMonth: nil,
-                                anchorDay: nil,
-                                intervalMinutes: nil
-                            )
-                            
-                            let firstRun = ReminderCompute.firstRun(
-                                kind: scheduleKind,
-                                startDay: Calendar.current.startOfDay(for: reminderStartDate),
-                                timesOfDay: [timeStr],
-                                daysOfWeek: scheduleKind == .weekly ? selectedDays : nil,
-                                intervalMinutes: nil,
-                                recurrenceInterval: 1,
-                                dayOfMonth: nil,
-                                anchorMonth: nil,
-                                anchorDay: nil
-                            )
-                            
-                            let suffix = reminderTimes.count > 1 ? " (\(idx + 1)/\(reminderTimes.count))" : ""
-                            
-                            let r = LystariaReminder(
-                                title: habit.title + suffix,
-                                details: habit.details,
-                                nextRunAt: firstRun,
-                                schedule: schedule,
-                                timezone: TimeZone.current.identifier,
-                                linkedKind: .habit,
-                                linkedHabitId: habit.id
-                            )
-                            modelContext.insert(r)
-                            NotificationManager.shared.scheduleReminder(r)
-                        }
-                    }
-                    
-                    closeAction()
-                } label: {
-                    Text("Create Habit")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(!canSave ? AnyShapeStyle(Color.gray.opacity(0.3)) : AnyShapeStyle(LGradients.blue))
-                        .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
-                        .shadow(color: !canSave ? .clear : LColors.accent.opacity(0.3), radius: 12, y: 6)
-                }
-                .buttonStyle(.plain)
-                .disabled(!canSave)
-            }
-        )
+        }
     }
 }
 
@@ -1910,6 +2115,10 @@ struct EditHabitSheet: View {
     @State private var reminderTimes: [Date] = [Date()]
     @State private var weeklyDays: Set<Int> = []
     @State private var reminderStartDate: Date = Date()
+    @State private var intervalValue: Int = 1
+    @State private var intervalValueText: String = "1"
+    @State private var intervalWindowStart: Date = Calendar.current.date(bySettingHour: 8, minute: 0, second: 0, of: Date()) ?? Date()
+    @State private var intervalWindowEnd: Date = Calendar.current.date(bySettingHour: 22, minute: 0, second: 0, of: Date()) ?? Date()
 
     private let weekdays = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]
 
@@ -1930,6 +2139,9 @@ struct EditHabitSheet: View {
         if titleTrimmed.isEmpty { return false }
 
         if reminderEnabled {
+            if reminderKind == .everyXHours || reminderKind == .everyXMinutes {
+                return intervalValue >= 1
+            }
             if reminderTimes.count != timesPerDay { return false }
             if reminderKind == .weekly {
                 return weeklyDays.count == daysPerWeek
@@ -2011,25 +2223,14 @@ struct EditHabitSheet: View {
     }
 
     var body: some View {
-        LystariaOverlayPopup(
-            onClose: {
-                closeAction()
-            },
-            width: 720,
-            heightRatio: 0.70,
-            header: {
-                HStack {
-                    GradientTitle(text: "Edit Habit", size: 26)
-                    Spacer()
-                    Button { closeAction() } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(LColors.textSecondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-            },
-            content: {
+        LystariaFullScreenForm(
+            title: "Edit Habit",
+            cancelLabel: "Cancel",
+            onCancel: { closeAction() },
+            saveLabel: "Save",
+            canSave: canSave,
+            onSave: { applyChanges() }
+        ) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("TITLE")
                         .font(.system(size: 13, weight: .semibold))
@@ -2053,19 +2254,21 @@ struct EditHabitSheet: View {
                             .disabled(reminderEnabled && reminderKind == .daily)
                             .opacity((reminderEnabled && reminderKind == .daily) ? 0.6 : 1.0)
 
-                        Stepper("Times per day: \(timesPerDay)", value: $timesPerDay, in: 1...20)
-                            .foregroundStyle(LColors.textPrimary)
-                            .onChange(of: timesPerDay) { _, newValue in
-                                guard reminderEnabled else { return }
-                                if reminderTimes.isEmpty { reminderTimes = [Date()] }
-                                if reminderTimes.count < newValue {
-                                    while reminderTimes.count < newValue {
-                                        reminderTimes.append(reminderTimes.last ?? Date())
+                        if !(reminderEnabled && (reminderKind == .everyXHours || reminderKind == .everyXMinutes)) {
+                            Stepper("Times per day: \(timesPerDay)", value: $timesPerDay, in: 1...20)
+                                .foregroundStyle(LColors.textPrimary)
+                                .onChange(of: timesPerDay) { _, newValue in
+                                    guard reminderEnabled else { return }
+                                    if reminderTimes.isEmpty { reminderTimes = [Date()] }
+                                    if reminderTimes.count < newValue {
+                                        while reminderTimes.count < newValue {
+                                            reminderTimes.append(reminderTimes.last ?? Date())
+                                        }
+                                    } else if reminderTimes.count > newValue {
+                                        reminderTimes = Array(reminderTimes.prefix(newValue))
                                     }
-                                } else if reminderTimes.count > newValue {
-                                    reminderTimes = Array(reminderTimes.prefix(newValue))
                                 }
-                            }
+                        }
                     }
                 }
 
@@ -2114,7 +2317,7 @@ struct EditHabitSheet: View {
                             }
 
                             HStack(spacing: 8) {
-                                ForEach([HabitReminderKind.daily, HabitReminderKind.weekly], id: \.self) { k in
+                                ForEach([HabitReminderKind.daily, HabitReminderKind.weekly, HabitReminderKind.everyXHours, HabitReminderKind.everyXMinutes], id: \.self) { k in
                                     let on = reminderKind == k
                                     Button {
                                         reminderKind = k
@@ -2139,20 +2342,93 @@ struct EditHabitSheet: View {
                                 }
                             }
 
-                            VStack(alignment: .leading, spacing: 10) {
-                                ForEach(Array(reminderTimes.indices), id: \.self) { idx in
-                                    LystariaControlRow(label: idx == 0 ? "Time" : "Time \(idx + 1)") {
-                                        DatePicker(
-                                            "",
-                                            selection: Binding(
-                                                get: { reminderTimes[idx] },
-                                                set: { reminderTimes[idx] = $0 }
-                                            ),
-                                            displayedComponents: .hourAndMinute
-                                        )
+                            if reminderKind == .everyXHours || reminderKind == .everyXMinutes {
+                                let unit = reminderKind == .everyXHours ? "hours" : "minutes"
+                                LystariaControlRow(label: "Every") {
+                                    HStack(spacing: 8) {
+                                        Button {
+                                            let v = max(1, intervalValue - 1)
+                                            intervalValue = v
+                                            intervalValueText = "\(v)"
+                                        } label: {
+                                            Image(systemName: "minus")
+                                                .font(.system(size: 13, weight: .semibold))
+                                                .frame(width: 28, height: 28)
+                                                .background(Color.white.opacity(0.08))
+                                                .clipShape(RoundedRectangle(cornerRadius: 7))
+                                                .overlay(RoundedRectangle(cornerRadius: 7).stroke(LColors.glassBorder, lineWidth: 1))
+                                                .foregroundStyle(LColors.textPrimary)
+                                        }
+                                        .buttonStyle(.plain)
+
+                                        TextField("", text: $intervalValueText)
+                                            .keyboardType(.numberPad)
+                                            .multilineTextAlignment(.center)
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundStyle(LColors.textPrimary)
+                                            .frame(width: 48)
+                                            .padding(.vertical, 6)
+                                            .background(Color.white.opacity(0.08))
+                                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(LColors.glassBorder, lineWidth: 1))
+                                            .onChange(of: intervalValueText) { _, newText in
+                                                if let parsed = Int(newText.filter(\.isNumber)), parsed >= 1 {
+                                                    intervalValue = parsed
+                                                }
+                                            }
+
+                                        Button {
+                                            let v = intervalValue + 1
+                                            intervalValue = v
+                                            intervalValueText = "\(v)"
+                                        } label: {
+                                            Image(systemName: "plus")
+                                                .font(.system(size: 13, weight: .semibold))
+                                                .frame(width: 28, height: 28)
+                                                .background(Color.white.opacity(0.08))
+                                                .clipShape(RoundedRectangle(cornerRadius: 7))
+                                                .overlay(RoundedRectangle(cornerRadius: 7).stroke(LColors.glassBorder, lineWidth: 1))
+                                                .foregroundStyle(LColors.textPrimary)
+                                        }
+                                        .buttonStyle(.plain)
+
+                                        Text(unit)
+                                            .font(.system(size: 13, weight: .semibold))
+                                            .foregroundStyle(LColors.textSecondary)
+                                    }
+                                }
+
+                                LystariaControlRow(label: "From") {
+                                    DatePicker("", selection: $intervalWindowStart, displayedComponents: .hourAndMinute)
                                         .labelsHidden()
                                         .datePickerStyle(.compact)
                                         .tint(LColors.accent)
+                                }
+
+                                LystariaControlRow(label: "Until") {
+                                    DatePicker("", selection: $intervalWindowEnd, displayedComponents: .hourAndMinute)
+                                        .labelsHidden()
+                                        .datePickerStyle(.compact)
+                                        .tint(LColors.accent)
+                                }
+                            }
+
+                            if reminderKind != .everyXHours && reminderKind != .everyXMinutes {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    ForEach(Array(reminderTimes.indices), id: \.self) { idx in
+                                        LystariaControlRow(label: idx == 0 ? "Time" : "Time \(idx + 1)") {
+                                            DatePicker(
+                                                "",
+                                                selection: Binding(
+                                                    get: { reminderTimes[idx] },
+                                                    set: { reminderTimes[idx] = $0 }
+                                                ),
+                                                displayedComponents: .hourAndMinute
+                                            )
+                                            .labelsHidden()
+                                            .datePickerStyle(.compact)
+                                            .tint(LColors.accent)
+                                        }
                                     }
                                 }
                             }
@@ -2200,28 +2476,9 @@ struct EditHabitSheet: View {
                         }
                     }
                     .contentShape(Rectangle())
-                    .onTapGesture {
-                        dismissKeyboard()
-                    }
+                    .onTapGesture { dismissKeyboard() }
                 }
-            },
-            footer: {
-                Button {
-                    applyChanges()
-                } label: {
-                    Text("Save Changes")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(!canSave ? AnyShapeStyle(Color.gray.opacity(0.3)) : AnyShapeStyle(LGradients.blue))
-                        .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
-                        .shadow(color: !canSave ? .clear : LColors.accent.opacity(0.3), radius: 12, y: 6)
-                }
-                .buttonStyle(.plain)
-                .disabled(!canSave)
-            }
-        )
+        }
         .onAppear { loadFromModel() }
     }
 
@@ -2235,6 +2492,29 @@ struct EditHabitSheet: View {
         reminderKind = habit.reminderKind
         weeklyDays = Set(habit.reminderDaysOfWeek)
         reminderStartDate = habit.reminderStartDate ?? Date()
+
+        // Seed interval value for everyXHours / everyXMinutes kinds.
+        if reminderKind == .everyXHours {
+            intervalValue = max(1, habit.reminderIntervalHours)
+        } else if reminderKind == .everyXMinutes {
+            intervalValue = max(1, habit.reminderIntervalMinutes)
+        } else {
+            intervalValue = 1
+        }
+        intervalValueText = "\(intervalValue)"
+
+        // Seed window pickers.
+        let cal = Calendar.current
+        if let (wsH, wsM) = ReminderCompute.parseHHMM(habit.reminderIntervalWindowStart) {
+            intervalWindowStart = ReminderCompute.merge(day: Date(), hour: wsH, minute: wsM)
+        } else {
+            intervalWindowStart = cal.date(bySettingHour: 8, minute: 0, second: 0, of: Date()) ?? Date()
+        }
+        if let (weH, weM) = ReminderCompute.parseHHMM(habit.reminderIntervalWindowEnd) {
+            intervalWindowEnd = ReminderCompute.merge(day: Date(), hour: weH, minute: weM)
+        } else {
+            intervalWindowEnd = cal.date(bySettingHour: 22, minute: 0, second: 0, of: Date()) ?? Date()
+        }
 
         // Seed time pickers from the actual linked reminders when available.
         if reminderEnabled {
@@ -2273,6 +2553,26 @@ struct EditHabitSheet: View {
         habit.reminderTimeOfDay = reminderEnabled ? timeStr24(from: reminderTimes.first ?? Date()) : nil
         habit.reminderDaysOfWeek = reminderEnabled && reminderKind == .weekly ? Array(weeklyDays).sorted() : []
         habit.reminderStartDate = reminderEnabled ? Calendar.current.startOfDay(for: reminderStartDate) : nil
+        if reminderEnabled && reminderKind == .everyXHours {
+            habit.reminderIntervalHours = max(1, intervalValue)
+            habit.reminderIntervalMinutes = 0
+            let (wsH, wsM) = ReminderCompute.hourMinute(from: intervalWindowStart)
+            let (weH, weM) = ReminderCompute.hourMinute(from: intervalWindowEnd)
+            habit.reminderIntervalWindowStart = String(format: "%02d:%02d", wsH, wsM)
+            habit.reminderIntervalWindowEnd = String(format: "%02d:%02d", weH, weM)
+        } else if reminderEnabled && reminderKind == .everyXMinutes {
+            habit.reminderIntervalHours = 0
+            habit.reminderIntervalMinutes = max(1, intervalValue)
+            let (wsH, wsM) = ReminderCompute.hourMinute(from: intervalWindowStart)
+            let (weH, weM) = ReminderCompute.hourMinute(from: intervalWindowEnd)
+            habit.reminderIntervalWindowStart = String(format: "%02d:%02d", wsH, wsM)
+            habit.reminderIntervalWindowEnd = String(format: "%02d:%02d", weH, weM)
+        } else {
+            habit.reminderIntervalHours = 0
+            habit.reminderIntervalMinutes = 0
+            habit.reminderIntervalWindowStart = ""
+            habit.reminderIntervalWindowEnd = ""
+        }
         habit.updatedAt = Date()
 
         // Remove existing linked reminders.
@@ -2284,41 +2584,48 @@ struct EditHabitSheet: View {
 
         // Recreate linked reminders to match current settings.
         if reminderEnabled {
-            let scheduleKind: ReminderScheduleKind = (reminderKind == .weekly) ? .weekly : .daily
-            let selectedDays = Array(weeklyDays).sorted()
-
-            for (idx, t) in reminderTimes.enumerated() {
-                let (hh, mm) = ReminderCompute.hourMinute(from: t)
-                let timeStr = String(format: "%02d:%02d", hh, mm)
-
+            if reminderKind == .everyXHours || reminderKind == .everyXMinutes {
+                let intervalMinutes = reminderKind == .everyXHours
+                    ? max(1, intervalValue) * 60
+                    : max(1, intervalValue)
                 let schedule = ReminderSchedule(
-                    kind: scheduleKind,
-                    timeOfDay: timeStr,
-                    timesOfDay: [timeStr],
+                    kind: .interval,
+                    timeOfDay: nil,
+                    timesOfDay: nil,
                     interval: nil,
-                    daysOfWeek: scheduleKind == .weekly ? selectedDays : nil,
+                    daysOfWeek: nil,
                     dayOfMonth: nil,
                     anchorMonth: nil,
                     anchorDay: nil,
-                    intervalMinutes: nil
+                    intervalMinutes: intervalMinutes
                 )
+                let now = Date()
+                let cal = Calendar.current
+                let (wsH, wsM) = ReminderCompute.hourMinute(from: intervalWindowStart)
+                let (weH, weM) = ReminderCompute.hourMinute(from: intervalWindowEnd)
+                let selectedStartDay = cal.startOfDay(for: reminderStartDate)
+                let todayStart = cal.startOfDay(for: now)
+                let todayWindowStart = ReminderCompute.merge(day: now, hour: wsH, minute: wsM)
+                let todayWindowEnd = ReminderCompute.merge(day: now, hour: weH, minute: weM)
 
-                let firstRun = ReminderCompute.firstRun(
-                    kind: scheduleKind,
-                    startDay: Calendar.current.startOfDay(for: reminderStartDate),
-                    timesOfDay: [timeStr],
-                    daysOfWeek: scheduleKind == .weekly ? selectedDays : nil,
-                    intervalMinutes: nil,
-                    recurrenceInterval: 1,
-                    dayOfMonth: nil,
-                    anchorMonth: nil,
-                    anchorDay: nil
-                )
-
-                let suffix = reminderTimes.count > 1 ? " (\(idx + 1)/\(reminderTimes.count))" : ""
-
+                let firstRun: Date
+                if selectedStartDay > todayStart {
+                    firstRun = ReminderCompute.merge(day: selectedStartDay, hour: wsH, minute: wsM)
+                } else if now < todayWindowStart {
+                    firstRun = todayWindowStart
+                } else if now <= todayWindowEnd {
+                    firstRun = ReminderCompute.nextRunInterval(
+                        after: now,
+                        intervalMinutes: intervalMinutes,
+                        windowStart: habit.reminderIntervalWindowStart,
+                        windowEnd: habit.reminderIntervalWindowEnd
+                    )
+                } else {
+                    let tomorrow = cal.date(byAdding: .day, value: 1, to: todayStart) ?? todayStart
+                    firstRun = ReminderCompute.merge(day: tomorrow, hour: wsH, minute: wsM)
+                }
                 let rr = LystariaReminder(
-                    title: habit.title + suffix,
+                    title: habit.title,
                     details: habit.details,
                     nextRunAt: firstRun,
                     schedule: schedule,
@@ -2326,9 +2633,51 @@ struct EditHabitSheet: View {
                     linkedKind: .habit,
                     linkedHabitId: habit.id
                 )
-
                 modelContext.insert(rr)
                 NotificationManager.shared.scheduleReminder(rr)
+            } else {
+                let scheduleKind: ReminderScheduleKind = (reminderKind == .weekly) ? .weekly : .daily
+                let selectedDays = Array(weeklyDays).sorted()
+
+                for (idx, t) in reminderTimes.enumerated() {
+                    let (hh, mm) = ReminderCompute.hourMinute(from: t)
+                    let timeStr = String(format: "%02d:%02d", hh, mm)
+
+                    let schedule = ReminderSchedule(
+                        kind: scheduleKind,
+                        timeOfDay: timeStr,
+                        timesOfDay: [timeStr],
+                        interval: nil,
+                        daysOfWeek: scheduleKind == .weekly ? selectedDays : nil,
+                        dayOfMonth: nil,
+                        anchorMonth: nil,
+                        anchorDay: nil,
+                        intervalMinutes: nil
+                    )
+                    let firstRun = ReminderCompute.firstRun(
+                        kind: scheduleKind,
+                        startDay: Calendar.current.startOfDay(for: reminderStartDate),
+                        timesOfDay: [timeStr],
+                        daysOfWeek: scheduleKind == .weekly ? selectedDays : nil,
+                        intervalMinutes: nil,
+                        recurrenceInterval: 1,
+                        dayOfMonth: nil,
+                        anchorMonth: nil,
+                        anchorDay: nil
+                    )
+                    let suffix = reminderTimes.count > 1 ? " (\(idx + 1)/\(reminderTimes.count))" : ""
+                    let rr = LystariaReminder(
+                        title: habit.title + suffix,
+                        details: habit.details,
+                        nextRunAt: firstRun,
+                        schedule: schedule,
+                        timezone: TimeZone.current.identifier,
+                        linkedKind: .habit,
+                        linkedHabitId: habit.id
+                    )
+                    modelContext.insert(rr)
+                    NotificationManager.shared.scheduleReminder(rr)
+                }
             }
         }
 

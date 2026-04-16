@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import WidgetKit
 
 @main
 struct Lystaria_Watch_Watch_AppApp: App {
@@ -20,6 +21,11 @@ struct Lystaria_Watch_Watch_AppApp: App {
                 ])
                 .onAppear {
                     WatchSessionManager.shared.activate()
+
+                    // On every launch, reload the widget with whatever data
+                    // is already stored in the shared plist file. This ensures
+                    // the complication shows data even after the watch app restarts.
+                    WidgetCenter.shared.reloadAllTimelines()
                 }
         }
     }

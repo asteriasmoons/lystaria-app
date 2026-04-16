@@ -18,7 +18,6 @@ struct SettingsView: View {
     @Query(sort: \CalendarEvent.startDate, order: .forward) private var appEvents: [CalendarEvent]
     @Query(sort: [SortDescriptor(\EventCalendar.sortOrder), SortDescriptor(\EventCalendar.name)]) private var calendars: [EventCalendar]
     
-    @AppStorage("settings.displayName") private var displayName: String = ""
     @AppStorage("settings.calendarSyncEnabled") private var calendarSyncEnabled: Bool = false
     @AppStorage("settings.selectedCalendarIdentifier") private var selectedCalendarIdentifier: String = ""
     
@@ -49,7 +48,6 @@ struct SettingsView: View {
                 // MARK: - Content
                 ScrollView {
                     VStack(spacing: LSpacing.sectionGap) {
-                        profileSection
                         calendarSyncSection
                         manageCalendarsSection
                         onboardingSection
@@ -123,30 +121,6 @@ struct SettingsView: View {
                     } else {
                         calendarSyncEnabled = false
                     }
-                }
-            }
-        }
-    }
-    
-    // MARK: - Profile Section
-    
-    private var profileSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            GlassCard {
-                VStack(spacing: 0) {
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Display Name")
-                                .font(.caption)
-                                .foregroundStyle(LColors.textSecondary)
-                            
-                            GlassTextField(
-                                placeholder: "Your name",
-                                text: $displayName
-                            )
-                        }
-                    }
-                    .padding(12)
                 }
             }
         }

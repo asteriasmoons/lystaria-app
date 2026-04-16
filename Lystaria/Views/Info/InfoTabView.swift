@@ -48,7 +48,7 @@ struct InfoTabView: View {
         GlassCard {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 10) {
-                    Image("starcircle")
+                    Image("halfheartfill")
                         .renderingMode(.template)
                         .resizable()
                         .scaledToFit()
@@ -87,13 +87,13 @@ struct InfoTabView: View {
 
     private var docsSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            SectionHeader(title: "Documentation", icon: "book.closed.fill")
+            SectionHeader(title: "Documentation", icon: "fillbook", isAsset: true)
 
             GlassCard {
                 VStack(spacing: 12) {
                     InfoLinkRow(
                         icon: "docfill",
-                        iconColor: LColors.accent,
+                        iconColor: LColors.gradientPurple,
                         title: "Lystaria Docs",
                         subtitle: "Guides, FAQs, and feature references",
                         url: "https://docs.lystaria.im"
@@ -104,7 +104,7 @@ struct InfoTabView: View {
 
                     InfoLinkRow(
                         icon: "lovemail",
-                        iconColor: LColors.gradientPurple,
+                        iconColor: LColors.accent,
                         title: "Send Feedback",
                         subtitle: "Report bugs or suggest features",
                         url: "mailto:contact@lystaria.im"
@@ -118,13 +118,13 @@ struct InfoTabView: View {
 
     private var projectsSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            SectionHeader(title: "Other Projects", icon: "square.stack.3d.up.fill")
+            SectionHeader(title: "Other Projects", icon: "fillshapes", isAsset: true)
 
             GlassCard {
                 VStack(spacing: 12) {
                     InfoLinkRow(
                         icon: "globestar",
-                        iconColor: LColors.accent,
+                        iconColor: LColors.gradientPurple,
                         title: "Lystaria Blog",
                         subtitle: "Lunar cycles, astrology & witchcraft",
                         url: "https://lystaria.im"
@@ -135,7 +135,7 @@ struct InfoTabView: View {
 
                     InfoLinkRow(
                         icon: "boltfill",
-                        iconColor: LColors.gradientPink,
+                        iconColor: LColors.accent,
                         title: "Elysium Dashboard",
                         subtitle: "Discord bot companion app",
                         url: "https://elysium.lystaria.im"
@@ -149,13 +149,13 @@ struct InfoTabView: View {
 
     private var socialsSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            SectionHeader(title: "Socials", icon: "userwavy")
+            SectionHeader(title: "Socials", icon: "sparklechat", isAsset: true)
 
             GlassCard {
                 VStack(spacing: 12) {
                     InfoLinkRow(
                         icon: "threads",
-                        iconColor: LColors.accent,
+                        iconColor: LColors.gradientPurple,
                         title: "Threads",
                         subtitle: "@asteriasmoons",
                         url: "https://threads.net/@asteriasmoons"
@@ -166,7 +166,7 @@ struct InfoTabView: View {
 
                     InfoLinkRow(
                         icon: "instafill",
-                        iconColor: LColors.gradientPink,
+                        iconColor: LColors.accent,
                         title: "Instagram",
                         subtitle: "@asteriasmoons",
                         url: "https://instagram.com/asteriasmoons"
@@ -177,7 +177,7 @@ struct InfoTabView: View {
 
                     InfoLinkRow(
                         icon: "facebook",
-                        iconColor: LColors.gradientBlue,
+                        iconColor: LColors.gradientPurple,
                         title: "Facebook",
                         subtitle: "asteriasmoons",
                         url: "https://facebook.com/asteriasmoons"
@@ -188,7 +188,7 @@ struct InfoTabView: View {
 
                     InfoLinkRow(
                         icon: "discord",
-                        iconColor: LColors.gradientPurple,
+                        iconColor: LColors.accent,
                         title: "Discord",
                         subtitle: "Join the Lystaria community",
                         url: "https://discord.gg/Q69N6d3uKY"
@@ -199,7 +199,7 @@ struct InfoTabView: View {
 
                     InfoLinkRow(
                         icon: "github",
-                        iconColor: LColors.gradientCyan,
+                        iconColor: LColors.gradientPurple,
                         title: "GitHub",
                         subtitle: "asteriasmoons",
                         url: "https://github.com/asteriasmoons"

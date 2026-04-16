@@ -123,13 +123,27 @@ struct CalendarDayView: View {
             ZStack(alignment: .bottomTrailing) {
                 LystariaBackground()
                 ScrollView {
-                    VStack(spacing: 0) {
-                        header
-                        if !allDayEvents.isEmpty { allDaySection.padding(.top, 12) }
-                        LazyVStack(spacing: 0) {
-                            ForEach(visibleHours) { slot in hourRow(slot.hour) }
+                    ScrollViewReader { proxy in
+                        VStack(spacing: 0) {
+                            header
+                            if !allDayEvents.isEmpty { allDaySection.padding(.top, 12) }
+                            LazyVStack(spacing: 0) {
+                                ForEach(visibleHours) { slot in
+                                    hourRow(slot.hour)
+                                        .id(slot.hour)
+                                }
+                            }
+                            .padding(.top, 8).padding(.bottom, 120)
                         }
-                        .padding(.top, 8).padding(.bottom, 120)
+                        .onAppear {
+                            let currentHour = tzCalendar.component(.hour, from: Date())
+                            let targetHour = max(5, min(currentHour, 23))
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                                withAnimation {
+                                    proxy.scrollTo(targetHour, anchor: .top)
+                                }
+                            }
+                        }
                     }
                 }
                 .scrollIndicators(.hidden)
@@ -1197,32 +1211,52 @@ extension CalendarDayView {
 
     private func hourRow(_ hour: Int) -> some View {
         let slotEvents = timedEvents(for: hour)
-        return VStack(spacing: 0) {
-            HStack(alignment: .top, spacing: 14) {
-                VStack(spacing: 2) {
-                    Text(hourLabel(hour)).font(.system(size: 18, weight: .bold)).foregroundStyle(LColors.textPrimary)
-                    Text(hourPeriod(hour)).font(.system(size: 11, weight: .semibold)).foregroundStyle(LColors.textSecondary)
-                }.frame(width: 52).padding(.top, 8)
-                VStack(alignment: .leading, spacing: 8) {
-                    if slotEvents.isEmpty {
-                        HStack {
-                            Text("No events").font(.system(size: 14)).foregroundStyle(LColors.textSecondary.opacity(0.6))
-                            Spacer()
-                            Button { sheetConfig = EventSheetConfig(selectedDate: dateForHour(hour), editingEvent: nil) } label: {
-                                Image(systemName: "plus").font(.system(size: 13)).foregroundStyle(LColors.accent)
-                                    .frame(width: 28, height: 28).background(LColors.accent.opacity(0.15)).clipShape(RoundedRectangle(cornerRadius: 8))
-                            }.buttonStyle(.plain)
-                        }.padding(.vertical, 12)
-                    } else {
-                        ForEach(slotEvents) { instance in eventCard(instance) }
-                        Button { sheetConfig = EventSheetConfig(selectedDate: dateForHour(hour), editingEvent: nil) } label: {
-                            HStack(spacing: 4) { Image(systemName: "plus").font(.system(size: 11)); Text("Add event").font(.system(size: 13)) }
-                                .foregroundStyle(LColors.textSecondary).padding(.vertical, 6)
-                        }.buttonStyle(.plain)
+        let isToday = tzCalendar.isDateInToday(selectedDate)
+
+        return TimelineView(.periodic(from: .now, by: 60)) { context in
+            let now = context.date
+            let currentHour = tzCalendar.component(.hour, from: now)
+            let isCurrentHour = isToday && currentHour == hour
+
+            VStack(spacing: 0) {
+                HStack(alignment: .top, spacing: 14) {
+                    VStack(spacing: 2) {
+                        Text(hourLabel(hour))
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(isCurrentHour ? LColors.accent : LColors.textPrimary)
+                        Text(hourPeriod(hour))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(isCurrentHour ? LColors.accent.opacity(0.8) : LColors.textSecondary)
                     }
-                }.frame(maxWidth: .infinity, alignment: .leading)
-            }.padding(.horizontal, LSpacing.pageHorizontal).padding(.vertical, 8)
-            Rectangle().fill(LColors.glassBorder.opacity(0.4)).frame(height: 1).padding(.leading, 66 + LSpacing.pageHorizontal)
+                    .frame(width: 52).padding(.top, 8)
+
+                    VStack(alignment: .leading, spacing: 0) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            if slotEvents.isEmpty {
+                                HStack {
+                                    Text("No events").font(.system(size: 14)).foregroundStyle(LColors.textSecondary.opacity(0.6))
+                                    Spacer()
+                                    Button { sheetConfig = EventSheetConfig(selectedDate: dateForHour(hour), editingEvent: nil) } label: {
+                                        Image(systemName: "plus").font(.system(size: 13)).foregroundStyle(LColors.accent)
+                                            .frame(width: 28, height: 28).background(LColors.accent.opacity(0.15)).clipShape(RoundedRectangle(cornerRadius: 8))
+                                    }.buttonStyle(.plain)
+                                }.padding(.vertical, 12)
+                            } else {
+                                ForEach(slotEvents) { instance in eventCard(instance) }
+                                Button { sheetConfig = EventSheetConfig(selectedDate: dateForHour(hour), editingEvent: nil) } label: {
+                                    HStack(spacing: 4) { Image(systemName: "plus").font(.system(size: 11)); Text("Add event").font(.system(size: 13)) }
+                                        .foregroundStyle(LColors.textSecondary).padding(.vertical, 6)
+                                }.buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.horizontal, LSpacing.pageHorizontal).padding(.vertical, 8)
+                .background(isCurrentHour ? LColors.accent.opacity(0.06) : Color.clear)
+
+                Rectangle().fill(LColors.glassBorder.opacity(0.4)).frame(height: 1).padding(.leading, 66 + LSpacing.pageHorizontal)
+            }
         }
     }
 

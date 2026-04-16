@@ -21,7 +21,7 @@ final class WaterHealthKitManager: ObservableObject {
     private let appSourceKey = "com.lystaria.waterEntry"
 
     @Published var todayWaterFlOz: Double = 0
-    private var waterGoalForSync: Double = {
+    private(set) var waterGoalForSync: Double = {
         // Seed from shared UserDefaults so the observer never overwrites
         // the widget with the hardcoded default before WaterTrackingView appears.
         let stored = UserDefaults(suiteName: HealthWidgetSync.appGroupID)

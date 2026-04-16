@@ -12,6 +12,9 @@ struct KanbanView: View {
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \KanbanBoard.sortOrder) private var boards: [KanbanBoard]
     @Query(sort: \LystariaReminder.nextRunAt) private var allReminders: [LystariaReminder]
+    @Query private var habits: [Habit]
+    @Query private var medications: [Medication]
+    @Query private var events: [CalendarEvent]
 
     @State private var selectedBoardID: UUID? = nil
     @State private var showNewBoard = false
@@ -357,37 +360,203 @@ struct KanbanView: View {
         try? modelContext.save()
     }
 
+    private func canMarkReminderDone(_ reminder: LystariaReminder) -> Bool {
+        // Routine reminders should always be allowed to complete from Kanban.
+        if reminder.reminderType == .routine {
+            return true
+        }
+
+        // This view does not have a shared checklist-gating property on the reminder model,
+        // so allow non-routine reminders to complete here as well.
+        return true
+    }
+
     private func markDone(_ reminder: LystariaReminder) {
-        let now = Date()
+        guard canMarkReminderDone(reminder) else { return }
+        logHabitIfLinked(reminder)
+        logMedicationIfLinked(reminder)
+        let completedOccurrenceDate = reminder.nextRunAt
 
-        if let schedule = reminder.schedule, schedule.kind != .once {
-            reminder.nextRunAt = ReminderCompute.nextRun(after: now.addingTimeInterval(91), reminder: reminder)
+        if reminder.isRecurring {
+            let now = Date()
+            let base = max(now, reminder.nextRunAt)
+            reminder.nextRunAt = ReminderCompute.nextRun(after: base.addingTimeInterval(91), reminder: reminder)
             reminder.acknowledgedAt = nil
-            reminder.isKanbanDone = false
-            reminder.updatedAt = now
+            if reminder.reminderType == .routine {
+                reminder.resetRoutineChecklist(for: "\(reminder.nextRunAt.timeIntervalSince1970)")
+            }
+            reminder.lastCompletedAt = Date()
+            incrementCompletionsToday(reminder, occurrenceDate: completedOccurrenceDate)
+            reminder.updatedAt = Date()
             try? modelContext.save()
-
+            awardPointsForReminderCompletion(reminder, occurrenceDate: completedOccurrenceDate)
             NotificationManager.shared.cancelReminder(reminder)
             NotificationManager.shared.scheduleReminder(reminder)
-        #if DEBUG
+#if DEBUG
             NotificationManager.shared.printPendingNotifications()
-        #endif
-
+#endif
             showToast("Completed")
+        } else {
+            reminder.isKanbanDone = true
+            reminder.lastCompletedAt = Date()
+            incrementCompletionsToday(reminder, occurrenceDate: completedOccurrenceDate)
+            reminder.acknowledgedAt = Date()
+            reminder.status = .sent
+            reminder.updatedAt = Date()
+            try? modelContext.save()
+            awardPointsForReminderCompletion(reminder, occurrenceDate: completedOccurrenceDate)
+            NotificationManager.shared.cancelReminder(reminder)
+#if DEBUG
+            NotificationManager.shared.printPendingNotifications()
+#endif
+            showToast("Completed")
+        }
+    }
+
+    // MARK: - Habit/Medication Logging (from RemindersView)
+
+    private func logHabitIfLinked(_ reminder: LystariaReminder) {
+        // Only habit-linked reminders should affect habit logs.
+        guard reminder.linkedKind == .habit,
+              let hid = reminder.linkedHabitId,
+              let habit = habits.first(where: { $0.id == hid }) else { return }
+
+        let cal = Calendar.current
+        let todayStart = cal.startOfDay(for: Date())
+        let cap = max(1, habit.timesPerDay)
+
+        // Match HabitsView behavior: if today was marked skipped, remove that skip
+        // when the user completes the habit from a linked reminder.
+        let todaysSkips = (habit.skips ?? []).filter {
+            cal.isDate($0.dayStart, inSameDayAs: todayStart)
+        }
+        for skip in todaysSkips {
+            modelContext.delete(skip)
+        }
+        if !todaysSkips.isEmpty {
+            habit.skips = (habit.skips ?? []).filter {
+                !cal.isDate($0.dayStart, inSameDayAs: todayStart)
+            }
+        }
+
+        if let existing = (habit.logs ?? []).first(where: { cal.isDate($0.dayStart, inSameDayAs: todayStart) }) {
+            if existing.count < cap {
+                existing.count += 1
+                existing.updatedAt = Date()
+            }
+        } else {
+            let newLog = HabitLog(habit: habit, dayStart: todayStart, count: 1)
+            modelContext.insert(newLog)
+        }
+
+        habit.updatedAt = Date()
+        habit.logs = habit.logs
+    }
+
+    private func logMedicationIfLinked(_ reminder: LystariaReminder) {
+        if reminder.reminderType == .routine {
+            for link in reminder.sortedMedicationLinks {
+                guard let medicationId = link.medicationId,
+                      let medication = medications.first(where: { $0.id == medicationId })
+                else {
+                    continue
+                }
+
+                let quantity = max(1, link.quantity)
+                let previousAmount = medication.currentAmount
+
+                if medication.currentAmount > 0 {
+                    medication.currentAmount = max(0, medication.currentAmount - quantity)
+                }
+
+                medication.lastTakenAt = Date()
+                medication.updatedAt = Date()
+
+                let historyEntry = MedicationHistoryEntry(
+                    type: .taken,
+                    amountText: "\(previousAmount) → \(medication.currentAmount)",
+                    details: "\(reminder.title) • Qty \(quantity)",
+                    createdAt: Date(),
+                    medication: medication,
+                )
+                modelContext.insert(historyEntry)
+            }
             return
         }
 
-        reminder.isKanbanDone = true
-        reminder.acknowledgedAt = now
-        reminder.updatedAt = now
-        try? modelContext.save()
+        guard reminder.linkedKind == .medication,
+              let mid = reminder.linkedMedicationId,
+              let medication = medications.first(where: { $0.id == mid }) else { return }
 
-        NotificationManager.shared.scheduleReminder(reminder)
-#if DEBUG
-        NotificationManager.shared.printPendingNotifications()
-#endif
+        let quantity = max(1, reminder.linkedMedicationQuantity)
+        let previousAmount = medication.currentAmount
 
-        showToast("Completed")
+        if medication.currentAmount > 0 {
+            medication.currentAmount = max(0, medication.currentAmount - quantity)
+        }
+
+        medication.lastTakenAt = Date()
+        medication.updatedAt = Date()
+
+        let historyEntry = MedicationHistoryEntry(
+            type: .taken,
+            amountText: "\(previousAmount) → \(medication.currentAmount)",
+            details: "\(reminder.title) • Qty \(quantity)",
+            createdAt: Date(),
+            medication: medication,
+        )
+        modelContext.insert(historyEntry)
+    }
+
+    private func awardPointsForReminderCompletion(_ reminder: LystariaReminder, occurrenceDate: Date) {
+        let reminderId = "\(reminder.persistentModelID)"
+        let occurrenceDayKey = SelfCarePointsManager.dayKey(from: occurrenceDate)
+        let isEventReminder = events.contains { $0.reminderServerId == reminderId }
+
+        if reminder.linkedKind == .habit {
+            _ = try? SelfCarePointsManager.awardHabitReminderCompletion(
+                in: modelContext,
+                reminderId: reminderId,
+                occurrenceDayKey: occurrenceDayKey,
+                title: reminder.title,
+            )
+        } else if isEventReminder {
+            _ = try? SelfCarePointsManager.awardEventReminderCompletion(
+                in: modelContext,
+                eventId: reminderId,
+                occurrenceDayKey: occurrenceDayKey,
+                title: reminder.title,
+            )
+        } else {
+            _ = try? SelfCarePointsManager.awardReminderCompletion(
+                in: modelContext,
+                reminderId: reminderId,
+                occurrenceDayKey: occurrenceDayKey,
+                title: reminder.title,
+            )
+        }
+    }
+
+
+    private func incrementCompletionsToday(_ reminder: LystariaReminder, occurrenceDate: Date) {
+        let cal = Calendar.current
+        var timestamps = decodeCompletionTimestamps(reminder)
+        timestamps = timestamps.filter { cal.isDateInToday($0) }
+        guard cal.isDateInToday(occurrenceDate) else { return }
+        timestamps.append(occurrenceDate)
+        reminder.completionTimestampsStorage = encodeCompletionTimestamps(timestamps)
+    }
+
+    private func decodeCompletionTimestamps(_ reminder: LystariaReminder) -> [Date] {
+        guard let data = reminder.completionTimestampsStorage.data(using: .utf8),
+              let intervals = try? JSONDecoder().decode([Double].self, from: data) else { return [] }
+        return intervals.map { Date(timeIntervalSince1970: $0) }
+    }
+
+    private func encodeCompletionTimestamps(_ dates: [Date]) -> String {
+        let intervals = dates.map(\.timeIntervalSince1970)
+        let data = try? JSONEncoder().encode(intervals)
+        return data.flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
     }
 
     private func deleteBoard(_ board: KanbanBoard) {
