@@ -25,6 +25,14 @@ struct OnboardingOverlay: View {
 
                 ZStack {
 
+                    // Full-screen touch absorber — prevents the underlying
+                    // scroll view or any other controls from receiving input
+                    // while onboarding is active.
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .ignoresSafeArea()
+                        .allowsHitTesting(true)
+
                     ZStack {
                         Color.black.opacity(0.6)
                             .ignoresSafeArea()

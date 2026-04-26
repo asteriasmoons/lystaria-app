@@ -31,7 +31,6 @@ struct RichBlockTextView: UIViewRepresentable {
         textView.setContentHuggingPriority(.defaultLow, for: .horizontal)
         textView.setContentHuggingPriority(.required, for: .vertical)
         textView.setContentCompressionResistancePriority(.required, for: .vertical)
-
         return textView
     }
 
@@ -57,6 +56,7 @@ struct RichBlockTextView: UIViewRepresentable {
             ]
         } else {
             uiView.linkTextAttributes = [
+                .foregroundColor: UIColor.systemBlue,
                 .underlineStyle: NSUnderlineStyle.single.rawValue
             ]
         }
@@ -66,24 +66,5 @@ struct RichBlockTextView: UIViewRepresentable {
         Coordinator()
     }
 
-    final class Coordinator: NSObject, UITextViewDelegate {
-        @available(iOS, introduced: 10.0, deprecated: 17.0)
-        func textView(
-            _ textView: UITextView,
-            shouldInteractWith URL: URL,
-            in characterRange: NSRange,
-            interaction: UITextItemInteraction
-        ) -> Bool {
-            true
-        }
-
-        @available(iOS 17.0, *)
-        func textView(
-            _ textView: UITextView,
-            primaryActionFor textItem: UITextItem,
-            defaultAction: UIAction
-        ) -> UIAction? {
-            defaultAction
-        }
-    }
+    final class Coordinator: NSObject, UITextViewDelegate {}
 }

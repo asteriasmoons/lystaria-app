@@ -6,29 +6,21 @@
 //
 
 import SwiftUI
-import Foundation
+import SwiftData
 
 struct WatchMoodHistoryView: View {
-    @State private var moodLogs: [MoodLog] = []
-    @State private var isLoading = false
-    @State private var errorMessage: String?
-
-    init() {}
+    @Query(sort: \MoodLog.createdAt, order: .reverse)
+    private var moodLogs: [MoodLog]
 
     private var groupedLogs: [(date: Date, logs: [MoodLog])] {
         let calendar = Calendar.current
-
-        let grouped = Dictionary(grouping: moodLogs) { log in
-            calendar.startOfDay(for: logDate(log))
+        let filtered = moodLogs.filter { $0.deletedAt == nil }
+        let grouped = Dictionary(grouping: filtered) { log in
+            calendar.startOfDay(for: log.createdAt)
         }
-
         return grouped
             .map { (date: $0.key, logs: $0.value) }
             .sorted { $0.date > $1.date }
-    }
-
-    private func logDate(_ log: MoodLog) -> Date {
-        log.createdAt
     }
 
     var body: some View {
@@ -36,22 +28,7 @@ struct WatchMoodHistoryView: View {
             WatchLystariaBackground()
 
             Group {
-                if isLoading {
-                    ProgressView()
-                        .tint(.white)
-                } else if let errorMessage {
-                    VStack(spacing: 8) {
-                        Text("Unable to Load")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.white)
-
-                        Text(errorMessage)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.8))
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding(.horizontal, 12)
-                } else if groupedLogs.isEmpty {
+                if groupedLogs.isEmpty {
                     Text("No Mood Logs Yet")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.white)
@@ -95,22 +72,6 @@ struct WatchMoodHistoryView: View {
         }
         .navigationTitle("History")
         .toolbarBackground(.hidden, for: .navigationBar)
-        .task {
-            await loadMoodLogs()
-        }
-    }
-
-    private func loadMoodLogs() async {
-        isLoading = true
-        errorMessage = nil
-
-        do {
-            moodLogs = try await MoodLogService.shared.fetchMoodLogs()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-
-        isLoading = false
     }
 
     private func formattedDate(_ date: Date) -> String {

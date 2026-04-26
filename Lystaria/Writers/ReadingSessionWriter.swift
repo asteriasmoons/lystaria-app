@@ -123,6 +123,24 @@ enum ReadingSessionWriter {
         book.updatedAt = Date()
 
         try modelContext.save()
+
+        let sessionId = session.persistentModelID.hashValue.description
+
+        if session.isTimerSession {
+            _ = try? SelfCarePointsManager.awardReadingTimerSession(
+                in: modelContext,
+                sessionId: sessionId,
+                title: book.title.isEmpty ? "Reading Timer Session" : "Timer: \(book.title)",
+                sessionDate: sessionDate
+            )
+        } else {
+            _ = try? SelfCarePointsManager.awardReadingSession(
+                in: modelContext,
+                sessionId: sessionId,
+                title: book.title.isEmpty ? "Reading Session" : "Session: \(book.title)",
+                sessionDate: sessionDate
+            )
+        }
     }
 }
 

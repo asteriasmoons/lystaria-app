@@ -13,12 +13,49 @@ struct WatchReadingGoalView: View {
     @Query(sort: \ReadingGoal.updatedAt, order: .reverse)
     private var goals: [ReadingGoal]
 
+    @Query(sort: \ReadingSession.sessionDate, order: .reverse)
+    private var sessions: [ReadingSession]
+
     private var activeGoal: ReadingGoal? {
         goals.first(where: { $0.isActive })
     }
 
+    private func goalDateRange(for period: ReadingGoalPeriod) -> (start: Date, end: Date) {
+        let cal = Calendar.current
+        let now = Date()
+        switch period {
+        case .daily:
+            let start = cal.startOfDay(for: now)
+            let end = cal.date(byAdding: .day, value: 1, to: start) ?? now
+            return (start, end)
+        case .weekly:
+            let interval = cal.dateInterval(of: .weekOfYear, for: now)
+            return (interval?.start ?? now, interval?.end ?? now)
+        case .monthly:
+            let interval = cal.dateInterval(of: .month, for: now)
+            return (interval?.start ?? now, interval?.end ?? now)
+        case .yearly:
+            let interval = cal.dateInterval(of: .year, for: now)
+            return (interval?.start ?? now, interval?.end ?? now)
+        }
+    }
+
     private var currentAmount: Double {
-        Double(activeGoal?.progressValue ?? 0)
+        guard let goal = activeGoal else { return 0 }
+        let range = goalDateRange(for: goal.period)
+        let periodSessions = sessions.filter {
+            $0.sessionDate >= range.start && $0.sessionDate < range.end
+        }
+        switch goal.metric {
+        case .minutes:
+            return Double(periodSessions.reduce(0) { $0 + max($1.minutesRead, 0) })
+        case .hours:
+            return Double(periodSessions.reduce(0) { $0 + max($1.minutesRead, 0) }) / 60.0
+        case .pages:
+            return Double(periodSessions.reduce(0) { $0 + max($1.pagesRead, 0) })
+        case .books:
+            return 0
+        }
     }
 
     private var goalAmount: Double {

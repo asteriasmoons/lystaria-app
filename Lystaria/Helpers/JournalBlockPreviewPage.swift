@@ -11,6 +11,7 @@ import SwiftData
 struct JournalBlockPreviewPage: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appState: AppState
 
     let entry: JournalEntry
 
@@ -18,6 +19,8 @@ struct JournalBlockPreviewPage: View {
     @State private var showEditorPage = false
     @State private var isCompletingAction = false
     @State private var hasPreparedPreview = false
+    @State private var mentionedBook: JournalBook? = nil
+    @State private var navigateToMentionedBook = false
 
     var body: some View {
         ZStack {
@@ -62,7 +65,21 @@ struct JournalBlockPreviewPage: View {
                         .padding(.bottom, 12)
                     }
 
-                    JournalBlockDisplayView(entry: entry)
+                    JournalBlockDisplayView(entry: entry, onMentionTapped: { idString in
+                        print("🔥 MENTION TAPPED: \(idString)")
+                        let descriptor = FetchDescriptor<JournalBook>(
+                            predicate: #Predicate { $0.deletedAt == nil }
+                        )
+                        let books = (try? modelContext.fetch(descriptor)) ?? []
+                        print("🔥 BOOKS FOUND: \(books.map { $0.uuid.uuidString })")
+                        if let match = books.first(where: { $0.uuid.uuidString == idString }) {
+                            print("🔥 MATCH FOUND: \(match.title)")
+                            mentionedBook = match
+                            navigateToMentionedBook = true
+                        } else {
+                            print("🔥 NO MATCH for id: \(idString)")
+                        }
+                    })
                 }
             }
         }
@@ -131,6 +148,17 @@ struct JournalBlockPreviewPage: View {
                         .navigationBarBackButtonHidden(true)
                 }
             }
+        }
+        .background {
+            NavigationLink(
+                destination: Group {
+                    if let book = mentionedBook {
+                        JournalBookDetailView(book: book)
+                            .environmentObject(appState)
+                    }
+                },
+                isActive: $navigateToMentionedBook
+            ) { EmptyView() }
         }
         .confirmationDialog(
             "Delete this entry?",

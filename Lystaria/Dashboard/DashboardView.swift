@@ -86,6 +86,7 @@ struct DashboardView: View {
     @EnvironmentObject private var appState: AppState
 
     @State private var showToolbox = false
+    @State private var showSelfCarePointsPage = false
     @State private var showMoonPhaseDetails = false
     @State private var momentumRefreshID = UUID()
     @State private var moonPhaseData = MoonPhaseCalculator.calculate(for: Date())
@@ -1241,6 +1242,9 @@ struct DashboardView: View {
             .navigationDestination(isPresented: $showToolbox) {
                 ToolboxView()
             }
+            .navigationDestination(isPresented: $showSelfCarePointsPage) {
+                SelfCarePointsView()
+            }
         }
     }
 
@@ -1356,6 +1360,28 @@ struct DashboardView: View {
                 }
                 .buttonStyle(.plain)
                 .onboardingTarget("healthIcon")
+
+                Button {
+                    showSelfCarePointsPage = true
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.08))
+                            .overlay(
+                                Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                            .frame(width: 34, height: 34)
+
+                        Image("bowheart")
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 16, height: 16)
+                            .foregroundStyle(.white)
+                    }
+                }
+                .buttonStyle(.plain)
+                .onboardingTarget("loveIcon")
 
                 Button {
                     showToolbox = true

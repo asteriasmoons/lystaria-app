@@ -22,7 +22,7 @@ struct MainTabView: View {
             case .reminders: return "bellfill"
             case .calendar:  return "calfill"
             case .journal:   return "notesfill"
-            case .reading:   return "bookopen"
+            case .reading:   return "bookstack"
             case .profile:   return "userwavy"
             case .info:       return "infofill"
             case .dashboard: return "homeline"

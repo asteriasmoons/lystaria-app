@@ -25,7 +25,6 @@ struct WatchHomeView: View {
                     // PAGE 1
                     WatchHomePageView(items: [
                         WatchHomeItem(title: "Mood", icon: "heartcircle", destination: .mood),
-                        WatchHomeItem(title: "Stats", icon: "statscircle", destination: .stats),
                         WatchHomeItem(title: "Books", icon: "openbook", destination: .books),
                         WatchHomeItem(title: "Journal", icon: "pagesfill", destination: .journal)
                     ])
@@ -42,7 +41,6 @@ struct WatchHomeView: View {
                     WatchHomePageView(items: [
                         WatchHomeItem(title: "Health", icon: "hearthealth", destination: .health),
                         WatchHomeItem(title: "Profile", icon: "wavyuser", destination: .profile),
-                        WatchHomeItem(title: "Settings", icon: "cogcircle", destination: .settings),
                         WatchHomeItem.empty
                     ])
 
@@ -65,17 +63,17 @@ struct WatchHomePageView: View {
     var body: some View {
 
         VStack(spacing: 14) {
-
-            HStack(spacing: 18) {
-                WatchHomeIconButton(item: items[0])
-                WatchHomeIconButton(item: items[1])
+            let rows = stride(from: 0, to: items.count, by: 2).map {
+                Array(items[$0..<min($0 + 2, items.count)])
             }
 
-            HStack(spacing: 18) {
-                WatchHomeIconButton(item: items[2])
-                WatchHomeIconButton(item: items[3])
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                HStack(spacing: 18) {
+                    ForEach(row, id: \.title) { item in
+                        WatchHomeIconButton(item: item)
+                    }
+                }
             }
-
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
@@ -108,7 +106,6 @@ struct WatchHomeItem {
 enum WatchHomeDestination {
 
     case mood
-    case stats
     case books
     case journal
     case calendar
@@ -117,7 +114,6 @@ enum WatchHomeDestination {
     case checklists
     case health
     case profile
-    case settings
     case empty
 }
 
@@ -186,9 +182,6 @@ struct WatchHomeIconButton: View {
         case .mood:
             WatchMoodMainView()
 
-        case .stats:
-            WatchPlaceholderView(title: "Stats")
-
         case .books:
             WatchBooksMainView()
 
@@ -196,25 +189,22 @@ struct WatchHomeIconButton: View {
             WatchJournalMainView()
 
         case .calendar:
-            WatchPlaceholderView(title: "Calendar")
+            WatchCalendarView()
 
         case .reminder:
-            WatchPlaceholderView(title: "Reminder")
+            WatchRemindersView()
 
         case .habits:
-            WatchPlaceholderView(title: "Habits")
+            WatchHabitsView()
 
         case .checklists:
-            WatchPlaceholderView(title: "Checklists")
+            WatchChecklistsView()
             
         case .health:
             WatchHealthMainView()
 
         case .profile:
             WatchProfileView()
-
-        case .settings:
-            WatchPlaceholderView(title: "Settings")
 
         case .empty:
             EmptyView()

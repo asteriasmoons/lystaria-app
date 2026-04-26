@@ -30,8 +30,8 @@ struct OnboardingPages {
         steps: [
             OnboardingStep(
                 targetID: "calendarSettingsIcon",
-                title: "Settings",
-                message: "Open calendar settings here. This is for things like syncing your local calendar and other app settings like onboarding reruns."
+                title: "Settings Menu",
+                message: "Open calendar settings here. This is for things like syncing your local calendar and managing your calendars or joining a shared event."
             )
         ]
     )
@@ -40,15 +40,20 @@ struct OnboardingPages {
         pageID: "onboarding_dashboard",
         steps: [
             OnboardingStep(
-                targetID: "toolboxIcon",
-                title: "Toolbox",
-                message: "Tap the pause icon to open the Toolbox. Inside you'll find a breathing timer with a calming animation to help you reset, and a burn card where you can type anything weighing on you and press \"Burn\" to watch it disappear in a flame."
-            ),
-            OnboardingStep(
                 targetID: "healthIcon",
                 title: "Health",
                 message: "Tap here to view your health metrics and exercise logs and to log your health metrics and exercises to your day."
-                )
+                ),
+            OnboardingStep(
+                targetID: "loveIcon",
+                title: "Self-Care Points",
+                message: "Tap here to see all your self care points and track your progress. You can also see your history here and what you earned on. Your level is also here."
+            ),
+            OnboardingStep(
+                targetID: "toolboxIcon",
+                title: "Toolbox",
+                message: "Tap the pause icon to open the Toolbox. Inside you'll find a breathing timer with a calming animation to help you reset, and a burn card where you can type anything weighing on you and press \"Burn\" to watch it disappear in a flame."
+            )
         ]
     )
 
@@ -84,6 +89,16 @@ struct OnboardingPages {
                 targetID: "notesIcon",
                 title: "Sticky Notes",
                 message: "Create colorful sticky notes in the app and view them. Pick your own color, pin or favorite your note and filter them by views too."
+               ),
+            OnboardingStep(
+                targetID: "groupIcon",
+                title: "Buddy Reading",
+                message: "Group up to read books together and chat about your interests and progress"
+              ),
+            OnboardingStep(
+                targetID: "boltIcon",
+                title: "Sprinting",
+                message: "Participate in global reading sprints and view the leaderboard to see where you're at in the global reading community"
                )
             ]
         )

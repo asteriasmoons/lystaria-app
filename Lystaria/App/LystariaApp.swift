@@ -61,6 +61,7 @@ struct LystariaApp: App {
             BookSeries.self,
             BookNote.self,
             ReadingStats.self,
+            ReadingGoalSnapshot.self,
             ReadingSession.self,
             ReadingGoal.self,
             DailyReadingProgress.self,
@@ -115,8 +116,10 @@ struct LystariaApp: App {
             ContentView()
                 .environmentObject(appState)
                 .environmentObject(notificationManager)
-                .onAppear {
-                    WatchSessionManager.shared.activate()
+            // AFTER
+            .onAppear {
+                SelfCarePointsManager.scheduleWeeklyResetTimer(modelContainer: sharedModelContainer)
+                WatchSessionManager.shared.activate()
 
                     appState.bootstrap(modelContext: sharedModelContainer.mainContext)
                     SharedBookmarkImportManager.importPendingBookmark(modelContext: sharedModelContainer.mainContext)
@@ -140,8 +143,10 @@ struct LystariaApp: App {
                     handleNotificationAction(notification)
                 }
                 #if os(iOS)
-                .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
-                    notificationManager.refreshAuthorizationStatus()
+            // AFTER
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+                SelfCarePointsManager.scheduleWeeklyResetTimer(modelContainer: sharedModelContainer)
+                notificationManager.refreshAuthorizationStatus()
                     SharedBookmarkImportManager.importPendingBookmark(modelContext: sharedModelContainer.mainContext)
                     SharedFolderExportManager.exportFolders(modelContext: sharedModelContainer.mainContext)
                     processRefills(modelContext: sharedModelContainer.mainContext)

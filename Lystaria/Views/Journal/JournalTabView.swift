@@ -91,6 +91,7 @@ struct JournalTabView: View {
             }
             .onAppear {
                 migrateEntriesIntoDefaultBookIfNeeded()
+                migrateBookUUIDsIfNeeded()
                 JournalEntryBlockMigration.migrateEntriesIfNeeded(allEntries, modelContext: modelContext)
                 syncWidgetSnapshot()
             }
@@ -397,6 +398,24 @@ struct JournalTabView: View {
     private func unpinBook(_ book: JournalBook) {
         book.pinOrder = 0
         try? modelContext.save()
+    }
+
+    private func migrateBookUUIDsIfNeeded() {
+        // All existing books got the same UUID default from SwiftData schema migration.
+        // Assign each book a unique UUID if it shares the same one as another book.
+        var seen = Set<UUID>()
+        var needsSave = false
+        for book in books {
+            if seen.contains(book.uuid) {
+                book.uuid = UUID()
+                needsSave = true
+            } else {
+                seen.insert(book.uuid)
+            }
+        }
+        if needsSave {
+            try? modelContext.save()
+        }
     }
 
     private func migrateEntriesIntoDefaultBookIfNeeded() {

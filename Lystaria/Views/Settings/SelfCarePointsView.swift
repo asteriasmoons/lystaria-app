@@ -759,6 +759,10 @@ struct SelfCarePointsView: View {
                     earnRow(icon: "figure.walk", title: "Exercise Log", amount: SelfCarePointsManager.exerciseLogPoints)
                     divider
                     earnRow(icon: "face.smiling.fill", title: "Mood Log", amount: SelfCarePointsManager.moodLogPoints)
+                    divider
+                    earnRow(icon: "book.pages.fill", title: "Reading Session", amount: SelfCarePointsManager.readingSessionPoints)
+                    divider
+                    earnRow(icon: "timer", title: "Reading Timer Session", amount: SelfCarePointsManager.readingTimerSessionPoints)
                 }
             }
         }
@@ -900,6 +904,10 @@ struct SelfCarePointsView: View {
             return "figure.walk"
         case .moodLog:
             return "face.smiling.fill"
+        case .readingSession:
+            return "book.pages.fill"
+        case .readingTimerSession:
+            return "timer"
         }
     }
 

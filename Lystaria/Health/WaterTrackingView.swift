@@ -664,15 +664,14 @@ struct WaterTrackingView: View {
             }
 
             if showCustomAmountPopup {
-                Color.black.opacity(0.35)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        focusedField = nil
-                        showCustomAmountPopup = false
-                    }
+                ZStack {
+                    Color.black.opacity(0.35)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            focusedField = nil
+                            showCustomAmountPopup = false
+                        }
 
-                VStack {
-                    Spacer()
                     VStack(spacing: 18) {
                         GradientTitle(text: "Other FL OZ", font: .title2.bold())
 
@@ -710,23 +709,21 @@ struct WaterTrackingView: View {
                     .shadow(color: .black.opacity(0.25), radius: 16, y: 8)
                     .contentShape(RoundedRectangle(cornerRadius: 24))
                     .onTapGesture { }
-                    Spacer()
                 }
-                .padding(.horizontal, 24)
-                .transition(.scale.combined(with: .opacity))
+                .ignoresSafeArea()
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
                 .zIndex(20)
             }
 
             if showClearCustomPopup {
-                Color.black.opacity(0.35)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        focusedField = nil
-                        showClearCustomPopup = false
-                    }
+                ZStack {
+                    Color.black.opacity(0.35)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            focusedField = nil
+                            showClearCustomPopup = false
+                        }
 
-                VStack {
-                    Spacer()
                     VStack(spacing: 18) {
                         GradientTitle(text: "Clear FL OZ", font: .title2.bold())
 
@@ -764,23 +761,21 @@ struct WaterTrackingView: View {
                     .shadow(color: .black.opacity(0.25), radius: 16, y: 8)
                     .contentShape(RoundedRectangle(cornerRadius: 24))
                     .onTapGesture { }
-                    Spacer()
                 }
-                .padding(.horizontal, 24)
-                .transition(.scale.combined(with: .opacity))
+                .ignoresSafeArea()
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
                 .zIndex(21)
             }
 
             if showPlanPopup {
-                Color.black.opacity(0.35)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        focusedField = nil
-                        showPlanPopup = false
-                    }
+                ZStack {
+                    Color.black.opacity(0.35)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            focusedField = nil
+                            showPlanPopup = false
+                        }
 
-                VStack {
-                    Spacer()
                     LystariaOverlayPopup(
                         onClose: {
                             focusedField = nil
@@ -821,23 +816,21 @@ struct WaterTrackingView: View {
                             .padding(.vertical, 16)
                         }
                     )
-                    Spacer()
                 }
-                .padding(.horizontal, 24)
-                .transition(.scale.combined(with: .opacity))
+                .ignoresSafeArea()
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
                 .zIndex(21)
             }
 
             if showExtraPopup {
-                Color.black.opacity(0.35)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        focusedField = nil
-                        showExtraPopup = false
-                    }
+                ZStack {
+                    Color.black.opacity(0.35)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            focusedField = nil
+                            showExtraPopup = false
+                        }
 
-                VStack {
-                    Spacer()
                     LystariaOverlayPopup(
                         onClose: {
                             focusedField = nil
@@ -878,23 +871,21 @@ struct WaterTrackingView: View {
                             .padding(.vertical, 16)
                         }
                     )
-                    Spacer()
                 }
-                .padding(.horizontal, 24)
-                .transition(.scale.combined(with: .opacity))
+                .ignoresSafeArea()
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
                 .zIndex(21)
             }
 
             if showWaterPlanningHistoryPopup {
-                Color.black.opacity(0.35)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        visibleWaterHistoryCount = 4
-                        showWaterPlanningHistoryPopup = false
-                    }
+                ZStack {
+                    Color.black.opacity(0.35)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            visibleWaterHistoryCount = 4
+                            showWaterPlanningHistoryPopup = false
+                        }
 
-                VStack {
-                    Spacer()
                     LystariaOverlayPopup(
                         onClose: {
                             visibleWaterHistoryCount = 4
@@ -944,23 +935,21 @@ struct WaterTrackingView: View {
                             .padding(.vertical, 16)
                         }
                     )
-                    Spacer()
                 }
-                .padding(.horizontal, 24)
-                .transition(.scale.combined(with: .opacity))
+                .ignoresSafeArea()
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
                 .zIndex(22)
             }
 
             if showGoalPopup {
-                Color.black.opacity(0.35)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        focusedField = nil
-                        showGoalPopup = false
-                    }
+                ZStack {
+                    Color.black.opacity(0.35)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            focusedField = nil
+                            showGoalPopup = false
+                        }
 
-                VStack {
-                    Spacer()
                     VStack(spacing: 18) {
                         GradientTitle(text: "Set Goal", font: .title2.bold())
 
@@ -1005,10 +994,9 @@ struct WaterTrackingView: View {
                     .shadow(color: .black.opacity(0.25), radius: 16, y: 8)
                     .contentShape(RoundedRectangle(cornerRadius: 24))
                     .onTapGesture { }
-                    Spacer()
                 }
-                .padding(.horizontal, 24)
-                .transition(.scale.combined(with: .opacity))
+                .ignoresSafeArea()
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
                 .zIndex(20)
             }
         }

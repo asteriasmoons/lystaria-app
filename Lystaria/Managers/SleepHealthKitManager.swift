@@ -26,7 +26,7 @@ final class SleepHealthKitManager: ObservableObject {
     /// Human-readable label.
     @Published private(set) var sleepLabel: String = "Unavailable"
 
-    /// Goal in hours — default 8.
+    /// Goal in hours — set externally from DailyCompletionSettings.
     var sleepGoalHours: Double = 8 {
         didSet { recompute() }
     }
@@ -38,23 +38,25 @@ final class SleepHealthKitManager: ObservableObject {
     // MARK: - Auth
 
     func requestAuthorization() async {
-        guard HKHealthStore.isHealthDataAvailable(), !isAuthorized else { return }
-        isAuthorized = true
-        do {
-            try await healthStore.requestAuthorization(toShare: [], read: [sleepType])
-            await fetchLastNightSleep()
-        } catch {
-            print("SleepHealthKitManager auth error:", error)
+        guard HKHealthStore.isHealthDataAvailable() else { return }
+        if !isAuthorized {
+            isAuthorized = true
+            do {
+                try await healthStore.requestAuthorization(toShare: [], read: [sleepType])
+            } catch {
+                print("SleepHealthKitManager auth error:", error)
+                return
+            }
         }
+        await fetchLastNightSleep()
     }
 
     // MARK: - Fetch
 
     func fetchLastNightSleep() async {
-        // Look at the window from yesterday noon → now so we always capture
-        // a full night regardless of when the user wakes up.
+        // Search a 30-hour window so we catch any normal sleep schedule.
         let end   = Date()
-        let start = Calendar.current.date(byAdding: .hour, value: -20, to: end) ?? end
+        let start = Calendar.current.date(byAdding: .hour, value: -30, to: end) ?? end
 
         let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate)
         let sort      = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
@@ -68,18 +70,41 @@ final class SleepHealthKitManager: ObservableObject {
             ) { _, samples, _ in
                 let sleepSamples = (samples as? [HKCategorySample]) ?? []
 
-                // Sum only stages that count as actual sleep (not in-bed).
-                let totalSeconds = sleepSamples
-                    .filter { sample in
-                        guard let value = HKCategoryValueSleepAnalysis(rawValue: sample.value) else { return false }
-                        switch value {
-                        case .asleepUnspecified, .asleepCore, .asleepDeep, .asleepREM:
-                            return true
-                        default:
-                            return false
-                        }
+                // Keep only actual sleep stages (not inBed).
+                let asleepSamples = sleepSamples.filter { sample in
+                    guard let value = HKCategoryValueSleepAnalysis(rawValue: sample.value) else { return false }
+                    switch value {
+                    case .asleepUnspecified, .asleepCore, .asleepDeep, .asleepREM:
+                        return true
+                    default:
+                        return false
                     }
-                    .reduce(0.0) { $0 + $1.endDate.timeIntervalSince($1.startDate) }
+                }.sorted { $0.endDate > $1.endDate }
+
+                guard !asleepSamples.isEmpty else {
+                    continuation.resume(returning: 0)
+                    return
+                }
+
+                // Find the most recent contiguous sleep session.
+                // A gap > 90 minutes between samples means a new/prior session.
+                let gapThreshold: TimeInterval = 90 * 60
+                var sessionEnd   = asleepSamples[0].endDate
+                var sessionStart = asleepSamples[0].startDate
+                var totalSeconds: TimeInterval = asleepSamples[0].endDate.timeIntervalSince(asleepSamples[0].startDate)
+
+                for sample in asleepSamples.dropFirst() {
+                    let gap = sessionStart.timeIntervalSince(sample.endDate)
+                    if gap <= gapThreshold {
+                        // Belongs to the same session — extend backwards.
+                        totalSeconds += sample.endDate.timeIntervalSince(sample.startDate)
+                        sessionStart = min(sessionStart, sample.startDate)
+                    } else {
+                        // Gap is too large — this is a prior session, stop.
+                        break
+                    }
+                    _ = sessionEnd // suppress unused warning
+                }
 
                 continuation.resume(returning: totalSeconds / 3600)
             }

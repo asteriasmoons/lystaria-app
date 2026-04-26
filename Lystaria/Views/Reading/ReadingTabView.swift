@@ -1,21 +1,21 @@
 // ReadingTabView.swift
 // Lystaria
 
-import SwiftUI
-import SwiftData
-import PhotosUI
-import Combine
-import UIKit
 import ActivityKit
+import Combine
+import PhotosUI
+import SwiftData
+import SwiftUI
+import UIKit
 
 // Cross-platform: numeric keyboard only exists on iOS/visionOS
 extension View {
     @ViewBuilder
     func numericKeyboardIfAvailable() -> some View {
         #if os(iOS) || os(visionOS)
-        self.keyboardType(.numberPad)
+            keyboardType(.numberPad)
         #else
-        self
+            self
         #endif
     }
 }
@@ -23,14 +23,15 @@ extension View {
 struct ReadingTabView: View {
     @Environment(\.modelContext) private var modelContext
     @StateObject private var limits = LimitManager.shared
+    @Query private var userSettingsAll: [UserSettings]
     @Query(sort: \Book.createdAt, order: .reverse) private var books: [Book]
     @Query(sort: \ReadingStats.updatedAt, order: .reverse) private var readingStats: [ReadingStats]
     @Query(sort: \ReadingGoal.updatedAt, order: .reverse) private var readingGoals: [ReadingGoal]
     @Query(sort: \ReadingSession.sessionDate, order: .reverse) private var readingSessions: [ReadingSession]
-    @Query(sort: \WeeklyReadingSnapshot.startDate, order: .reverse) private var weeklyReadingSnapshots: [WeeklyReadingSnapshot]
+    @Query(sort: \ReadingGoalSnapshot.startDate, order: .reverse) private var readingGoalSnapshots: [ReadingGoalSnapshot]
     @Query(sort: \ReadingPointsEntry.date, order: .reverse) private var readingPointsEntries: [ReadingPointsEntry]
     @EnvironmentObject private var appState: AppState
-    
+
     @State private var showAddBook = false
     @State private var editingBook: Book? = nil
     @State private var visibleBookCount: Int = 4
@@ -40,15 +41,15 @@ struct ReadingTabView: View {
     @State private var editingReadingGoal: ReadingGoal? = nil
     @State private var showingReadingGoalProgressPopup = false
     @State private var showingReadingGoalHistoryPopup = false
-    
+
     @State private var showingBookNotesPopup = false
     @State private var notesBook: Book? = nil
     @State private var selectedBookNote: BookNote? = nil
     @State private var showingAddBookNotePopup = false
-    
+
     @State private var showingSeriesPopup: Bool = false
     @State private var selectedSeriesForPopup: BookSeries? = nil
-    
+
     @State private var showDeleteConfirm = false
     @State private var bookPendingDeletion: Book? = nil
     @State private var showSummary = true
@@ -57,20 +58,34 @@ struct ReadingTabView: View {
     @State private var showReadingTimerSheet = false
     @State private var tagFilter: String? = nil
     @State private var selectedStatus: BookStatus? = nil
-    
+
     @State private var loggingSessionForBook: Book? = nil
     @State private var selectedBookForDetails: Book? = nil
     @State private var showingSessionHistoryForBook: Book? = nil
-    
+
     @State private var showingBookPointsPopup: Bool = false
     @State private var selectedBookForPointsPopup: Book? = nil
-    // Onboarding for hidden header icons
+    @State private var showBuddyReadingView = false
+    @State private var showSprintRoomView = false
+    /// Onboarding for hidden header icons
     @StateObject private var onboarding = OnboardingManager()
-    
+
     private var currentUserId: String? {
         appState.currentAppleUserId
     }
-    
+
+    private var userSettings: UserSettings? {
+        userSettingsAll.first
+    }
+
+    private func ensureUserSettings() {
+        if userSettingsAll.isEmpty {
+            let settings = UserSettings()
+            modelContext.insert(settings)
+            try? modelContext.save()
+        }
+    }
+
     private var currentStats: ReadingStats? {
         if let currentUserId, !currentUserId.isEmpty {
             let matches = readingStats.filter { $0.userId == currentUserId }
@@ -78,35 +93,35 @@ struct ReadingTabView: View {
                 return bestMatch
             }
         }
-        
+
         return readingStats.max(by: { $0.updatedAt < $1.updatedAt })
     }
-    
+
     private var streakDays: Int {
         currentStats?.streakDays ?? 0
     }
-    
+
     private var bestStreakDays: Int {
         currentStats?.bestStreakDays ?? 0
     }
-    
+
     private var lastCheckInDate: Date? {
         currentStats?.lastCheckInDate
     }
-    
+
     private var alreadyCheckedInToday: Bool {
         guard let lastCheckInDate else { return false }
         return Calendar.current.isDateInToday(lastCheckInDate)
     }
-    
+
     private var readingStreakStatusText: String {
         alreadyCheckedInToday ? "Checked in today" : "Not checked in today"
     }
-    
+
     private var readingStreakSupportText: String {
         alreadyCheckedInToday
-        ? "You already protected your streak today."
-        : "Check in today to keep your streak going."
+            ? "You already protected your streak today."
+            : "Check in today to keep your streak going."
     }
 
     private var currentUserPointsEntries: [ReadingPointsEntry] {
@@ -125,16 +140,16 @@ struct ReadingTabView: View {
     private var totalReadingPointsSessions: Int {
         currentUserPointsEntries.count
     }
-    
+
     private var currentGoal: ReadingGoal? {
         guard let currentUserId else { return nil }
         let matches = readingGoals.filter { $0.userId == currentUserId && $0.isActive }
         return matches.max(by: { $0.updatedAt < $1.updatedAt })
     }
-    
+
     private var currentGoalTargetDisplay: String {
         guard let currentGoal else { return "" }
-        
+
         switch currentGoal.metric {
         case .minutes:
             return "\(currentGoal.targetValue) min"
@@ -146,99 +161,134 @@ struct ReadingTabView: View {
             return "\(currentGoal.targetValue) books"
         }
     }
-    
+
     private var currentGoalProgressValue: Int {
         guard let goal = currentGoal else { return 0 }
-        
+
         let range = goalDateRange(for: goal.period)
-        
+
         switch goal.metric {
         case .minutes:
             return readingSessions
                 .filter { session in
                     session.sessionDate >= range.start &&
-                    session.sessionDate < range.end
+                        session.sessionDate < range.end
                 }
-                .reduce(0) { $0 + $1.minutesRead }
-            
+                .reduce(0) { $0 + max($1.minutesRead, 0) }
+
         case .hours:
             return readingSessions
                 .filter { session in
                     session.sessionDate >= range.start &&
-                    session.sessionDate < range.end
+                        session.sessionDate < range.end
                 }
-                .reduce(0) { $0 + $1.minutesRead }
-            
+                .reduce(0) { $0 + max($1.minutesRead, 0) }
+
         case .pages:
             return readingSessions
                 .filter { session in
                     session.sessionDate >= range.start &&
-                    session.sessionDate < range.end
+                        session.sessionDate < range.end
                 }
-                .reduce(0) { $0 + $1.pagesRead }
-            
+                .reduce(0) { $0 + max($1.pagesRead, 0) }
+
         case .books:
-            return books.filter { book in
+            return books.count(where: { book in
                 guard book.deletedAt == nil else { return false }
                 guard book.status == .finished else { return false }
                 guard let finishedAt = book.finishedAt else { return false }
                 return finishedAt >= range.start && finishedAt < range.end
-            }.count
+            })
         }
     }
-    
+
+    private var currentGoalProgressDouble: Double {
+        guard let goal = currentGoal else { return 0 }
+
+        switch goal.metric {
+        case .hours:
+            return Double(currentGoalProgressValue) / 60.0
+        case .minutes, .pages, .books:
+            return Double(currentGoalProgressValue)
+        }
+    }
+
     private var currentGoalProgressDisplay: String {
         guard let goal = currentGoal else { return "" }
-        
+
         switch goal.metric {
         case .minutes:
             return "\(currentGoalProgressValue) / \(goal.targetValue) min"
         case .hours:
-            let targetMinutes = goal.targetValue * 60
-            return "\(currentGoalProgressValue) / \(targetMinutes) min"
+            return "\(formattedHours(currentGoalProgressDouble)) / \(goal.targetValue) hr"
         case .pages:
             return "\(currentGoalProgressValue) / \(goal.targetValue) pages"
         case .books:
             return "\(currentGoalProgressValue) / \(goal.targetValue) books"
         }
     }
-    
+
     private var currentGoalProgressFraction: Double {
         guard let goal = currentGoal else { return 0 }
-        
-        let target: Double
-        switch goal.metric {
+
+        let target = switch goal.metric {
         case .minutes:
-            target = Double(goal.targetValue)
+            Double(goal.targetValue)
         case .hours:
-            target = Double(goal.targetValue * 60)
+            Double(goal.targetValue)
         case .pages:
-            target = Double(goal.targetValue)
+            Double(goal.targetValue)
         case .books:
-            target = Double(goal.targetValue)
+            Double(goal.targetValue)
         }
-        
+
         guard target > 0 else { return 0 }
-        return min(max(Double(currentGoalProgressValue) / target, 0), 1)
+        return min(max(currentGoalProgressDouble / target, 0), 1)
     }
-    
+
     private var currentGoalSegmentCount: Int {
         10
     }
-    
+
     private var currentGoalFilledSegments: Int {
-        guard let goal = currentGoal else { return 0 }
-        guard goal.targetValue > 0 else { return 0 }
-        guard currentWeekPagesRead > 0 else { return 0 }
-        
-        let ratio = min(Double(currentWeekPagesRead) / Double(goal.targetValue), 1.0)
+        guard currentGoal != nil else { return 0 }
+        let ratio = currentGoalProgressFraction
+        guard ratio > 0 else { return 0 }
         return min(max(Int(ceil(ratio * Double(currentGoalSegmentCount))), 0), currentGoalSegmentCount)
     }
-    
+
+    private var currentGoalArcCenterText: String {
+        guard let goal = currentGoal else { return "0 / 0" }
+
+        switch goal.metric {
+        case .minutes:
+            return "\(currentGoalProgressValue) / \(goal.targetValue)"
+        case .hours:
+            return "\(formattedHours(currentGoalProgressDouble)) / \(goal.targetValue)"
+        case .pages:
+            return "\(currentGoalProgressValue) / \(goal.targetValue)"
+        case .books:
+            return "\(currentGoalProgressValue) / \(goal.targetValue)"
+        }
+    }
+
+    private var currentGoalArcBottomText: String {
+        guard let goal = currentGoal else { return "" }
+        return goal.period.label
+    }
+
+    private func formattedHours(_ value: Double) -> String {
+        let rounded = (value * 10).rounded() / 10
+        if rounded == floor(rounded) {
+            return String(format: "%.0f", rounded)
+        }
+        return String(format: "%.1f", rounded)
+    }
+
     private func goalDateRange(for period: ReadingGoalPeriod) -> (start: Date, end: Date) {
         let calendar = Calendar.current
         let now = Date()
-        
+
         switch period {
         case .daily:
             let start = calendar.startOfDay(for: now)
@@ -256,7 +306,6 @@ struct ReadingTabView: View {
         }
     }
 
-    
     @ViewBuilder
     private var readingPopupsOverlay: some View {
         if showBookSummaryPopup {
@@ -265,7 +314,7 @@ struct ReadingTabView: View {
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
                 .zIndex(50)
         }
-        
+
         if showBookRecommendationsPopup {
             BookRecommendationsSheet(isPresented: $showBookRecommendationsPopup)
                 .preferredColorScheme(.dark)
@@ -273,13 +322,13 @@ struct ReadingTabView: View {
                 .zIndex(51)
         }
     }
-    
+
     private var headerSection: some View {
         VStack(spacing: 0) {
             HStack {
                 GradientTitle(text: "Reading", font: .largeTitle.bold())
                 Spacer()
-                
+
                 Button {
                     showBookmarksView = true
                 } label: {
@@ -287,10 +336,10 @@ struct ReadingTabView: View {
                         Circle()
                             .fill(Color.white.opacity(0.08))
                             .overlay(
-                                Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                                Circle().stroke(LColors.glassBorder, lineWidth: 1),
                             )
                             .frame(width: 34, height: 34)
-                        
+
                         Image("markfill")
                             .renderingMode(.template)
                             .resizable()
@@ -302,6 +351,52 @@ struct ReadingTabView: View {
                 .buttonStyle(.plain)
                 .onboardingTarget("bookmarkIcon")
                 
+                // In headerSection, after the bookmarks button and before the notes button:
+
+                Button {
+                    showBuddyReadingView = true
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.08))
+                            .overlay(
+                                Circle().stroke(LColors.glassBorder, lineWidth: 1),
+                            )
+                            .frame(width: 34, height: 34)
+
+                        Image("groupfill")
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 16, height: 16)
+                            .foregroundColor(.white)
+                    }
+                }
+                .buttonStyle(.plain)
+                .onboardingTarget("groupIcon")
+                
+                Button {
+                    showSprintRoomView = true
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.08))
+                            .overlay(
+                                Circle().stroke(LColors.glassBorder, lineWidth: 1),
+                            )
+                            .frame(width: 34, height: 34)
+
+                        Image("sparkfill")
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 16, height: 16)
+                            .foregroundColor(.white)
+                    }
+                }
+                .buttonStyle(.plain)
+                .onboardingTarget("boltIcon")
+
                 Button {
                     showNotesView = true
                 } label: {
@@ -309,7 +404,7 @@ struct ReadingTabView: View {
                         Circle()
                             .fill(Color.white.opacity(0.08))
                             .overlay(
-                                Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                                Circle().stroke(LColors.glassBorder, lineWidth: 1),
                             )
                             .frame(width: 34, height: 34)
                         Image("notepad")
@@ -324,14 +419,14 @@ struct ReadingTabView: View {
                 .onboardingTarget("notesIcon")
             }
             .padding(.top, 24)
-            
+
             Rectangle()
                 .fill(LColors.glassBorder)
                 .frame(height: 1)
                 .padding(.top, 12)
         }
     }
-    
+
     private var topToggleSection: some View {
         HStack(spacing: 10) {
             Button {
@@ -347,11 +442,11 @@ struct ReadingTabView: View {
                     .background(showSummary ? LColors.accent : Color.white.opacity(0.08))
                     .clipShape(Capsule())
                     .overlay(
-                        Capsule().stroke(showSummary ? LColors.accent : LColors.glassBorder, lineWidth: 1)
+                        Capsule().stroke(showSummary ? LColors.accent : LColors.glassBorder, lineWidth: 1),
                     )
             }
             .buttonStyle(.plain)
-            
+
             Button {
                 showSummary = false
                 showBookRecommendationsPopup = true
@@ -365,11 +460,11 @@ struct ReadingTabView: View {
                     .background(!showSummary ? LColors.accent : Color.white.opacity(0.08))
                     .clipShape(Capsule())
                     .overlay(
-                        Capsule().stroke(!showSummary ? LColors.accent : LColors.glassBorder, lineWidth: 1)
+                        Capsule().stroke(!showSummary ? LColors.accent : LColors.glassBorder, lineWidth: 1),
                     )
             }
             .buttonStyle(.plain)
-            
+
             Button {
                 showReadingTimerSheet = true
                 showBookSummaryPopup = false
@@ -383,22 +478,21 @@ struct ReadingTabView: View {
                     .background(Color.white.opacity(0.08))
                     .clipShape(Capsule())
                     .overlay(
-                        Capsule().stroke(LColors.glassBorder, lineWidth: 1)
+                        Capsule().stroke(LColors.glassBorder, lineWidth: 1),
                     )
             }
             .buttonStyle(.plain)
-            
+
             Spacer()
         }
     }
-    
+
     private func handleAddBookTap() {
         let decision = limits.canCreate(.bookCardsTotal, currentCount: books.count)
         guard decision.allowed else { return }
         showAddBook = true
     }
-    
-    
+
     var body: some View {
         NavigationStack {
             mainContent
@@ -407,6 +501,12 @@ struct ReadingTabView: View {
                 }
                 .navigationDestination(isPresented: $showNotesView) {
                     NotesView()
+                }
+                .navigationDestination(isPresented: $showBuddyReadingView) {
+                    BuddyReadingView()
+                }
+                .navigationDestination(isPresented: $showSprintRoomView) {
+                    SprintRoomView()
                 }
         }
         .sheet(isPresented: $showReadingTimerSheet) {
@@ -418,8 +518,7 @@ struct ReadingTabView: View {
         }
     }
 
-    // Extracted to break the modifier chain that was causing the type-checker timeout.
-    @ViewBuilder
+    /// Extracted to break the modifier chain that was causing the type-checker timeout.
     private var mainContent: some View {
         ZStack {
             LystariaBackground()
@@ -436,7 +535,6 @@ struct ReadingTabView: View {
             .padding(.bottom, 100)
             .zIndex(10000)
         }
-        .ignoresSafeArea(edges: .bottom)
         .overlay { sheetOverlaysA }
         .overlay { sheetOverlaysB }
         .onChange(of: selectedStatus) { _, _ in visibleBookCount = 4 }
@@ -446,7 +544,7 @@ struct ReadingTabView: View {
             title: "Delete book?",
             message: "This will permanently remove this book.",
             confirmTitle: "Delete",
-            confirmRole: .destructive
+            confirmRole: .destructive,
         ) {
             if let b = bookPendingDeletion {
                 b.deletedAt = Date()
@@ -458,8 +556,19 @@ struct ReadingTabView: View {
         .onAppear {
             ensureReadingStatsRecordExists()
             syncBestReadingStreakIfNeeded()
-            savePreviousWeekSnapshotIfNeeded()
+            savePastReadingGoalSnapshotsIfNeeded()
             visibleBookCount = 4
+            ensureUserSettings()
+            selectedStatus = userSettings?.readingDefaultStatus
+        }
+        .onChange(of: readingSessions.count) { _, _ in
+            savePastReadingGoalSnapshotsIfNeeded()
+        }
+        .onChange(of: books.map { $0.updatedAt }) { _, _ in
+            savePastReadingGoalSnapshotsIfNeeded()
+        }
+        .onChange(of: readingGoals.map { $0.updatedAt }) { _, _ in
+            savePastReadingGoalSnapshotsIfNeeded()
         }
         .overlayPreferenceValue(OnboardingTargetKey.self) { anchors in
             ZStack {
@@ -474,8 +583,7 @@ struct ReadingTabView: View {
         }
     }
 
-    // First batch of sheet overlays — split to keep each expression small.
-    @ViewBuilder
+    /// First batch of sheet overlays — split to keep each expression small.
     private var sheetOverlaysA: some View {
         ZStack {
             if showAddBook {
@@ -513,7 +621,7 @@ struct ReadingTabView: View {
                     onShowPoints: {
                         selectedBookForPointsPopup = book
                         showingBookPointsPopup = true
-                    }
+                    },
                 )
                 .preferredColorScheme(.dark)
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
@@ -533,8 +641,7 @@ struct ReadingTabView: View {
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showingSessionHistoryForBook != nil)
     }
 
-    // Second batch of sheet overlays.
-    @ViewBuilder
+    /// Second batch of sheet overlays.
     private var sheetOverlaysB: some View {
         ZStack {
             if showingBookNotesPopup, let book = notesBook {
@@ -542,10 +649,10 @@ struct ReadingTabView: View {
                     book: book,
                     onClose: {
                         showingBookNotesPopup = false
-                        if !showingAddBookNotePopup && selectedBookNote == nil { notesBook = nil }
+                        if !showingAddBookNotePopup, selectedBookNote == nil { notesBook = nil }
                     },
                     onAddNote: { showingAddBookNotePopup = true },
-                    onSelectNote: { note in selectedBookNote = note }
+                    onSelectNote: { note in selectedBookNote = note },
                 )
                 .preferredColorScheme(.dark)
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
@@ -570,7 +677,7 @@ struct ReadingTabView: View {
                     onClose: {
                         showingReadingGoalSheet = false
                         editingReadingGoal = nil
-                    }
+                    },
                 )
                 .preferredColorScheme(.dark)
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
@@ -581,7 +688,7 @@ struct ReadingTabView: View {
                     currentGoal: currentGoal,
                     currentUserId: currentUserId,
                     onClose: { showingReadingGoalProgressPopup = false },
-                    onShowHistory: { showingReadingGoalHistoryPopup = true }
+                    onShowHistory: { showingReadingGoalHistoryPopup = true },
                 )
                 .preferredColorScheme(.dark)
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
@@ -590,7 +697,7 @@ struct ReadingTabView: View {
             if showingReadingGoalHistoryPopup {
                 ReadingGoalHistoryPopup(
                     currentUserId: currentUserId,
-                    onClose: { showingReadingGoalHistoryPopup = false }
+                    onClose: { showingReadingGoalHistoryPopup = false },
                 )
                 .preferredColorScheme(.dark)
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
@@ -602,7 +709,7 @@ struct ReadingTabView: View {
                     onClose: {
                         showingSeriesPopup = false
                         selectedSeriesForPopup = nil
-                    }
+                    },
                 )
                 .environment(\.colorScheme, .dark)
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
@@ -615,7 +722,7 @@ struct ReadingTabView: View {
                     onClose: {
                         showingBookPointsPopup = false
                         selectedBookForPointsPopup = nil
-                    }
+                    },
                 )
                 .environment(\.colorScheme, .dark)
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
@@ -631,13 +738,13 @@ struct ReadingTabView: View {
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showingReadingGoalHistoryPopup)
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showingSeriesPopup)
     }
-    
+
     private var mainScrollContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 headerSection
                 topToggleSection
-                
+
                 GlassCard {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(alignment: .center, spacing: 12) {
@@ -649,14 +756,14 @@ struct ReadingTabView: View {
                                     .frame(width: 24, height: 24)
                                     .foregroundStyle(.white)
                                     .padding(.top, 1)
-                                
+
                                 VStack(alignment: .leading, spacing: 4) {
                                     GradientTitle(text: "Reading Streak", font: .system(size: 14, weight: .bold))
                                 }
                             }
-                            
+
                             Spacer()
-                            
+
                             Text(readingStreakStatusText)
                                 .font(.system(size: 9, weight: .semibold))
                                 .foregroundStyle(LColors.textPrimary)
@@ -666,10 +773,10 @@ struct ReadingTabView: View {
                                 .clipShape(Capsule())
                                 .overlay(
                                     Capsule()
-                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                        .stroke(LColors.glassBorder, lineWidth: 1),
                                 )
                         }
-                        
+
                         HStack(spacing: 10) {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("CURRENT STREAK")
@@ -687,9 +794,9 @@ struct ReadingTabView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 16))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 16)
-                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                    .stroke(LColors.glassBorder, lineWidth: 1),
                             )
-                            
+
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("BEST DAYS")
                                     .font(.system(size: 11, weight: .bold))
@@ -706,15 +813,15 @@ struct ReadingTabView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 16))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 16)
-                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                    .stroke(LColors.glassBorder, lineWidth: 1),
                             )
                         }
-                        
+
                         Text(readingStreakSupportText)
                             .font(.subheadline)
                             .foregroundStyle(LColors.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
-                        
+
                         HStack(spacing: 10) {
                             Button {
                                 do {
@@ -724,7 +831,7 @@ struct ReadingTabView: View {
                                     }
                                     let didCheckIn = try ReadingCheckInWriter.checkInToday(
                                         modelContext: modelContext,
-                                        userId: currentUserId
+                                        userId: currentUserId,
                                     )
                                     if didCheckIn {
                                         syncBestReadingStreakIfNeeded()
@@ -748,12 +855,12 @@ struct ReadingTabView: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 12)
-                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                        .stroke(LColors.glassBorder, lineWidth: 1),
                                 )
                             }
                             .buttonStyle(.plain)
                             .disabled(alreadyCheckedInToday)
-                            
+
                             Button {
                                 if let record = currentStats {
                                     record.streakDays = 0
@@ -775,11 +882,11 @@ struct ReadingTabView: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 12)
-                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                        .stroke(LColors.glassBorder, lineWidth: 1),
                                 )
                             }
                             .buttonStyle(.plain)
-                            
+
                             Spacer()
                         }
                     }
@@ -822,7 +929,7 @@ struct ReadingTabView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 16))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 16)
-                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                    .stroke(LColors.glassBorder, lineWidth: 1),
                             )
 
                             VStack(alignment: .leading, spacing: 8) {
@@ -841,7 +948,7 @@ struct ReadingTabView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 16))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 16)
-                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                    .stroke(LColors.glassBorder, lineWidth: 1),
                             )
                         }
 
@@ -854,7 +961,7 @@ struct ReadingTabView: View {
                         }
                     }
                 }
-                
+
                 GlassCard {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(alignment: .center, spacing: 12) {
@@ -863,10 +970,10 @@ struct ReadingTabView: View {
                                     .font(.system(size: 22, weight: .bold))
                                     .foregroundStyle(.white)
                                     .padding(.top, 1)
-                                
+
                                 VStack(alignment: .leading, spacing: 4) {
                                     GradientTitle(text: "Reading Goal", font: .system(size: 14, weight: .bold))
-                                    
+
                                     if let goal = currentGoal {
                                         Text("\(goal.period.label) • \(goal.metric.label)")
                                             .font(.subheadline)
@@ -878,10 +985,10 @@ struct ReadingTabView: View {
                                     }
                                 }
                             }
-                            
+
                             Spacer()
                         }
-                        
+
                         if let goal = currentGoal {
                             VStack(alignment: .leading, spacing: 14) {
                                 HStack(alignment: .top, spacing: 18) {
@@ -893,16 +1000,16 @@ struct ReadingTabView: View {
                                             .frame(maxWidth: .infinity, alignment: .leading)
                                     }
                                     .frame(maxWidth: .infinity, alignment: .leading)
-                                    
+
                                     HalfCircleDashedGoalProgressView(
                                         segmentCount: currentGoalSegmentCount,
                                         filledSegments: currentGoalFilledSegments,
-                                        centerText: "\(currentWeekPagesRead) / \(goal.targetValue)",
-                                        bottomText: goal.metric.label.lowercased()
+                                        centerText: currentGoalArcCenterText,
+                                        bottomText: currentGoalArcBottomText,
                                     )
                                     .padding(.top, -45)
                                 }
-                                
+
                                 HStack(spacing: 10) {
                                     Button {
                                         editingReadingGoal = goal
@@ -920,36 +1027,12 @@ struct ReadingTabView: View {
                                         .clipShape(RoundedRectangle(cornerRadius: 12))
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 12)
-                                                .stroke(LColors.glassBorder, lineWidth: 1)
+                                                .stroke(LColors.glassBorder, lineWidth: 1),
                                         )
                                     }
                                     .buttonStyle(.plain)
                                     .fixedSize(horizontal: true, vertical: false)
-                                    
-                                    Button {
-                                        goal.progressValue = 0
-                                        goal.updatedAt = Date()
-                                        try? modelContext.save()
-                                    } label: {
-                                        HStack(spacing: 8) {
-                                            Image(systemName: "arrow.counterclockwise")
-                                            Text("Reset")
-                                                .font(.system(size: 14, weight: .semibold))
-                                        }
-                                        .foregroundStyle(.white)
-                                        .padding(.horizontal, 14)
-                                        .padding(.vertical, 10)
-                                        .background(AnyShapeStyle(LGradients.blue))
-                                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 12)
-                                                .stroke(LColors.glassBorder, lineWidth: 1)
-                                        )
-                                        .shadow(color: LColors.accent.opacity(0.3), radius: 8, y: 4)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .fixedSize(horizontal: true, vertical: false)
-                                    
+
                                     Spacer(minLength: 0)
                                 }
                             }
@@ -963,48 +1046,76 @@ struct ReadingTabView: View {
                                     .font(.subheadline)
                                     .foregroundStyle(LColors.textSecondary)
                                     .fixedSize(horizontal: false, vertical: true)
-                                
+
                                 HStack(spacing: 10) {
                                     GradientCapsuleButton(title: "+ Goal", icon: "target") {
                                         editingReadingGoal = nil
                                         showingReadingGoalSheet = true
                                     }
-                                    
+
                                     Spacer()
                                 }
                             }
                         }
                     }
                 }
-                
+
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
                         Pill(title: "All", on: selectedStatus == nil) {
                             withAnimation { selectedStatus = nil }
                         }
-                        
+                        .contextMenu {
+                            Button {
+                                if let settings = userSettings {
+                                    settings.readingDefaultStatus = nil
+                                    settings.updatedAt = Date()
+                                    try? modelContext.save()
+                                }
+                            } label: {
+                                Label(
+                                    userSettings?.readingDefaultStatusFilter == "" ? "Default Tab ✓" : "Set as Default Tab",
+                                    systemImage: userSettings?.readingDefaultStatusFilter == "" ? "checkmark.circle.fill" : "star",
+                                )
+                            }
+                        }
+
                         ForEach(BookStatus.allCases, id: \.self) { status in
                             Pill(title: status.label, on: selectedStatus == status) {
                                 withAnimation { selectedStatus = status }
                             }
+                            .contextMenu {
+                                Button {
+                                    if let settings = userSettings {
+                                        settings.readingDefaultStatus = status
+                                        settings.updatedAt = Date()
+                                        try? modelContext.save()
+                                    }
+                                } label: {
+                                    Label(
+                                        userSettings?.readingDefaultStatusFilter == status.rawValue ? "Default Tab ✓" : "Set as Default Tab",
+                                        systemImage: userSettings?.readingDefaultStatusFilter == status.rawValue ? "checkmark.circle.fill" : "star",
+                                    )
+                                }
+                            }
                         }
                     }
                 }
-                
+
                 if let currentTag = tagFilter {
                     HStack {
                         HStack(spacing: 6) {
                             Image(systemName: "tag.fill")
                                 .font(.system(size: 12))
                                 .foregroundStyle(LColors.textSecondary)
-                            
+
                             Text("Filtered by #\(currentTag)")
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(LColors.textPrimary)
                         }
-                        
+
                         Spacer()
-                        
+
                         Button {
                             withAnimation {
                                 tagFilter = nil
@@ -1019,7 +1130,7 @@ struct ReadingTabView: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 8))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 8)
-                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                        .stroke(LColors.glassBorder, lineWidth: 1),
                                 )
                         }
                         .buttonStyle(.plain)
@@ -1029,19 +1140,19 @@ struct ReadingTabView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 14))
                     .overlay(
                         RoundedRectangle(cornerRadius: 14)
-                            .stroke(LColors.glassBorder, lineWidth: 1)
+                            .stroke(LColors.glassBorder, lineWidth: 1),
                     )
                 }
-                
+
                 booksSection
-                
+
                 Spacer(minLength: 96)
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 140)
         }
     }
-    
+
     private func seriesChipText(for book: Book, series: BookSeries) -> String {
         let cleanLabel = book.seriesLabel.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -1055,35 +1166,34 @@ struct ReadingTabView: View {
 
         return series.title
     }
-    
+
     private var booksSection: some View {
         VStack(spacing: 14) {
             let filteredBooks = books.filter { book in
                 guard book.deletedAt == nil else { return false }
                 let statusMatches = selectedStatus.map { book.status == $0 } ?? true
-                let tagMatches: Bool
-                if let currentTag = tagFilter, !currentTag.isEmpty {
-                    tagMatches = book.tags.contains(where: { $0.caseInsensitiveCompare(currentTag) == .orderedSame })
+                let tagMatches: Bool = if let currentTag = tagFilter, !currentTag.isEmpty {
+                    book.tags.contains(where: { $0.caseInsensitiveCompare(currentTag) == .orderedSame })
                 } else {
-                    tagMatches = true
+                    true
                 }
                 return statusMatches && tagMatches
             }
-                .sorted { a, b in
-                    if a.status == .reading && b.status != .reading { return true }
-                    if a.status != .reading && b.status == .reading { return false }
-                    return a.createdAt > b.createdAt
-                }
-            
+            .sorted { a, b in
+                if a.status == .reading, b.status != .reading { return true }
+                if a.status != .reading, b.status == .reading { return false }
+                return a.createdAt > b.createdAt
+            }
+
             let visibleBooks = Array(filteredBooks.prefix(visibleBookCount))
             let allowedBookIds = Set(
                 books
                     .filter { $0.deletedAt == nil }
                     .sorted { $0.createdAt < $1.createdAt }
                     .prefix(4)
-                    .map { $0.persistentModelID }
+                    .map(\.persistentModelID),
             )
-            
+
             if filteredBooks.isEmpty {
                 GlassCard {
                     Text("No books yet.")
@@ -1126,18 +1236,18 @@ struct ReadingTabView: View {
                                     .clipShape(Capsule())
                                     .overlay(
                                         Capsule()
-                                            .stroke(LColors.glassBorder, lineWidth: 1)
+                                            .stroke(LColors.glassBorder, lineWidth: 1),
                                     )
                             }
-                            
+
                             if !book.author.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                 Text(book.author)
                                     .font(.subheadline)
                                     .foregroundStyle(LColors.textSecondary)
                             }
-                            
+
                             HStack(spacing: 8) {
-                                ForEach(1...5, id: \.self) { i in
+                                ForEach(1 ... 5, id: \.self) { i in
                                     Button {
                                         let newValue = (book.rating == i) ? 0 : i
                                         book.rating = newValue
@@ -1156,20 +1266,21 @@ struct ReadingTabView: View {
                                 }
                             }
                             .padding(.top, 2)
-                            
+
                             if !book.shortSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                 Text(book.shortSummary)
                                     .font(.subheadline)
                                     .foregroundStyle(LColors.textSecondary)
                                     .lineLimit(8)
                             }
-                            
+
                             if book.status == .reading,
                                let total = book.totalPages, total > 0,
-                               let current = book.currentPage, current >= 0 {
+                               let current = book.currentPage, current >= 0
+                            {
                                 let clampedCurrent = min(max(current, 0), total)
                                 let progress = CGFloat(book.progressPercent)
-                                
+
                                 VStack(alignment: .leading, spacing: 8) {
                                     ZStack(alignment: .leading) {
                                         RoundedRectangle(cornerRadius: 6)
@@ -1177,9 +1288,9 @@ struct ReadingTabView: View {
                                             .frame(height: 10)
                                             .overlay(
                                                 RoundedRectangle(cornerRadius: 6)
-                                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                                    .stroke(LColors.glassBorder, lineWidth: 1),
                                             )
-                                        
+
                                         GeometryReader { geo in
                                             let width = max(0, min(geo.size.width * progress, geo.size.width))
                                             RoundedRectangle(cornerRadius: 6)
@@ -1188,14 +1299,14 @@ struct ReadingTabView: View {
                                         }
                                         .frame(height: 10)
                                     }
-                                    
+
                                     HStack {
                                         Text("\(clampedCurrent) / \(total) pages")
                                             .font(.system(size: 12, weight: .semibold))
                                             .foregroundStyle(LColors.textSecondary)
-                                        
+
                                         Spacer()
-                                        
+
                                         Text("\(Int((progress * 100).rounded()))%")
                                             .font(.system(size: 12, weight: .semibold))
                                             .foregroundStyle(LColors.textSecondary)
@@ -1203,7 +1314,7 @@ struct ReadingTabView: View {
                                 }
                                 .padding(.top, 6)
                             }
-                            
+
                             if !book.tags.isEmpty {
                                 ScrollView(.horizontal, showsIndicators: false) {
                                     HStack(spacing: 8) {
@@ -1223,7 +1334,7 @@ struct ReadingTabView: View {
                                                     .background(Color.white.opacity(0.06))
                                                     .clipShape(Capsule())
                                                     .overlay(
-                                                        Capsule().stroke(LGradients.tag, lineWidth: 1)
+                                                        Capsule().stroke(LGradients.tag, lineWidth: 1),
                                                     )
                                             }
                                             .buttonStyle(.plain)
@@ -1232,7 +1343,7 @@ struct ReadingTabView: View {
                                     .padding(.top, 6)
                                 }
                             }
-                            
+
                             VStack(alignment: .leading, spacing: 10) {
                                 HStack(spacing: 10) {
                                     Button {
@@ -1250,11 +1361,11 @@ struct ReadingTabView: View {
                                         .clipShape(RoundedRectangle(cornerRadius: 12))
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 12)
-                                                .stroke(LColors.glassBorder, lineWidth: 1)
+                                                .stroke(LColors.glassBorder, lineWidth: 1),
                                         )
                                     }
                                     .buttonStyle(.plain)
-                                    
+
                                     Button {
                                         selectedBookForDetails = book
                                     } label: {
@@ -1270,21 +1381,21 @@ struct ReadingTabView: View {
                                         .clipShape(RoundedRectangle(cornerRadius: 12))
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 12)
-                                                .stroke(LColors.glassBorder, lineWidth: 1)
+                                                .stroke(LColors.glassBorder, lineWidth: 1),
                                         )
                                     }
                                     .buttonStyle(.plain)
-                                    
+
                                     GradientCapsuleButton(title: "Log Session", icon: "booksfill") {
                                         loggingSessionForBook = book
                                     }
                                 }
-                                
+
                                 HStack(spacing: 10) {
                                     if book.status == .reading,
                                        let total = book.totalPages, total > 0,
-                                       let current = book.currentPage {
-                                        
+                                       let current = book.currentPage
+                                    {
                                         Button {
                                             let newValue = max(current - 1, 0)
                                             if newValue != current {
@@ -1304,11 +1415,11 @@ struct ReadingTabView: View {
                                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                                                 .overlay(
                                                     RoundedRectangle(cornerRadius: 12)
-                                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                                        .stroke(LColors.glassBorder, lineWidth: 1),
                                                 )
                                         }
                                         .buttonStyle(.plain)
-                                        
+
                                         Button {
                                             let newValue = min(current + 1, total)
                                             if newValue != current {
@@ -1328,20 +1439,20 @@ struct ReadingTabView: View {
                                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                                                 .overlay(
                                                     RoundedRectangle(cornerRadius: 12)
-                                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                                        .stroke(LColors.glassBorder, lineWidth: 1),
                                                 )
                                         }
                                         .buttonStyle(.plain)
-                                        
+
                                         Button {
                                             if let total = book.totalPages, total > 0 {
                                                 book.currentPage = total
                                             }
-                                            
+
                                             book.status = .finished
                                             book.finishedAt = Date() // ← THIS is what you’re adding
                                             book.updatedAt = Date()
-                                            
+
                                             try? modelContext.save()
                                         } label: {
                                             Image("checkfill")
@@ -1355,12 +1466,12 @@ struct ReadingTabView: View {
                                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                                                 .overlay(
                                                     RoundedRectangle(cornerRadius: 12)
-                                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                                        .stroke(LColors.glassBorder, lineWidth: 1),
                                                 )
                                         }
                                         .buttonStyle(.plain)
                                     }
-                                    
+
                                     GradientCapsuleButton(title: "Delete", icon: "trashfill") {
                                         bookPendingDeletion = book
                                         showDeleteConfirm = true
@@ -1368,14 +1479,13 @@ struct ReadingTabView: View {
                                 }
                             }
                             .padding(.top, 10)
-                            
                         }
                         // Removed whole-card tap behavior
                     }
                     .premiumLocked(!limits.hasPremiumAccess && !allowedBookIds.contains(book.persistentModelID))
                 }
             }
-            
+
             if filteredBooks.count > visibleBooks.count {
                 HStack {
                     Spacer()
@@ -1392,7 +1502,7 @@ struct ReadingTabView: View {
             title: "Delete book?",
             message: "This will remove this book from your library.",
             confirmTitle: "Delete",
-            confirmRole: .destructive
+            confirmRole: .destructive,
         ) {
             if let book = bookPendingDeletion {
                 modelContext.delete(book)
@@ -1401,7 +1511,7 @@ struct ReadingTabView: View {
             bookPendingDeletion = nil
         }
     }
-    
+
     private func handleReadingDeepLink(_ url: URL) {
         guard url.scheme?.lowercased() == "lystaria" else { return }
         guard url.host?.lowercased() == "reading-timer" else { return }
@@ -1410,7 +1520,7 @@ struct ReadingTabView: View {
             showReadingTimerSheet = true
         }
     }
-    
+
     private func syncBestReadingStreakIfNeeded() {
         guard let record = currentStats else { return }
         let correctedBest = max(record.bestStreakDays, record.streakDays)
@@ -1419,7 +1529,7 @@ struct ReadingTabView: View {
         record.updatedAt = Date()
         try? modelContext.save()
     }
-    
+
     private var currentWeekDateRange: (start: Date, end: Date) {
         let calendar = Calendar.current
         let now = Date()
@@ -1428,11 +1538,11 @@ struct ReadingTabView: View {
         let end = calendar.date(byAdding: .day, value: 6, to: start) ?? start
         return (start, end)
     }
-    
+
     private var previousWeekDateRange: (start: Date, end: Date) {
         weekDateRange(weeksAgo: 1)
     }
-    
+
     private func weekDateRange(weeksAgo: Int) -> (start: Date, end: Date) {
         let calendar = Calendar.current
         let referenceDate = calendar.date(byAdding: .day, value: -(weeksAgo * 7), to: Date()) ?? Date()
@@ -1441,103 +1551,21 @@ struct ReadingTabView: View {
         let end = calendar.date(byAdding: .day, value: 6, to: start) ?? start
         return (start, end)
     }
-    
+
     private func weekRange(startingAt start: Date) -> (start: Date, end: Date) {
         let calendar = Calendar.current
         let normalizedStart = calendar.startOfDay(for: start)
         let end = calendar.date(byAdding: .day, value: 6, to: normalizedStart) ?? normalizedStart
         return (start: normalizedStart, end: end)
     }
-    
-    private var mostRecentSnapshotStartDate: Date? {
-        guard let currentUserId else { return nil }
-        return weeklyReadingSnapshots
-            .filter { $0.userId == currentUserId }
-            .map { $0.startDate }
-            .max()
-    }
-    
-    private func snapshotExists(for range: (start: Date, end: Date)) -> Bool {
-        guard let currentUserId else { return false }
-        let calendar = Calendar.current
-        
-        return weeklyReadingSnapshots.contains { snapshot in
-            snapshot.userId == currentUserId &&
-            calendar.isDate(snapshot.startDate, inSameDayAs: range.start) &&
-            calendar.isDate(snapshot.endDate, inSameDayAs: range.end)
-        }
-    }
-    
-    private func totalProgress(for range: (start: Date, end: Date), metric: ReadingGoalMetric) -> Int {
-        (books.flatMap { $0.sessions ?? [] })
-            .filter { session in
-                range.start <= session.sessionDate && session.sessionDate <= range.end
-            }
-            .reduce(0) { partial, session in
-                partial + progressContribution(for: metric, session: session)
-            }
-    }
-    
-    private var activeGoalForSnapshots: ReadingGoal? {
-        guard let currentUserId else { return nil }
-        return readingGoals.first(where: { $0.userId == currentUserId && $0.isActive })
-    }
-    
-    private func savePreviousWeekSnapshotIfNeeded() {
-        guard let currentUserId else { return }
-        guard let goal = activeGoalForSnapshots else { return }
-        
-        let calendar = Calendar.current
-        let previousRange = previousWeekDateRange
-        let currentWeekStart = currentWeekDateRange.start
-        
-        let firstUnsavedStart: Date = {
-            if let mostRecent = mostRecentSnapshotStartDate {
-                return calendar.date(byAdding: .day, value: 7, to: mostRecent) ?? previousRange.start
-            } else {
-                return previousRange.start
-            }
-        }()
-        
-        var nextStart = calendar.startOfDay(for: firstUnsavedStart)
-        
-        while nextStart < currentWeekStart {
-            let range = weekRange(startingAt: nextStart)
-            
-            if !snapshotExists(for: range) {
-                let goalTarget = max(goal.targetValue, 0)
-                let goalMetric = goal.metric
-                let totalProgress = totalProgress(for: range, metric: goalMetric)
-                let metGoal = goalTarget > 0 ? totalProgress >= goalTarget : false
-                
-                let snapshot = WeeklyReadingSnapshot(
-                    userId: currentUserId,
-                    startDate: range.start,
-                    endDate: range.end,
-                    totalProgress: totalProgress,
-                    goalTarget: goalTarget,
-                    metGoal: metGoal,
-                    goalMetric: goalMetric,
-                    createdAt: Date(),
-                    updatedAt: Date()
-                )
-                
-                modelContext.insert(snapshot)
-            }
-            
-            nextStart = calendar.date(byAdding: .day, value: 7, to: nextStart) ?? currentWeekStart
-        }
-        
-        try? modelContext.save()
-    }
-    
+
     private var currentWeekPagesRead: Int {
         guard let goal = currentGoal else { return 0 }
         let calendar = Calendar.current
         let now = Date()
-        
+
         guard let interval = calendar.dateInterval(of: .weekOfYear, for: now) else { return 0 }
-        
+
         return (books.flatMap { $0.sessions ?? [] })
             .filter { session in
                 interval.contains(session.sessionDate)
@@ -1546,7 +1574,214 @@ struct ReadingTabView: View {
                 partial + progressContribution(for: goal.metric, session: session)
             }
     }
-    
+
+    private var activeGoalForSnapshots: ReadingGoal? {
+        guard let currentUserId else { return nil }
+        let matches = readingGoals.filter { $0.userId == currentUserId && $0.isActive }
+        return matches.max(by: { $0.updatedAt < $1.updatedAt })
+    }
+
+    private func currentPeriodDateRange(for period: ReadingGoalPeriod) -> (start: Date, end: Date) {
+        let calendar = Calendar.current
+        let now = Date()
+
+        switch period {
+        case .daily:
+            let start = calendar.startOfDay(for: now)
+            let end = calendar.date(byAdding: .day, value: 1, to: start) ?? now
+            return (start, end)
+
+        case .weekly:
+            let interval = calendar.dateInterval(of: .weekOfYear, for: now)
+            let start = interval?.start ?? calendar.startOfDay(for: now)
+            let end = interval?.end ?? calendar.date(byAdding: .weekOfYear, value: 1, to: start) ?? start
+            return (start, end)
+
+        case .monthly:
+            let interval = calendar.dateInterval(of: .month, for: now)
+            let start = interval?.start ?? calendar.startOfDay(for: now)
+            let end = interval?.end ?? calendar.date(byAdding: .month, value: 1, to: start) ?? start
+            return (start, end)
+
+        case .yearly:
+            let interval = calendar.dateInterval(of: .year, for: now)
+            let start = interval?.start ?? calendar.startOfDay(for: now)
+            let end = interval?.end ?? calendar.date(byAdding: .year, value: 1, to: start) ?? start
+            return (start, end)
+        }
+    }
+
+    private func dateRange(for period: ReadingGoalPeriod, periodsAgo: Int) -> (start: Date, end: Date) {
+        let calendar = Calendar.current
+        let current = currentPeriodDateRange(for: period)
+
+        switch period {
+        case .daily:
+            let start = calendar.date(byAdding: .day, value: -periodsAgo, to: current.start) ?? current.start
+            let end = calendar.date(byAdding: .day, value: 1, to: start) ?? start
+            return (calendar.startOfDay(for: start), end)
+
+        case .weekly:
+            let start = calendar.date(byAdding: .weekOfYear, value: -periodsAgo, to: current.start) ?? current.start
+            let end = calendar.date(byAdding: .weekOfYear, value: 1, to: start) ?? start
+            return (calendar.startOfDay(for: start), end)
+
+        case .monthly:
+            let start = calendar.date(byAdding: .month, value: -periodsAgo, to: current.start) ?? current.start
+            let end = calendar.date(byAdding: .month, value: 1, to: start) ?? start
+            return (calendar.startOfDay(for: start), end)
+
+        case .yearly:
+            let start = calendar.date(byAdding: .year, value: -periodsAgo, to: current.start) ?? current.start
+            let end = calendar.date(byAdding: .year, value: 1, to: start) ?? start
+            return (calendar.startOfDay(for: start), end)
+        }
+    }
+
+    private func nextPeriodStart(after start: Date, period: ReadingGoalPeriod) -> Date {
+        let calendar = Calendar.current
+
+        switch period {
+        case .daily:
+            return calendar.date(byAdding: .day, value: 1, to: start) ?? start
+        case .weekly:
+            return calendar.date(byAdding: .weekOfYear, value: 1, to: start) ?? start
+        case .monthly:
+            return calendar.date(byAdding: .month, value: 1, to: start) ?? start
+        case .yearly:
+            return calendar.date(byAdding: .year, value: 1, to: start) ?? start
+        }
+    }
+
+    private func periodRange(startingAt start: Date, period: ReadingGoalPeriod) -> (start: Date, end: Date) {
+        let calendar = Calendar.current
+        let normalizedStart = calendar.startOfDay(for: start)
+        let end = nextPeriodStart(after: normalizedStart, period: period)
+        return (start: normalizedStart, end: end)
+    }
+
+    private func mostRecentSnapshotStartDate(for period: ReadingGoalPeriod) -> Date? {
+        guard let currentUserId else { return nil }
+
+        return readingGoalSnapshots
+            .filter { $0.userId == currentUserId && $0.goalPeriod == period }
+            .map(\.startDate)
+            .max()
+    }
+
+    private func snapshotExists(for range: (start: Date, end: Date), period: ReadingGoalPeriod) -> Bool {
+        guard let currentUserId else { return false }
+
+        return readingGoalSnapshots.contains { snapshot in
+            snapshot.userId == currentUserId &&
+                snapshot.goalPeriod == period &&
+                abs(snapshot.startDate.timeIntervalSince(range.start)) < 1 &&
+                abs(snapshot.endDate.timeIntervalSince(range.end)) < 1
+        }
+    }
+
+    private func totalProgress(for range: (start: Date, end: Date), metric: ReadingGoalMetric) -> Double {
+        switch metric {
+        case .minutes:
+            return Double(
+                readingSessions
+                    .filter { session in
+                        range.start <= session.sessionDate && session.sessionDate < range.end
+                    }
+                    .reduce(0) { partial, session in
+                        partial + max(session.minutesRead, 0)
+                    },
+            )
+
+        case .hours:
+            let minutes = readingSessions
+                .filter { session in
+                    range.start <= session.sessionDate && session.sessionDate < range.end
+                }
+                .reduce(0) { partial, session in
+                    partial + max(session.minutesRead, 0)
+                }
+            return Double(minutes) / 60.0
+
+        case .pages:
+            return Double(
+                readingSessions
+                    .filter { session in
+                        range.start <= session.sessionDate && session.sessionDate < range.end
+                    }
+                    .reduce(0) { partial, session in
+                        partial + max(session.pagesRead, 0)
+                    },
+            )
+
+        case .books:
+            return Double(
+                books.count(where: { book in
+                    guard book.deletedAt == nil else { return false }
+                    guard book.status == .finished else { return false }
+                    guard let finishedAt = book.finishedAt else { return false }
+                    return finishedAt >= range.start && finishedAt < range.end
+                }),
+            )
+        }
+    }
+
+    private func savePastReadingGoalSnapshotsIfNeeded() {
+        guard let currentUserId else { return }
+        guard let goal = activeGoalForSnapshots else { return }
+
+        let period = goal.period
+        let currentRange = currentPeriodDateRange(for: period)
+        let calendar = Calendar.current
+        let backfillStart = dateRange(for: period, periodsAgo: 1).start
+
+        let firstUnsavedStart: Date = if let mostRecent = mostRecentSnapshotStartDate(for: period) {
+            max(nextPeriodStart(after: mostRecent, period: period), backfillStart)
+        } else {
+            backfillStart
+        }
+
+        var nextStart = periodRange(startingAt: firstUnsavedStart, period: period).start
+
+        while nextStart < currentRange.start {
+            let range = periodRange(startingAt: nextStart, period: period)
+
+            guard range.end <= currentRange.start else { break }
+
+            if !snapshotExists(for: range, period: period) {
+                let goalTarget = max(goal.targetValue, 0)
+                let goalMetric = goal.metric
+                let totalProgress = totalProgress(for: range, metric: goalMetric)
+                let metGoal = goalTarget > 0 ? totalProgress >= Double(goalTarget) : false
+
+                let snapshot = ReadingGoalSnapshot(
+                    userId: currentUserId,
+                    startDate: range.start,
+                    endDate: range.end,
+                    totalProgress: totalProgress,
+                    goalTarget: goalTarget,
+                    metGoal: metGoal,
+                    goalMetric: goalMetric,
+                    goalPeriod: period,
+                    createdAt: Date(),
+                    updatedAt: Date(),
+                )
+
+                modelContext.insert(snapshot)
+                print("[ReadingTabView] Inserted reading goal snapshot:", period.rawValue, range.start, range.end, totalProgress, "/", goalTarget, "met:", metGoal)
+            }
+
+            nextStart = nextPeriodStart(after: nextStart, period: period)
+        }
+
+        do {
+            try modelContext.save()
+            print("[ReadingTabView] Reading goal snapshots save succeeded. Snapshot count:", readingGoalSnapshots.count)
+        } catch {
+            print("[ReadingTabView] Reading goal snapshots save FAILED:", error.localizedDescription)
+        }
+    }
+
     private func progressContribution(for metric: ReadingGoalMetric, session: ReadingSession) -> Int {
         switch metric {
         case .pages:
@@ -1565,7 +1800,7 @@ struct ReadingTabView: View {
             return 1
         }
     }
-    
+
     /// Ensures there is exactly one ReadingStats record for the current user,
     /// and safely adopts/merges an existing record if Sign in with Apple testing changed IDs.
     private func ensureReadingStatsRecordExists() {
@@ -1573,13 +1808,13 @@ struct ReadingTabView: View {
             print("[ReadingTabView] No signed-in Apple user ID available")
             return
         }
-        
+
         let allDescriptor = FetchDescriptor<ReadingStats>()
-        
+
         do {
             let allRecords = try modelContext.fetch(allDescriptor)
             let uidMatches = allRecords.filter { $0.userId == uid }
-            
+
             if uidMatches.isEmpty {
                 if let adopted = allRecords.max(by: { $0.updatedAt < $1.updatedAt }) {
                     adopted.userId = uid
@@ -1589,18 +1824,18 @@ struct ReadingTabView: View {
                     print("[ReadingTabView] Adopted existing ReadingStats record for new userId=\(uid)")
                     return
                 }
-                
+
                 let new = ReadingStats(userId: uid, streakDays: 0, bestStreakDays: 0)
                 modelContext.insert(new)
                 try? modelContext.save()
                 print("[ReadingTabView] Created ReadingStats record for userId=\(uid)")
                 return
             }
-            
+
             if uidMatches.count == 1 {
                 let record = uidMatches[0]
-                let globalBest = allRecords.map { $0.bestStreakDays }.max() ?? 0
-                let globalCurrent = allRecords.map { $0.streakDays }.max() ?? 0
+                let globalBest = allRecords.map(\.bestStreakDays).max() ?? 0
+                let globalCurrent = allRecords.map(\.streakDays).max() ?? 0
                 let correctedBest = max(record.bestStreakDays, record.streakDays, globalBest, globalCurrent)
                 if correctedBest != record.bestStreakDays {
                     record.bestStreakDays = correctedBest
@@ -1609,18 +1844,18 @@ struct ReadingTabView: View {
                 }
                 return
             }
-            
+
             let best = uidMatches.max(by: { $0.updatedAt < $1.updatedAt }) ?? uidMatches[0]
-            let mergedBestStreak = uidMatches.map { $0.bestStreakDays }.max() ?? 0
-            let mergedCurrentStreak = uidMatches.map { $0.streakDays }.max() ?? 0
+            let mergedBestStreak = uidMatches.map(\.bestStreakDays).max() ?? 0
+            let mergedCurrentStreak = uidMatches.map(\.streakDays).max() ?? 0
             best.bestStreakDays = max(best.bestStreakDays, best.streakDays, mergedBestStreak, mergedCurrentStreak)
             best.streakDays = max(best.streakDays, mergedCurrentStreak)
             best.userId = uid
-            
+
             for dupe in uidMatches where dupe.persistentModelID != best.persistentModelID {
                 modelContext.delete(dupe)
             }
-            
+
             best.updatedAt = Date()
             try? modelContext.save()
             print("[ReadingTabView] Cleaned up \(uidMatches.count - 1) duplicate ReadingStats record(s)")
@@ -1651,7 +1886,7 @@ struct ReadingTimerSheet: View {
     @State private var timerStartedAt: Date? = nil
 
     private let presetOptions: [Int] = [10, 15, 20, 30, 45, 60]
-    
+
     private var currentUserId: String? {
         appState.currentAppleUserId
     }
@@ -1676,7 +1911,7 @@ struct ReadingTimerSheet: View {
 
     private var resolvedMinutes: Int {
         if useCustomTime {
-            let value = Int(customMinutesText.filter { $0.isNumber }) ?? 0
+            let value = Int(customMinutesText.filter(\.isNumber)) ?? 0
             return max(value, 1)
         }
         return max(selectedPresetMinutes, 1)
@@ -1774,7 +2009,7 @@ struct ReadingTimerSheet: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 14))
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 14)
-                                            .stroke(LColors.glassBorder, lineWidth: 1)
+                                            .stroke(LColors.glassBorder, lineWidth: 1),
                                     )
                                 }
 
@@ -1810,7 +2045,7 @@ struct ReadingTimerSheet: View {
                                                     .clipShape(Capsule())
                                                     .overlay(
                                                         Capsule()
-                                                            .stroke(!useCustomTime && selectedPresetMinutes == minutes ? LColors.accent : LColors.glassBorder, lineWidth: 1)
+                                                            .stroke(!useCustomTime && selectedPresetMinutes == minutes ? LColors.accent : LColors.glassBorder, lineWidth: 1),
                                                     )
                                             }
                                             .buttonStyle(.plain)
@@ -1842,13 +2077,13 @@ struct ReadingTimerSheet: View {
                                             .clipShape(RoundedRectangle(cornerRadius: 14))
                                             .overlay(
                                                 RoundedRectangle(cornerRadius: 14)
-                                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                                    .stroke(LColors.glassBorder, lineWidth: 1),
                                             )
                                             .foregroundStyle(LColors.textPrimary)
                                             .keyboardType(.numberPad)
                                             .focused($isCustomMinutesFocused)
                                             .onChange(of: customMinutesText) { _, newValue in
-                                                let filtered = newValue.filter { $0.isNumber }
+                                                let filtered = newValue.filter(\.isNumber)
                                                 if filtered != newValue {
                                                     customMinutesText = filtered
                                                 }
@@ -1904,7 +2139,7 @@ struct ReadingTimerSheet: View {
                                         .clipShape(RoundedRectangle(cornerRadius: 12))
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 12)
-                                                .stroke(LColors.glassBorder, lineWidth: 1)
+                                                .stroke(LColors.glassBorder, lineWidth: 1),
                                         )
                                     }
                                     .buttonStyle(.plain)
@@ -1926,7 +2161,7 @@ struct ReadingTimerSheet: View {
                                         .clipShape(RoundedRectangle(cornerRadius: 12))
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 12)
-                                                .stroke(LColors.glassBorder, lineWidth: 1)
+                                                .stroke(LColors.glassBorder, lineWidth: 1),
                                         )
                                     }
                                     .buttonStyle(.plain)
@@ -1958,7 +2193,8 @@ struct ReadingTimerSheet: View {
         }
         .onAppear {
             if selectedBookPersistentIDString.isEmpty,
-               let firstReadingBook = readingBooks.first {
+               let firstReadingBook = readingBooks.first
+            {
                 selectedBookPersistentIDString = String(describing: firstReadingBook.persistentModelID)
             }
             applySelectedDuration()
@@ -2007,7 +2243,7 @@ struct ReadingTimerSheet: View {
         remainingSeconds = totalSeconds
         didFinalizeCurrentSession = false
     }
-    
+
     private func elapsedSeconds() -> Int {
         max(totalSeconds - remainingSeconds, 0)
     }
@@ -2036,7 +2272,7 @@ struct ReadingTimerSheet: View {
             endPage: nil,
             minutesRead: minutesRead,
             pagesRead: 0,
-            sessionDate: sessionDate
+            sessionDate: sessionDate,
         )
         session.isTimerSession = true
         modelContext.insert(session)
@@ -2047,13 +2283,20 @@ struct ReadingTimerSheet: View {
             bookTitle: selectedBook.title,
             minutesRead: minutesRead,
             pointsEarned: minutesRead,
-            date: sessionDate
+            date: sessionDate,
         )
         modelContext.insert(entry)
 
         try? modelContext.save()
+        let sessionId = session.persistentModelID.hashValue.description
+        _ = try? SelfCarePointsManager.awardReadingTimerSession(
+            in: modelContext,
+            sessionId: sessionId,
+            title: selectedBook.title.isEmpty ? "Reading Timer Session" : "Timer: \(selectedBook.title)",
+            sessionDate: sessionDate
+        )
     }
-    
+
     private func liveActivityEndDate() -> Date {
         Date().addingTimeInterval(TimeInterval(remainingSeconds))
     }
@@ -2063,7 +2306,7 @@ struct ReadingTimerSheet: View {
         return ReadingTimerActivityAttributes.ContentState(
             endDate: liveActivityEndDate(),
             bookTitle: selectedBook.title,
-            minutesTotal: resolvedMinutes
+            minutesTotal: resolvedMinutes,
         )
     }
 
@@ -2082,7 +2325,7 @@ struct ReadingTimerSheet: View {
             let activity = try Activity<ReadingTimerActivityAttributes>.request(
                 attributes: attributes,
                 content: .init(state: state, staleDate: state.endDate),
-                pushType: nil
+                pushType: nil,
             )
             await MainActor.run {
                 liveActivity = activity
@@ -2106,7 +2349,7 @@ struct ReadingTimerSheet: View {
         let finalState = makeLiveActivityState() ?? ReadingTimerActivityAttributes.ContentState(
             endDate: Date(),
             bookTitle: selectedBook?.title ?? "Reading Timer",
-            minutesTotal: resolvedMinutes
+            minutesTotal: resolvedMinutes,
         )
         await activity.end(.init(state: finalState, staleDate: Date()), dismissalPolicy: .immediate)
         await MainActor.run {
@@ -2151,7 +2394,7 @@ struct ReadingTimerSheet: View {
         let computed = totalSeconds - elapsed
         remainingSeconds = max(computed, 0)
     }
-    
+
     private func pauseTimer() {
         isRunning = false
         timerCancellable?.cancel()
@@ -2194,7 +2437,7 @@ struct HalfCircleDashedGoalProgressView: View {
             let centerY = height * 0.95
 
             ZStack {
-                ForEach(0..<safeSegmentCount, id: \.self) { index in
+                ForEach(0 ..< safeSegmentCount, id: \.self) { index in
                     let fraction = safeSegmentCount == 1
                         ? 0.5
                         : Double(index) / Double(safeSegmentCount - 1)
@@ -2208,18 +2451,18 @@ struct HalfCircleDashedGoalProgressView: View {
                     Capsule()
                         .fill(
                             isFilled
-                            ? AnyShapeStyle(LGradients.blue)
-                            : AnyShapeStyle(Color.white.opacity(0.08))
+                                ? AnyShapeStyle(LGradients.blue)
+                                : AnyShapeStyle(Color.white.opacity(0.08)),
                         )
                         .frame(width: 26, height: 10)
                         .overlay(
                             Capsule()
                                 .stroke(
                                     isFilled
-                                    ? AnyShapeStyle(LGradients.blue)
-                                    : AnyShapeStyle(LColors.glassBorder),
-                                    lineWidth: 1
-                                )
+                                        ? AnyShapeStyle(LGradients.blue)
+                                        : AnyShapeStyle(LColors.glassBorder),
+                                    lineWidth: 1,
+                                ),
                         )
                         .rotationEffect(rotation)
                         .position(x: x, y: y)
@@ -2246,11 +2489,14 @@ struct HalfCircleDashedGoalProgressView: View {
 }
 
 // MARK: - Book Series Detail Popup
+
 struct BookSeriesDetailPopup: View {
     let series: BookSeries
-    var onClose: (() -> Void)? = nil
+    var onClose: (() -> Void)?
 
-    private var closeAction: () -> Void { onClose ?? {} }
+    private var closeAction: () -> Void {
+        onClose ?? {}
+    }
 
     private var booksSorted: [Book] {
         (series.books ?? []).sorted {
@@ -2322,25 +2568,32 @@ struct BookSeriesDetailPopup: View {
             },
             footer: {
                 EmptyView()
-            }
+            },
         )
     }
 }
 
 // MARK: - Reading Goal Progress Popup & History
+
 struct ReadingGoalProgressPopup: View {
     let currentGoal: ReadingGoal?
     let currentUserId: String?
-    var onClose: (() -> Void)? = nil
-    var onShowHistory: (() -> Void)? = nil
+    var onClose: (() -> Void)?
+    var onShowHistory: (() -> Void)?
 
     @Query(sort: \DailyReadingProgress.date, order: .reverse) private var dailyReadingProgress: [DailyReadingProgress]
     @Query(sort: \ReadingSession.sessionDate, order: .reverse) private var readingSessions: [ReadingSession]
+    @Query(sort: \Book.updatedAt, order: .reverse) private var books: [Book]
 
-    private var closeAction: () -> Void { onClose ?? {} }
+    private var closeAction: () -> Void {
+        onClose ?? {}
+    }
+
+    private var calendar: Calendar {
+        .current
+    }
 
     private var currentWeekRange: (start: Date, end: Date) {
-        let calendar = Calendar.current
         let now = Date()
         let interval = calendar.dateInterval(of: .weekOfYear, for: now)
         let start = interval?.start ?? calendar.startOfDay(for: now)
@@ -2348,16 +2601,39 @@ struct ReadingGoalProgressPopup: View {
         return (start, end)
     }
 
+    private var currentMonthRange: DateInterval {
+        let now = Date()
+        return calendar.dateInterval(of: .month, for: now)
+            ?? DateInterval(start: calendar.startOfDay(for: now), end: now)
+    }
+
+    private var currentYearRange: DateInterval {
+        let now = Date()
+        return calendar.dateInterval(of: .year, for: now)
+            ?? DateInterval(start: calendar.startOfDay(for: now), end: now)
+    }
+
     private var weekDates: [Date] {
-        let calendar = Calendar.current
-        return (0..<7).compactMap { dayOffset in
+        (0 ..< 7).compactMap { dayOffset in
             calendar.date(byAdding: .day, value: dayOffset, to: currentWeekRange.start)
         }
     }
-    
+
+    private var monthDates: [Date] {
+        let dayCount = calendar.range(of: .day, in: .month, for: currentMonthRange.start)?.count ?? 30
+        return (0 ..< dayCount).compactMap { dayOffset in
+            calendar.date(byAdding: .day, value: dayOffset, to: currentMonthRange.start)
+        }
+    }
+
+    private var yearMonths: [Date] {
+        (0 ..< 12).compactMap { monthOffset in
+            calendar.date(byAdding: .month, value: monthOffset, to: currentYearRange.start)
+        }
+    }
+
     private var currentWeekTotal: Int {
         guard let currentGoal else { return 0 }
-        let calendar = Calendar.current
 
         return readingSessions
             .filter { session in
@@ -2370,9 +2646,104 @@ struct ReadingGoalProgressPopup: View {
             }
     }
 
+    private var currentMonthTotal: Double {
+        guard let currentGoal else { return 0 }
+
+        switch currentGoal.metric {
+        case .minutes:
+            return Double(
+                readingSessions
+                    .filter { session in
+                        guard let book = session.book else { return false }
+                        guard book.deletedAt == nil else { return false }
+                        return session.sessionDate >= currentMonthRange.start && session.sessionDate < currentMonthRange.end
+                    }
+                    .reduce(0) { $0 + max($1.minutesRead, 0) },
+            )
+
+        case .hours:
+            let minutes = readingSessions
+                .filter { session in
+                    guard let book = session.book else { return false }
+                    guard book.deletedAt == nil else { return false }
+                    return session.sessionDate >= currentMonthRange.start && session.sessionDate < currentMonthRange.end
+                }
+                .reduce(0) { $0 + max($1.minutesRead, 0) }
+            return Double(minutes) / 60.0
+
+        case .pages:
+            return Double(
+                readingSessions
+                    .filter { session in
+                        guard let book = session.book else { return false }
+                        guard book.deletedAt == nil else { return false }
+                        return session.sessionDate >= currentMonthRange.start && session.sessionDate < currentMonthRange.end
+                    }
+                    .reduce(0) { $0 + max($1.pagesRead, 0) },
+            )
+
+        case .books:
+            return Double(
+                books.count(where: { book in
+                    guard book.deletedAt == nil else { return false }
+                    guard book.status == .finished else { return false }
+                    guard let finishedAt = book.finishedAt else { return false }
+                    return finishedAt >= currentMonthRange.start && finishedAt < currentMonthRange.end
+                }),
+            )
+        }
+    }
+
+    private var currentYearTotal: Double {
+        guard let currentGoal else { return 0 }
+
+        switch currentGoal.metric {
+        case .minutes:
+            return Double(
+                readingSessions
+                    .filter { session in
+                        guard let book = session.book else { return false }
+                        guard book.deletedAt == nil else { return false }
+                        return session.sessionDate >= currentYearRange.start && session.sessionDate < currentYearRange.end
+                    }
+                    .reduce(0) { $0 + max($1.minutesRead, 0) },
+            )
+
+        case .hours:
+            let minutes = readingSessions
+                .filter { session in
+                    guard let book = session.book else { return false }
+                    guard book.deletedAt == nil else { return false }
+                    return session.sessionDate >= currentYearRange.start && session.sessionDate < currentYearRange.end
+                }
+                .reduce(0) { $0 + max($1.minutesRead, 0) }
+            return Double(minutes) / 60.0
+
+        case .pages:
+            return Double(
+                readingSessions
+                    .filter { session in
+                        guard let book = session.book else { return false }
+                        guard book.deletedAt == nil else { return false }
+                        return session.sessionDate >= currentYearRange.start && session.sessionDate < currentYearRange.end
+                    }
+                    .reduce(0) { $0 + max($1.pagesRead, 0) },
+            )
+
+        case .books:
+            return Double(
+                books.count(where: { book in
+                    guard book.deletedAt == nil else { return false }
+                    guard book.status == .finished else { return false }
+                    guard let finishedAt = book.finishedAt else { return false }
+                    return finishedAt >= currentYearRange.start && finishedAt < currentYearRange.end
+                }),
+            )
+        }
+    }
+
     private func pagesRead(for day: Date) -> Int {
         guard let currentGoal else { return 0 }
-        let calendar = Calendar.current
 
         return readingSessions
             .filter { session in
@@ -2383,6 +2754,112 @@ struct ReadingGoalProgressPopup: View {
             .reduce(0) { partial, session in
                 partial + progressContribution(for: currentGoal.metric, session: session)
             }
+    }
+
+    private func monthlyValue(for day: Date) -> Double {
+        guard let currentGoal else { return 0 }
+        let dayStart = calendar.startOfDay(for: day)
+        let nextDay = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+
+        switch currentGoal.metric {
+        case .minutes:
+            return Double(
+                readingSessions
+                    .filter { session in
+                        guard let book = session.book else { return false }
+                        guard book.deletedAt == nil else { return false }
+                        return session.sessionDate >= dayStart && session.sessionDate < nextDay
+                    }
+                    .reduce(0) { $0 + max($1.minutesRead, 0) },
+            )
+
+        case .hours:
+            let minutes = readingSessions
+                .filter { session in
+                    guard let book = session.book else { return false }
+                    guard book.deletedAt == nil else { return false }
+                    return session.sessionDate >= dayStart && session.sessionDate < nextDay
+                }
+                .reduce(0) { $0 + max($1.minutesRead, 0) }
+            return Double(minutes) / 60.0
+
+        case .pages:
+            return Double(
+                readingSessions
+                    .filter { session in
+                        guard let book = session.book else { return false }
+                        guard book.deletedAt == nil else { return false }
+                        return session.sessionDate >= dayStart && session.sessionDate < nextDay
+                    }
+                    .reduce(0) { $0 + max($1.pagesRead, 0) },
+            )
+
+        case .books:
+            return Double(
+                books.count(where: { book in
+                    guard book.deletedAt == nil else { return false }
+                    guard book.status == .finished else { return false }
+                    guard let finishedAt = book.finishedAt else { return false }
+                    return finishedAt >= dayStart && finishedAt < nextDay
+                }),
+            )
+        }
+    }
+
+    private func yearlyValue(for monthStart: Date) -> Double {
+        guard let currentGoal else { return 0 }
+        let nextMonth = calendar.date(byAdding: .month, value: 1, to: monthStart) ?? monthStart
+
+        switch currentGoal.metric {
+        case .minutes:
+            return Double(
+                readingSessions
+                    .filter { session in
+                        guard let book = session.book else { return false }
+                        guard book.deletedAt == nil else { return false }
+                        return session.sessionDate >= monthStart && session.sessionDate < nextMonth
+                    }
+                    .reduce(0) { $0 + max($1.minutesRead, 0) },
+            )
+
+        case .hours:
+            let minutes = readingSessions
+                .filter { session in
+                    guard let book = session.book else { return false }
+                    guard book.deletedAt == nil else { return false }
+                    return session.sessionDate >= monthStart && session.sessionDate < nextMonth
+                }
+                .reduce(0) { $0 + max($1.minutesRead, 0) }
+            return Double(minutes) / 60.0
+
+        case .pages:
+            return Double(
+                readingSessions
+                    .filter { session in
+                        guard let book = session.book else { return false }
+                        guard book.deletedAt == nil else { return false }
+                        return session.sessionDate >= monthStart && session.sessionDate < nextMonth
+                    }
+                    .reduce(0) { $0 + max($1.pagesRead, 0) },
+            )
+
+        case .books:
+            return Double(
+                books.count(where: { book in
+                    guard book.deletedAt == nil else { return false }
+                    guard book.status == .finished else { return false }
+                    guard let finishedAt = book.finishedAt else { return false }
+                    return finishedAt >= monthStart && finishedAt < nextMonth
+                }),
+            )
+        }
+    }
+
+    private func shortMonthLabel(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.setLocalizedDateFormatFromTemplate("MMM")
+        return formatter.string(from: date)
     }
 
     private func progressContribution(for metric: ReadingGoalMetric, session: ReadingSession) -> Int {
@@ -2411,10 +2888,81 @@ struct ReadingGoalProgressPopup: View {
         return formatter.string(from: day)
     }
 
+    private func shortMonthDay(for day: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.setLocalizedDateFormatFromTemplate("d")
+        return formatter.string(from: day)
+    }
+
+    private func formatBubbleValue(_ value: Double, metric: ReadingGoalMetric) -> String {
+        switch metric {
+        case .hours:
+            let rounded = (value * 10).rounded() / 10
+            if rounded == 0 { return "0" }
+            if rounded == floor(rounded) {
+                return String(format: "%.0f", rounded)
+            }
+            return String(format: "%.1f", rounded)
+        case .minutes, .pages, .books:
+            return "\(Int(value))"
+        }
+    }
+
+    private var progressRangeDisplay: String {
+        guard let currentGoal else { return weekRangeDisplay }
+
+        switch currentGoal.period {
+        case .monthly:
+            return monthRangeDisplay
+        case .yearly:
+            return yearRangeDisplay
+        default:
+            return weekRangeDisplay
+        }
+    }
+
+    private var progressSummaryText: String {
+        guard let currentGoal else { return "" }
+
+        switch currentGoal.period {
+        case .monthly:
+            let current = formatBubbleValue(currentMonthTotal, metric: currentGoal.metric)
+            return "\(current) / \(currentGoal.targetValue) \(currentGoal.metric.label.lowercased())"
+        case .yearly:
+            let current = formatBubbleValue(currentYearTotal, metric: currentGoal.metric)
+            return "\(current) / \(currentGoal.targetValue) \(currentGoal.metric.label.lowercased())"
+        default:
+            return "\(currentWeekTotal) / \(currentGoal.targetValue) \(currentGoal.metric.label.lowercased())"
+        }
+    }
+
     private var weekRangeDisplay: String {
         let start = currentWeekRange.start.formatted(date: .abbreviated, time: .omitted)
         let end = currentWeekRange.end.formatted(date: .abbreviated, time: .omitted)
         return "\(start) – \(end)"
+    }
+
+    private var monthRangeDisplay: String {
+        let start = currentMonthRange.start.formatted(date: .abbreviated, time: .omitted)
+        let endDate = calendar.date(byAdding: .day, value: -1, to: currentMonthRange.end) ?? currentMonthRange.start
+        let end = endDate.formatted(date: .abbreviated, time: .omitted)
+        return "\(start) – \(end)"
+    }
+
+    private var yearRangeDisplay: String {
+        let start = currentYearRange.start.formatted(date: .abbreviated, time: .omitted)
+        let endDate = calendar.date(byAdding: .day, value: -1, to: currentYearRange.end) ?? currentYearRange.start
+        let end = endDate.formatted(date: .abbreviated, time: .omitted)
+        return "\(start) – \(end)"
+    }
+
+    private var monthlyColumns: [GridItem] {
+        Array(repeating: GridItem(.flexible(minimum: 0, maximum: .infinity), spacing: 10), count: 7)
+    }
+
+    private var yearlyColumns: [GridItem] {
+        Array(repeating: GridItem(.flexible(minimum: 0, maximum: .infinity), spacing: 10), count: 4)
     }
 
     var body: some View {
@@ -2438,86 +2986,152 @@ struct ReadingGoalProgressPopup: View {
             },
             content: {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(weekRangeDisplay)
+                    Text(progressRangeDisplay)
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(LColors.textSecondary)
 
-                    if let currentGoal {
-                        Text("\(currentWeekTotal) / \(currentGoal.targetValue) \(currentGoal.metric.label.lowercased())")
+                    if currentGoal != nil {
+                        Text(progressSummaryText)
                             .font(.subheadline)
                             .foregroundStyle(LColors.textSecondary)
                     }
                 }
 
-                VStack(spacing: 16) {
-                    HStack(spacing: 10) {
-                        Spacer(minLength: 0)
-
-                        ForEach(Array(weekDates.prefix(4)), id: \.self) { day in
-                            let value = pagesRead(for: day)
+                if let currentGoal, currentGoal.period == .monthly {
+                    LazyVGrid(columns: monthlyColumns, spacing: 14) {
+                        ForEach(monthDates, id: \.self) { day in
+                            let value = monthlyValue(for: day)
 
                             VStack(spacing: 8) {
                                 ZStack {
                                     Circle()
                                         .fill(value > 0 ? AnyShapeStyle(LGradients.blue) : AnyShapeStyle(Color.white.opacity(0.08)))
-                                        .frame(width: 46, height: 46)
+                                        .frame(width: 42, height: 42)
                                         .overlay(
                                             Circle()
-                                                .stroke(LColors.glassBorder, lineWidth: 1)
+                                                .stroke(LColors.glassBorder, lineWidth: 1),
                                         )
 
-                                    Text("\(value)")
-                                        .font(.system(size: 12, weight: .bold))
+                                    Text(formatBubbleValue(value, metric: currentGoal.metric))
+                                        .font(.system(size: 11, weight: .bold))
                                         .foregroundStyle(.white)
-                                        .minimumScaleFactor(0.7)
+                                        .minimumScaleFactor(0.65)
                                         .lineLimit(1)
                                 }
 
-                                Text(shortWeekday(for: day))
-                                    .font(.system(size: 11, weight: .semibold))
+                                Text(shortMonthDay(for: day))
+                                    .font(.system(size: 10, weight: .semibold))
                                     .foregroundStyle(LColors.textSecondary)
                             }
-                            .frame(width: 58)
+                            .frame(maxWidth: .infinity)
                         }
-
-                        Spacer(minLength: 0)
                     }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 12)
 
-                    HStack(spacing: 10) {
-                        Spacer(minLength: 0)
-
-                        ForEach(Array(weekDates.suffix(3)), id: \.self) { day in
-                            let value = pagesRead(for: day)
+                } else if let currentGoal, currentGoal.period == .yearly {
+                    LazyVGrid(columns: yearlyColumns, spacing: 16) {
+                        ForEach(yearMonths, id: \.self) { monthStart in
+                            let value = yearlyValue(for: monthStart)
 
                             VStack(spacing: 8) {
                                 ZStack {
                                     Circle()
                                         .fill(value > 0 ? AnyShapeStyle(LGradients.blue) : AnyShapeStyle(Color.white.opacity(0.08)))
-                                        .frame(width: 46, height: 46)
+                                        .frame(width: 52, height: 52)
                                         .overlay(
                                             Circle()
-                                                .stroke(LColors.glassBorder, lineWidth: 1)
+                                                .stroke(LColors.glassBorder, lineWidth: 1),
                                         )
 
-                                    Text("\(value)")
+                                    Text(formatBubbleValue(value, metric: currentGoal.metric))
                                         .font(.system(size: 12, weight: .bold))
                                         .foregroundStyle(.white)
-                                        .minimumScaleFactor(0.7)
+                                        .minimumScaleFactor(0.65)
                                         .lineLimit(1)
                                 }
 
-                                Text(shortWeekday(for: day))
-                                    .font(.system(size: 11, weight: .semibold))
+                                Text(shortMonthLabel(for: monthStart))
+                                    .font(.system(size: 10, weight: .semibold))
                                     .foregroundStyle(LColors.textSecondary)
                             }
-                            .frame(width: 58)
+                            .frame(maxWidth: .infinity)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 12)
+
+                } else {
+                    VStack(spacing: 16) {
+                        HStack(spacing: 10) {
+                            Spacer(minLength: 0)
+
+                            ForEach(Array(weekDates.prefix(4)), id: \.self) { day in
+                                let value = pagesRead(for: day)
+
+                                VStack(spacing: 8) {
+                                    ZStack {
+                                        Circle()
+                                            .fill(value > 0 ? AnyShapeStyle(LGradients.blue) : AnyShapeStyle(Color.white.opacity(0.08)))
+                                            .frame(width: 46, height: 46)
+                                            .overlay(
+                                                Circle()
+                                                    .stroke(LColors.glassBorder, lineWidth: 1),
+                                            )
+
+                                        Text("\(value)")
+                                            .font(.system(size: 12, weight: .bold))
+                                            .foregroundStyle(.white)
+                                            .minimumScaleFactor(0.7)
+                                            .lineLimit(1)
+                                    }
+
+                                    Text(shortWeekday(for: day))
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(LColors.textSecondary)
+                                }
+                                .frame(width: 58)
+                            }
+
+                            Spacer(minLength: 0)
                         }
 
-                        Spacer(minLength: 0)
+                        HStack(spacing: 10) {
+                            Spacer(minLength: 0)
+
+                            ForEach(Array(weekDates.suffix(3)), id: \.self) { day in
+                                let value = pagesRead(for: day)
+
+                                VStack(spacing: 8) {
+                                    ZStack {
+                                        Circle()
+                                            .fill(value > 0 ? AnyShapeStyle(LGradients.blue) : AnyShapeStyle(Color.white.opacity(0.08)))
+                                            .frame(width: 46, height: 46)
+                                            .overlay(
+                                                Circle()
+                                                    .stroke(LColors.glassBorder, lineWidth: 1),
+                                            )
+
+                                        Text("\(value)")
+                                            .font(.system(size: 12, weight: .bold))
+                                            .foregroundStyle(.white)
+                                            .minimumScaleFactor(0.7)
+                                            .lineLimit(1)
+                                    }
+
+                                    Text(shortWeekday(for: day))
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(LColors.textSecondary)
+                                }
+                                .frame(width: 58)
+                            }
+
+                            Spacer(minLength: 0)
+                        }
                     }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 12)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.top, 12)
             },
             footer: {
                 HStack(spacing: 10) {
@@ -2536,30 +3150,50 @@ struct ReadingGoalProgressPopup: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .overlay(
                             RoundedRectangle(cornerRadius: 12)
-                                .stroke(LColors.glassBorder, lineWidth: 1)
+                                .stroke(LColors.glassBorder, lineWidth: 1),
                         )
                     }
                     .buttonStyle(.plain)
 
                     Spacer()
                 }
-            }
+            },
         )
     }
 }
 
 // MARK: - Reading Goal History Popup
+
 struct ReadingGoalHistoryPopup: View {
     let currentUserId: String?
-    var onClose: (() -> Void)? = nil
+    var onClose: (() -> Void)?
 
-    @Query(sort: \WeeklyReadingSnapshot.startDate, order: .reverse) private var snapshots: [WeeklyReadingSnapshot]
+    @Query(sort: \ReadingGoalSnapshot.startDate, order: .reverse) private var snapshots: [ReadingGoalSnapshot]
 
-    private var closeAction: () -> Void { onClose ?? {} }
+    private var closeAction: () -> Void {
+        onClose ?? {}
+    }
 
-    private var userSnapshots: [WeeklyReadingSnapshot] {
+    private var userSnapshots: [ReadingGoalSnapshot] {
         guard let currentUserId else { return [] }
         return snapshots.filter { $0.userId == currentUserId }
+    }
+
+    /// Helper for formatting progress
+    private func formattedSnapshotProgress(_ snapshot: ReadingGoalSnapshot) -> String {
+        switch snapshot.goalMetric {
+        case .hours:
+            let rounded = (snapshot.totalProgress * 10).rounded() / 10
+            let valueText = if rounded == floor(rounded) {
+                String(format: "%.0f", rounded)
+            } else {
+                String(format: "%.1f", rounded)
+            }
+            return "\(valueText) / \(snapshot.goalTarget) \(snapshot.goalMetric.label.lowercased())"
+
+        case .minutes, .pages, .books:
+            return "\(Int(snapshot.totalProgress)) / \(snapshot.goalTarget) \(snapshot.goalMetric.label.lowercased())"
+        }
     }
 
     var body: some View {
@@ -2584,7 +3218,7 @@ struct ReadingGoalHistoryPopup: View {
             content: {
                 if userSnapshots.isEmpty {
                     GlassCard {
-                        Text("No weekly history yet.")
+                        Text("No goal history yet.")
                             .foregroundStyle(LColors.textSecondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.vertical, 10)
@@ -2593,12 +3227,15 @@ struct ReadingGoalHistoryPopup: View {
                     ForEach(userSnapshots) { snapshot in
                         GlassCard {
                             VStack(alignment: .leading, spacing: 8) {
+                                Text(snapshot.goalPeriod.label.uppercased())
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundStyle(LColors.textSecondary)
                                 Text("\(snapshot.startDate.formatted(date: .abbreviated, time: .omitted)) – \(snapshot.endDate.formatted(date: .abbreviated, time: .omitted))")
                                     .font(.system(size: 13, weight: .bold))
                                     .foregroundStyle(LColors.textPrimary)
 
                                 HStack(spacing: 10) {
-                                    Text("\(snapshot.totalProgress) / \(snapshot.goalTarget) \(snapshot.goalMetric.label.lowercased())")
+                                    Text(formattedSnapshotProgress(snapshot))
                                         .font(.system(size: 12, weight: .semibold))
                                         .foregroundStyle(LColors.textSecondary)
 
@@ -2613,7 +3250,7 @@ struct ReadingGoalHistoryPopup: View {
                                         .clipShape(Capsule())
                                         .overlay(
                                             Capsule()
-                                                .stroke(Color.white.opacity(0.22), lineWidth: 1)
+                                                .stroke(Color.white.opacity(0.22), lineWidth: 1),
                                         )
                                 }
                             }
@@ -2623,17 +3260,18 @@ struct ReadingGoalHistoryPopup: View {
             },
             footer: {
                 EmptyView()
-            }
+            },
         )
     }
 }
 
 // MARK: - Add Book Sheet
+
 struct AddBookSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \BookSeries.title, order: .forward) private var bookSeries: [BookSeries]
     @StateObject private var limits = LimitManager.shared
-    var onClose: (() -> Void)? = nil
+    var onClose: (() -> Void)?
 
     @State private var title = ""
     @State private var author = ""
@@ -2654,7 +3292,10 @@ struct AddBookSheet: View {
     @State private var showSeriesPicker = false
     @State private var showNewSeriesPopup = false
 
-    private var titleTrimmed: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var titleTrimmed: String {
+        title.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private var closeAction: () -> Void {
         onClose ?? {}
     }
@@ -2739,18 +3380,18 @@ struct AddBookSheet: View {
                                             .padding(.vertical, 10)
                                             .background(
                                                 isSelected
-                                                ? LColors.accent
-                                                : Color.white.opacity(0.08)
+                                                    ? LColors.accent
+                                                    : Color.white.opacity(0.08),
                                             )
                                             .clipShape(Capsule())
                                             .overlay(
                                                 Capsule()
                                                     .stroke(
                                                         isSelected
-                                                        ? LColors.accent
-                                                        : LColors.glassBorder,
-                                                        lineWidth: 1
-                                                    )
+                                                            ? LColors.accent
+                                                            : LColors.glassBorder,
+                                                        lineWidth: 1,
+                                                    ),
                                             )
                                     }
                                     .buttonStyle(.plain)
@@ -2786,7 +3427,7 @@ struct AddBookSheet: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 12))
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 12)
-                                            .stroke(LColors.glassBorder, lineWidth: 1)
+                                            .stroke(LColors.glassBorder, lineWidth: 1),
                                     )
                                 }
                                 .buttonStyle(.plain)
@@ -2806,7 +3447,7 @@ struct AddBookSheet: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 12))
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 12)
-                                            .stroke(LColors.glassBorder, lineWidth: 1)
+                                            .stroke(LColors.glassBorder, lineWidth: 1),
                                     )
                                 }
                                 .buttonStyle(.plain)
@@ -2846,7 +3487,7 @@ struct AddBookSheet: View {
                             DatePicker(
                                 "",
                                 selection: $startedDate,
-                                displayedComponents: [.date]
+                                displayedComponents: [.date],
                             )
                             .datePickerStyle(.compact)
                             .labelsHidden()
@@ -2855,7 +3496,7 @@ struct AddBookSheet: View {
                             .clipShape(RoundedRectangle(cornerRadius: 14))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 14)
-                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                    .stroke(LColors.glassBorder, lineWidth: 1),
                             )
                         }
                     }
@@ -2873,7 +3514,7 @@ struct AddBookSheet: View {
                             DatePicker(
                                 "",
                                 selection: $finishedDate,
-                                displayedComponents: [.date]
+                                displayedComponents: [.date],
                             )
                             .datePickerStyle(.compact)
                             .labelsHidden()
@@ -2882,7 +3523,7 @@ struct AddBookSheet: View {
                             .clipShape(RoundedRectangle(cornerRadius: 14))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 14)
-                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                    .stroke(LColors.glassBorder, lineWidth: 1),
                             )
                         }
                     }
@@ -2934,7 +3575,7 @@ struct AddBookSheet: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(titleTrimmed.isEmpty)
-            }
+            },
         )
         .onChange(of: status) { _, newStatus in
             if newStatus != .reading {
@@ -2942,7 +3583,7 @@ struct AddBookSheet: View {
                 totalPagesText = ""
             }
 
-            if newStatus == .finished && !hasFinishedDate {
+            if newStatus == .finished, !hasFinishedDate {
                 finishedDate = Date()
                 hasFinishedDate = true
             }
@@ -2958,7 +3599,7 @@ struct AddBookSheet: View {
                         selectedSeries = series
                         selectedSeriesName = series.title
                         showSeriesPicker = false
-                    }
+                    },
                 )
                 .preferredColorScheme(.dark)
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
@@ -2987,7 +3628,7 @@ struct AddBookSheet: View {
                         }
 
                         showNewSeriesPopup = false
-                    }
+                    },
                 )
                 .preferredColorScheme(.dark)
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
@@ -3007,7 +3648,7 @@ struct AddBookSheet: View {
         let cleanTitle = titleTrimmed
         let cleanAuthor = author.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanSummary = shortSummary.trimmingCharacters(in: .whitespacesAndNewlines)
-        
+
         let cleanSeriesLabel = seriesLabelText.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedSeries: BookSeries? = {
             guard hasSeries else { return nil }
@@ -3034,12 +3675,12 @@ struct AddBookSheet: View {
             rating: 0,
             status: status,
             startedAt: hasStartedDate ? startedDate : nil,
-            finishedAt: hasFinishedDate ? finishedDate : nil
+            finishedAt: hasFinishedDate ? finishedDate : nil,
         )
-        
+
         if hasSeries {
             book.series = resolvedSeries
-            book.seriesIndex = Int(seriesPositionText.filter { $0.isNumber })
+            book.seriesIndex = Int(seriesPositionText.filter(\.isNumber))
             book.seriesLabel = cleanSeriesLabel
         } else {
             book.series = nil
@@ -3048,8 +3689,8 @@ struct AddBookSheet: View {
         }
 
         if status == .reading {
-            let current = Int(currentPageText.filter { $0.isNumber })
-            let total = Int(totalPagesText.filter { $0.isNumber })
+            let current = Int(currentPageText.filter(\.isNumber))
+            let total = Int(totalPagesText.filter(\.isNumber))
 
             if let total, total > 0 {
                 let safeCurrent = min(max(current ?? 0, 0), total)
@@ -3080,16 +3721,15 @@ struct AddBookSheet: View {
         try? modelContext.save()
         closeAction()
     }
-
-
 }
 
 // MARK: - Edit Book Sheet
+
 struct EditBookSheet: View {
     let book: Book
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \BookSeries.title, order: .forward) private var bookSeries: [BookSeries]
-    var onClose: (() -> Void)? = nil
+    var onClose: (() -> Void)?
 
     @State private var title: String
     @State private var author: String
@@ -3110,7 +3750,10 @@ struct EditBookSheet: View {
     @State private var showSeriesPicker: Bool = false
     @State private var showNewSeriesPopup: Bool = false
 
-    private var titleTrimmed: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var titleTrimmed: String {
+        title.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private var closeAction: () -> Void {
         onClose ?? {}
     }
@@ -3221,7 +3864,7 @@ struct EditBookSheet: View {
                                             .clipShape(Capsule())
                                             .overlay(
                                                 Capsule()
-                                                    .stroke(strokeColor, lineWidth: 1)
+                                                    .stroke(strokeColor, lineWidth: 1),
                                             )
                                     }
                                     .buttonStyle(.plain)
@@ -3257,7 +3900,7 @@ struct EditBookSheet: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 12))
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 12)
-                                            .stroke(LColors.glassBorder, lineWidth: 1)
+                                            .stroke(LColors.glassBorder, lineWidth: 1),
                                     )
                                 }
                                 .buttonStyle(.plain)
@@ -3277,7 +3920,7 @@ struct EditBookSheet: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 12))
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 12)
-                                            .stroke(LColors.glassBorder, lineWidth: 1)
+                                            .stroke(LColors.glassBorder, lineWidth: 1),
                                     )
                                 }
                                 .buttonStyle(.plain)
@@ -3317,7 +3960,7 @@ struct EditBookSheet: View {
                             DatePicker(
                                 "",
                                 selection: $startedDate,
-                                displayedComponents: [.date]
+                                displayedComponents: [.date],
                             )
                             .datePickerStyle(.compact)
                             .labelsHidden()
@@ -3326,7 +3969,7 @@ struct EditBookSheet: View {
                             .clipShape(RoundedRectangle(cornerRadius: 14))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 14)
-                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                    .stroke(LColors.glassBorder, lineWidth: 1),
                             )
                         }
                     }
@@ -3344,7 +3987,7 @@ struct EditBookSheet: View {
                             DatePicker(
                                 "",
                                 selection: $finishedDate,
-                                displayedComponents: [.date]
+                                displayedComponents: [.date],
                             )
                             .datePickerStyle(.compact)
                             .labelsHidden()
@@ -3353,7 +3996,7 @@ struct EditBookSheet: View {
                             .clipShape(RoundedRectangle(cornerRadius: 14))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 14)
-                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                    .stroke(LColors.glassBorder, lineWidth: 1),
                             )
                         }
                     }
@@ -3405,7 +4048,7 @@ struct EditBookSheet: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(titleTrimmed.isEmpty)
-            }
+            },
         )
         .onChange(of: status) { _, newStatus in
             if newStatus != .reading {
@@ -3413,7 +4056,7 @@ struct EditBookSheet: View {
                 totalPagesText = ""
             }
 
-            if newStatus == .finished && !hasFinishedDate {
+            if newStatus == .finished, !hasFinishedDate {
                 finishedDate = Date()
                 hasFinishedDate = true
             }
@@ -3429,7 +4072,7 @@ struct EditBookSheet: View {
                         selectedSeries = series
                         selectedSeriesName = series.title
                         showSeriesPicker = false
-                    }
+                    },
                 )
                 .preferredColorScheme(.dark)
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
@@ -3458,7 +4101,7 @@ struct EditBookSheet: View {
                         }
 
                         showNewSeriesPopup = false
-                    }
+                    },
                 )
                 .preferredColorScheme(.dark)
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
@@ -3498,10 +4141,10 @@ struct EditBookSheet: View {
         book.tagsRaw = tagsRaw.trimmingCharacters(in: .whitespacesAndNewlines)
         book.startedAt = hasStartedDate ? startedDate : nil
         book.finishedAt = hasFinishedDate ? finishedDate : nil
-        
+
         if hasSeries {
             book.series = resolvedSeries
-            book.seriesIndex = Int(seriesPositionText.filter { $0.isNumber })
+            book.seriesIndex = Int(seriesPositionText.filter(\.isNumber))
             book.seriesLabel = cleanSeriesLabel
         } else {
             book.series = nil
@@ -3510,8 +4153,8 @@ struct EditBookSheet: View {
         }
 
         if status == .reading {
-            let current = Int(currentPageText.filter { $0.isNumber })
-            let total = Int(totalPagesText.filter { $0.isNumber })
+            let current = Int(currentPageText.filter(\.isNumber))
+            let total = Int(totalPagesText.filter(\.isNumber))
 
             if let total, total > 0 {
                 let safeCurrent = min(max(current ?? 0, 0), total)
@@ -3543,12 +4186,15 @@ struct EditBookSheet: View {
 }
 
 // MARK: - Book Series Picker Popup
+
 struct BookSeriesPickerPopup: View {
     let seriesList: [BookSeries]
-    var onClose: (() -> Void)? = nil
-    var onSelect: ((BookSeries) -> Void)? = nil
+    var onClose: (() -> Void)?
+    var onSelect: ((BookSeries) -> Void)?
 
-    private var closeAction: () -> Void { onClose ?? {} }
+    private var closeAction: () -> Void {
+        onClose ?? {}
+    }
 
     private var sortedSeries: [BookSeries] {
         seriesList.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
@@ -3599,19 +4245,23 @@ struct BookSeriesPickerPopup: View {
             },
             footer: {
                 EmptyView()
-            }
+            },
         )
     }
 }
 
 // MARK: - Create Book Series Popup
+
 struct CreateBookSeriesPopup: View {
-    var onClose: (() -> Void)? = nil
-    var onCreate: ((String) -> Void)? = nil
+    var onClose: (() -> Void)?
+    var onCreate: ((String) -> Void)?
 
     @State private var title: String = ""
 
-    private var closeAction: () -> Void { onClose ?? {} }
+    private var closeAction: () -> Void {
+        onClose ?? {}
+    }
+
     private var trimmedTitle: String {
         title.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -3660,23 +4310,24 @@ struct CreateBookSeriesPopup: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(trimmedTitle.isEmpty)
-            }
+            },
         )
     }
 }
 
 // MARK: - Log Reading Session Sheet
+
 struct LogReadingSessionSheet: View {
     let book: Book
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var appState: AppState
     @Query(sort: \ReadingGoal.updatedAt, order: .reverse) private var readingGoals: [ReadingGoal]
-    var onClose: (() -> Void)? = nil
+    var onClose: (() -> Void)?
 
     @State private var startPageText: String
     @State private var endPageText: String
     @State private var minutesReadText: String = ""
-    @State private var sessionDate: Date = Date()
+    @State private var sessionDate: Date = .init()
 
     private var closeAction: () -> Void {
         onClose ?? {}
@@ -3696,9 +4347,9 @@ struct LogReadingSessionSheet: View {
     }
 
     private var canSave: Bool {
-        let start = Int(startPageText.filter { $0.isNumber })
-        let end = Int(endPageText.filter { $0.isNumber })
-        let minutes = Int(minutesReadText.filter { $0.isNumber })
+        let start = Int(startPageText.filter(\.isNumber))
+        let end = Int(endPageText.filter(\.isNumber))
+        let minutes = Int(minutesReadText.filter(\.isNumber))
 
         return start != nil || end != nil || (minutes ?? 0) > 0
     }
@@ -3789,7 +4440,7 @@ struct LogReadingSessionSheet: View {
                     DatePicker(
                         "",
                         selection: $sessionDate,
-                        displayedComponents: [.date, .hourAndMinute]
+                        displayedComponents: [.date, .hourAndMinute],
                     )
                     .datePickerStyle(.compact)
                     .labelsHidden()
@@ -3798,7 +4449,7 @@ struct LogReadingSessionSheet: View {
                     .clipShape(RoundedRectangle(cornerRadius: 14))
                     .overlay(
                         RoundedRectangle(cornerRadius: 14)
-                            .stroke(LColors.glassBorder, lineWidth: 1)
+                            .stroke(LColors.glassBorder, lineWidth: 1),
                     )
                 }
             },
@@ -3817,14 +4468,14 @@ struct LogReadingSessionSheet: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(!canSave)
-            }
+            },
         )
     }
 
     private func save() {
-        let start = Int(startPageText.filter { $0.isNumber })
-        let end = Int(endPageText.filter { $0.isNumber })
-        let minutes = Int(minutesReadText.filter { $0.isNumber }) ?? 0
+        let start = Int(startPageText.filter(\.isNumber))
+        let end = Int(endPageText.filter(\.isNumber))
+        let minutes = Int(minutesReadText.filter(\.isNumber)) ?? 0
         let pagesRead = {
             guard let start, let end else { return 0 }
             return max(end - start, 0)
@@ -3835,8 +4486,8 @@ struct LogReadingSessionSheet: View {
             startPage: start,
             endPage: end,
             minutesRead: minutes,
-            pagesRead: pagesRead,   // ← ADD THIS
-            sessionDate: sessionDate
+            pagesRead: pagesRead, // ← ADD THIS
+            sessionDate: sessionDate,
         )
 
         modelContext.insert(session)
@@ -3869,7 +4520,7 @@ struct LogReadingSessionSheet: View {
             var dailyDescriptor = FetchDescriptor<DailyReadingProgress>(
                 predicate: #Predicate<DailyReadingProgress> { progress in
                     progress.userId == currentUserId && progress.date == normalizedSessionDay
-                }
+                },
             )
             dailyDescriptor.fetchLimit = 1
 
@@ -3880,7 +4531,7 @@ struct LogReadingSessionSheet: View {
                 pagesRead: 0,
                 minutesRead: 0,
                 createdAt: Date(),
-                updatedAt: Date()
+                updatedAt: Date(),
             )
 
             dailyProgress.pagesRead += max(pagesRead, 0)
@@ -3904,6 +4555,13 @@ struct LogReadingSessionSheet: View {
         session.updatedAt = Date()
 
         try? modelContext.save()
+        let sessionId = session.persistentModelID.hashValue.description
+        _ = try? SelfCarePointsManager.awardReadingSession(
+            in: modelContext,
+            sessionId: sessionId,
+            title: book.title.isEmpty ? "Reading Session" : "Session: \(book.title)",
+            sessionDate: sessionDate
+        )
         closeAction()
     }
 
@@ -3946,33 +4604,36 @@ struct LogReadingSessionSheet: View {
 }
 
 // MARK: - Book Detail Sheet
+
 struct BookDetailSheet: View {
     let book: Book
-    var onClose: (() -> Void)? = nil
-    var onLogSession: (() -> Void)? = nil
-    var onShowSessionHistory: (() -> Void)? = nil
-    var onShowNotes: (() -> Void)? = nil
-    var onShowSeries: (() -> Void)? = nil
-    var onShowPoints: (() -> Void)? = nil
+    var onClose: (() -> Void)?
+    var onLogSession: (() -> Void)?
+    var onShowSessionHistory: (() -> Void)?
+    var onShowNotes: (() -> Void)?
+    var onShowSeries: (() -> Void)?
+    var onShowPoints: (() -> Void)?
 
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var appState: AppState
     @State private var selectedPhotoItem: PhotosPickerItem? = nil
 
-    private var closeAction: () -> Void { onClose ?? {} }
+    private var closeAction: () -> Void {
+        onClose ?? {}
+    }
 
     private var sessionsSorted: [ReadingSession] {
         (book.sessions ?? []).sorted { $0.sessionDate > $1.sessionDate }
     }
 
-    // --- Simplified footer button views ---
+    /// --- Simplified footer button views ---
     private var sessionHistoryButton: some View {
         Button {
             onShowSessionHistory?()
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: "clock.arrow.circlepath")
-                Text("Session History")
+                Text("Sessions")
                     .font(.system(size: 13, weight: .semibold))
             }
             .foregroundStyle(LColors.textPrimary)
@@ -3982,38 +4643,38 @@ struct BookDetailSheet: View {
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(LColors.glassBorder, lineWidth: 1)
+                    .stroke(LColors.glassBorder, lineWidth: 1),
             )
         }
         .buttonStyle(.plain)
     }
 
     private var notesButton: some View {
-            Button {
-                onShowNotes?()
-            } label: {
-                HStack(spacing: 8) {
-                    Image("pencilcircle")
-                        .renderingMode(.template)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 14, height: 14)
-                    Text("Notes")
-                        .font(.system(size: 13, weight: .semibold))
-                }
-                .foregroundStyle(LColors.textPrimary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(Color.white.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(LColors.glassBorder, lineWidth: 1)
-                )
+        Button {
+            onShowNotes?()
+        } label: {
+            HStack(spacing: 8) {
+                Image("pencilcircle")
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 14, height: 14)
+                Text("Notes")
+                    .font(.system(size: 13, weight: .semibold))
             }
-            .buttonStyle(.plain)
+            .foregroundStyle(LColors.textPrimary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(Color.white.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(LColors.glassBorder, lineWidth: 1),
+            )
         }
-    
+        .buttonStyle(.plain)
+    }
+
     private var pointsButton: some View {
         Button {
             onShowPoints?()
@@ -4023,7 +4684,7 @@ struct BookDetailSheet: View {
                     .renderingMode(.template)
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 22, height: 22)
+                    .frame(width: 14, height: 14)
                     .foregroundStyle(.white)
                     .padding(.top, 1)
                 Text("Points")
@@ -4036,7 +4697,7 @@ struct BookDetailSheet: View {
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(LColors.glassBorder, lineWidth: 1)
+                    .stroke(LColors.glassBorder, lineWidth: 1),
             )
         }
         .buttonStyle(.plain)
@@ -4054,7 +4715,7 @@ struct BookDetailSheet: View {
                             .resizable()
                             .scaledToFit()
                             .frame(width: 14, height: 14)
-                        Text("View Series")
+                        Text("Series")
                             .font(.system(size: 13, weight: .semibold))
                     }
                     .foregroundStyle(LColors.textPrimary)
@@ -4064,7 +4725,7 @@ struct BookDetailSheet: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
-                            .stroke(LColors.glassBorder, lineWidth: 1)
+                            .stroke(LColors.glassBorder, lineWidth: 1),
                     )
                 }
                 .buttonStyle(.plain)
@@ -4115,7 +4776,7 @@ struct BookDetailSheet: View {
                         .clipShape(Capsule())
                         .overlay(
                             Capsule()
-                                .stroke(LColors.glassBorder, lineWidth: 1)
+                                .stroke(LColors.glassBorder, lineWidth: 1),
                         )
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -4162,7 +4823,7 @@ struct BookDetailSheet: View {
 
     private var ratingSection: some View {
         HStack(spacing: 8) {
-            ForEach(1...5, id: \.self) { i in
+            ForEach(1 ... 5, id: \.self) { i in
                 Button {
                     let newValue = (book.rating == i) ? 0 : i
                     book.rating = newValue
@@ -4219,7 +4880,7 @@ struct BookDetailSheet: View {
                                 .clipShape(Capsule())
                                 .overlay(
                                     Capsule()
-                                        .stroke(AnyShapeStyle(LGradients.blue), lineWidth: 1)
+                                        .stroke(AnyShapeStyle(LGradients.blue), lineWidth: 1),
                                 )
                         }
 
@@ -4233,7 +4894,7 @@ struct BookDetailSheet: View {
                                 .clipShape(Capsule())
                                 .overlay(
                                     Capsule()
-                                        .stroke(AnyShapeStyle(LGradients.blue), lineWidth: 1)
+                                        .stroke(AnyShapeStyle(LGradients.blue), lineWidth: 1),
                                 )
                         }
                     }
@@ -4263,7 +4924,7 @@ struct BookDetailSheet: View {
                                     .clipShape(Capsule())
                                     .overlay(
                                         Capsule()
-                                            .stroke(AnyShapeStyle(LGradients.blue), lineWidth: 1)
+                                            .stroke(AnyShapeStyle(LGradients.blue), lineWidth: 1),
                                     )
                             }
                         }
@@ -4277,7 +4938,8 @@ struct BookDetailSheet: View {
         Group {
             if book.status == .reading,
                let total = book.totalPages, total > 0,
-               let current = book.currentPage {
+               let current = book.currentPage
+            {
                 let clampedCurrent = min(max(current, 0), total)
                 let progress = CGFloat(book.progressPercent)
 
@@ -4293,7 +4955,7 @@ struct BookDetailSheet: View {
                             .frame(height: 10)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 6)
-                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                    .stroke(LColors.glassBorder, lineWidth: 1),
                             )
 
                         GeometryReader { geo in
@@ -4373,7 +5035,7 @@ struct BookDetailSheet: View {
                         }
                     }
                 }
-            }
+            },
         )
         .onChange(of: selectedPhotoItem) { _, newItem in
             guard let newItem else { return }
@@ -4390,7 +5052,6 @@ struct BookDetailSheet: View {
         }
     }
 
-    @ViewBuilder
     private var coverSection: some View {
         VStack(spacing: 10) {
             ZStack {
@@ -4399,11 +5060,12 @@ struct BookDetailSheet: View {
                     .frame(width: 110, height: 160)
                     .overlay(
                         RoundedRectangle(cornerRadius: 18)
-                            .stroke(LColors.glassBorder, lineWidth: 1)
+                            .stroke(LColors.glassBorder, lineWidth: 1),
                     )
 
                 if let data = book.coverImageData,
-                   let uiImage = UIImage(data: data) {
+                   let uiImage = UIImage(data: data)
+                {
                     Image(uiImage: uiImage)
                         .resizable()
                         .scaledToFill()
@@ -4429,7 +5091,7 @@ struct BookDetailSheet: View {
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
-                            .stroke(LColors.glassBorder, lineWidth: 1)
+                            .stroke(LColors.glassBorder, lineWidth: 1),
                     )
             }
             .buttonStyle(.plain)
@@ -4438,9 +5100,10 @@ struct BookDetailSheet: View {
 }
 
 // MARK: - Book Points Popup
+
 struct BookPointsPopup: View {
     let book: Book
-    var onClose: (() -> Void)? = nil
+    var onClose: (() -> Void)?
 
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var appState: AppState
@@ -4450,7 +5113,9 @@ struct BookPointsPopup: View {
     @State private var pointsEntryPendingDeletion: ReadingPointsEntry? = nil
     @State private var showDeletePointsConfirm: Bool = false
 
-    private var closeAction: () -> Void { onClose ?? {} }
+    private var closeAction: () -> Void {
+        onClose ?? {}
+    }
 
     private var currentUserId: String? {
         appState.currentAppleUserId
@@ -4538,7 +5203,7 @@ struct BookPointsPopup: View {
                     .clipShape(RoundedRectangle(cornerRadius: 16))
                     .overlay(
                         RoundedRectangle(cornerRadius: 16)
-                            .stroke(LColors.glassBorder, lineWidth: 1)
+                            .stroke(LColors.glassBorder, lineWidth: 1),
                     )
 
                     VStack(alignment: .leading, spacing: 8) {
@@ -4557,7 +5222,7 @@ struct BookPointsPopup: View {
                     .clipShape(RoundedRectangle(cornerRadius: 16))
                     .overlay(
                         RoundedRectangle(cornerRadius: 16)
-                            .stroke(LColors.glassBorder, lineWidth: 1)
+                            .stroke(LColors.glassBorder, lineWidth: 1),
                     )
                 }
 
@@ -4630,7 +5295,7 @@ struct BookPointsPopup: View {
             },
             footer: {
                 EmptyView()
-            }
+            },
         )
         .onAppear {
             visibleEntryCount = 6
@@ -4653,13 +5318,16 @@ struct BookPointsPopup: View {
 }
 
 // MARK: - Book Notes Popup
+
 struct BookNotesPopup: View {
     let book: Book
-    var onClose: (() -> Void)? = nil
-    var onAddNote: (() -> Void)? = nil
-    var onSelectNote: ((BookNote) -> Void)? = nil
+    var onClose: (() -> Void)?
+    var onAddNote: (() -> Void)?
+    var onSelectNote: ((BookNote) -> Void)?
 
-    private var closeAction: () -> Void { onClose ?? {} }
+    private var closeAction: () -> Void {
+        onClose ?? {}
+    }
 
     private var notesSorted: [BookNote] {
         (book.notes ?? []).sorted { $0.createdAt > $1.createdAt }
@@ -4717,7 +5385,7 @@ struct BookNotesPopup: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .overlay(
                             RoundedRectangle(cornerRadius: 12)
-                                .stroke(LColors.glassBorder, lineWidth: 1)
+                                .stroke(LColors.glassBorder, lineWidth: 1),
                         )
                     }
                     .buttonStyle(.plain)
@@ -4750,20 +5418,23 @@ struct BookNotesPopup: View {
             },
             footer: {
                 EmptyView()
-            }
+            },
         )
     }
 }
 
 // MARK: - Add Book Note Popup
+
 struct AddBookNotePopup: View {
     let book: Book
-    var onClose: (() -> Void)? = nil
+    var onClose: (() -> Void)?
 
     @Environment(\.modelContext) private var modelContext
     @State private var noteText: String = ""
 
-    private var closeAction: () -> Void { onClose ?? {} }
+    private var closeAction: () -> Void {
+        onClose ?? {}
+    }
 
     private var autoDateText: String {
         Date().formatted(date: .abbreviated, time: .omitted)
@@ -4820,7 +5491,7 @@ struct AddBookNotePopup: View {
                         book: book,
                         text: trimmedNoteText,
                         createdAt: Date(),
-                        updatedAt: Date()
+                        updatedAt: Date(),
                     )
                     modelContext.insert(note)
                     try? modelContext.save()
@@ -4837,21 +5508,24 @@ struct AddBookNotePopup: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(trimmedNoteText.isEmpty)
-            }
+            },
         )
     }
 }
 
 // MARK: - Book Note Detail Popup
+
 struct BookNoteDetailPopup: View {
     let note: BookNote
-    var onClose: (() -> Void)? = nil
+    var onClose: (() -> Void)?
 
     @Environment(\.modelContext) private var modelContext
     @State private var showDeleteConfirm: Bool = false
     @State private var showingEditPopup: Bool = false
 
-    private var closeAction: () -> Void { onClose ?? {} }
+    private var closeAction: () -> Void {
+        onClose ?? {}
+    }
 
     private var noteDateText: String {
         note.createdAt.formatted(date: .abbreviated, time: .omitted)
@@ -4918,7 +5592,7 @@ struct BookNoteDetailPopup: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .overlay(
                             RoundedRectangle(cornerRadius: 12)
-                                .stroke(LColors.glassBorder, lineWidth: 1)
+                                .stroke(LColors.glassBorder, lineWidth: 1),
                         )
                     }
                     .buttonStyle(.plain)
@@ -4938,14 +5612,14 @@ struct BookNoteDetailPopup: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .overlay(
                             RoundedRectangle(cornerRadius: 12)
-                                .stroke(LColors.glassBorder, lineWidth: 1)
+                                .stroke(LColors.glassBorder, lineWidth: 1),
                         )
                     }
                     .buttonStyle(.plain)
 
                     Spacer()
                 }
-            }
+            },
         )
         .overlay {
             if showingEditPopup {
@@ -4953,7 +5627,7 @@ struct BookNoteDetailPopup: View {
                     note: note,
                     onClose: {
                         showingEditPopup = false
-                    }
+                    },
                 )
                 .preferredColorScheme(.dark)
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
@@ -4967,8 +5641,7 @@ struct BookNoteDetailPopup: View {
                 try? modelContext.save()
                 closeAction()
             }
-            Button("Cancel", role: .cancel) {
-            }
+            Button("Cancel", role: .cancel) {}
         } message: {
             Text("This will permanently remove this note.")
         }
@@ -4977,12 +5650,14 @@ struct BookNoteDetailPopup: View {
 
 struct EditBookNotePopup: View {
     let note: BookNote
-    var onClose: (() -> Void)? = nil
+    var onClose: (() -> Void)?
 
     @Environment(\.modelContext) private var modelContext
     @State private var noteText: String
 
-    private var closeAction: () -> Void { onClose ?? {} }
+    private var closeAction: () -> Void {
+        onClose ?? {}
+    }
 
     private var noteDateText: String {
         note.createdAt.formatted(date: .abbreviated, time: .omitted)
@@ -5051,25 +5726,28 @@ struct EditBookNotePopup: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(trimmedNoteText.isEmpty)
-            }
+            },
         )
     }
 }
 
 // MARK: - Book Session History Sheet
+
 struct BookSessionHistorySheet: View {
     let book: Book
-    var onClose: (() -> Void)? = nil
+    var onClose: (() -> Void)?
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var appState: AppState
     @State private var visibleSessionCount: Int = 4
     @State private var showDeleteSessionConfirm: Bool = false
     @State private var sessionPendingDeletion: ReadingSession? = nil
-    
+
     @Query(sort: \ReadingGoal.updatedAt, order: .reverse) private var readingGoals: [ReadingGoal]
     @Query(sort: \ReadingPointsEntry.date, order: .reverse) private var readingPointsEntries: [ReadingPointsEntry]
 
-    private var closeAction: () -> Void { onClose ?? {} }
+    private var closeAction: () -> Void {
+        onClose ?? {}
+    }
 
     private var currentUserId: String? {
         appState.currentAppleUserId
@@ -5218,7 +5896,7 @@ struct BookSessionHistorySheet: View {
             },
             footer: {
                 EmptyView()
-            }
+            },
         )
         .onAppear {
             visibleSessionCount = 4
@@ -5252,7 +5930,7 @@ struct BookSessionHistorySheet: View {
             .sorted { $0.sessionDate > $1.sessionDate }
 
         let latestEndPage = remainingSessions
-            .compactMap { $0.endPage }
+            .compactMap(\.endPage)
             .first
 
         if let latestEndPage {
@@ -5324,8 +6002,8 @@ struct BookSessionHistorySheet: View {
     }
 }
 
-
 // MARK: - Small UI helpers
+
 struct Pill: View {
     let title: String
     let on: Bool
@@ -5347,6 +6025,7 @@ struct Pill: View {
 }
 
 // MARK: - Status badge
+
 struct StatusBadge: View {
     let status: BookStatus
 
@@ -5360,7 +6039,7 @@ struct StatusBadge: View {
             .clipShape(Capsule())
             .overlay(
                 Capsule()
-                    .stroke(Color.white.opacity(0.22), lineWidth: 1)
+                    .stroke(Color.white.opacity(0.22), lineWidth: 1),
             )
     }
 }
@@ -5370,15 +6049,15 @@ extension BookStatus {
     var badgeColor: Color {
         switch self {
         case .tbr:
-            return Color(red: 0.36, green: 0.20, blue: 0.88)   // purple
+            return Color(red: 0.36, green: 0.20, blue: 0.88) // purple
         case .reading:
-            return Color(red: 0.00, green: 0.86, blue: 1.00)   // teal
+            return Color(red: 0.00, green: 0.86, blue: 1.00) // teal
         case .finished:
-            return Color(red: 0.22, green: 0.84, blue: 0.49)   // green
+            return Color(red: 0.22, green: 0.84, blue: 0.49) // green
         case .paused:
-            return Color(red: 0.98, green: 0.76, blue: 0.18)   // amber
+            return Color(red: 0.98, green: 0.76, blue: 0.18) // amber
         case .dnf:
-            return Color(red: 0.96, green: 0.33, blue: 0.37)   // red
+            return Color(red: 0.96, green: 0.33, blue: 0.37) // red
         @unknown default:
             return LColors.accent
         }
@@ -5386,6 +6065,7 @@ extension BookStatus {
 }
 
 // MARK: - LystariaTextField (plain, glassy, no macOS grey chrome)
+
 struct LystariaTextField: View {
     var placeholder: String
     @Binding var text: String
@@ -5398,13 +6078,14 @@ struct LystariaTextField: View {
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .overlay(
                 RoundedRectangle(cornerRadius: 14)
-                    .stroke(LColors.glassBorder, lineWidth: 1)
+                    .stroke(LColors.glassBorder, lineWidth: 1),
             )
             .foregroundStyle(LColors.textPrimary)
     }
 }
 
 // MARK: - LystariaTextArea (multiline, glassy)
+
 struct LystariaTextArea: View {
     var placeholder: String
     @Binding var text: String
@@ -5428,12 +6109,13 @@ struct LystariaTextArea: View {
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay(
             RoundedRectangle(cornerRadius: 14)
-                .stroke(LColors.glassBorder, lineWidth: 1)
+                .stroke(LColors.glassBorder, lineWidth: 1),
         )
     }
 }
 
 // MARK: - LystariaNumberField (digits only, glassy)
+
 struct LystariaNumberField: View {
     var placeholder: String
     @Binding var text: String
@@ -5446,12 +6128,12 @@ struct LystariaNumberField: View {
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .overlay(
                 RoundedRectangle(cornerRadius: 14)
-                    .stroke(LColors.glassBorder, lineWidth: 1)
+                    .stroke(LColors.glassBorder, lineWidth: 1),
             )
             .foregroundStyle(LColors.textPrimary)
             .onChange(of: text) { _, newValue in
                 // keep only digits
-                let filtered = newValue.filter { $0.isNumber }
+                let filtered = newValue.filter(\.isNumber)
                 if filtered != newValue {
                     text = filtered
                 }
@@ -5460,26 +6142,29 @@ struct LystariaNumberField: View {
 }
 
 // MARK: - Reading Goal Sheet
+
 struct ReadingGoalSheet: View {
     @Environment(\.modelContext) private var modelContext
-    
+
     let existingGoal: ReadingGoal?
     let currentUserId: String?
-    var onClose: (() -> Void)? = nil
-    
+    var onClose: (() -> Void)?
+
     @Query(sort: \ReadingGoal.updatedAt, order: .reverse) private var readingGoals: [ReadingGoal]
-    
+
     @State private var period: ReadingGoalPeriod
     @State private var metric: ReadingGoalMetric
     @State private var targetValueText: String
-    
-    private var closeAction: () -> Void { onClose ?? {} }
-    
+
+    private var closeAction: () -> Void {
+        onClose ?? {}
+    }
+
     private var canSave: Bool {
-        guard let value = Int(targetValueText.filter { $0.isNumber }) else { return false }
+        guard let value = Int(targetValueText.filter(\.isNumber)) else { return false }
         return value > 0 && currentUserId != nil
     }
-    
+
     init(existingGoal: ReadingGoal?, currentUserId: String?, onClose: (() -> Void)? = nil) {
         self.existingGoal = existingGoal
         self.currentUserId = currentUserId
@@ -5488,7 +6173,7 @@ struct ReadingGoalSheet: View {
         _metric = State(initialValue: existingGoal?.metric ?? .pages)
         _targetValueText = State(initialValue: existingGoal.map { String($0.targetValue) } ?? "")
     }
-    
+
     var body: some View {
         LystariaOverlayPopup(
             onClose: {
@@ -5514,7 +6199,7 @@ struct ReadingGoalSheet: View {
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(LColors.textSecondary)
                         .tracking(0.5)
-                    
+
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 10) {
                             ForEach(ReadingGoalPeriod.allCases, id: \.self) { option in
@@ -5531,7 +6216,7 @@ struct ReadingGoalSheet: View {
                                         .background(period == option ? LColors.accent : Color.white.opacity(0.08))
                                         .clipShape(Capsule())
                                         .overlay(
-                                            Capsule().stroke(period == option ? LColors.accent : LColors.glassBorder, lineWidth: 1)
+                                            Capsule().stroke(period == option ? LColors.accent : LColors.glassBorder, lineWidth: 1),
                                         )
                                 }
                                 .buttonStyle(.plain)
@@ -5539,13 +6224,13 @@ struct ReadingGoalSheet: View {
                         }
                     }
                 }
-                
+
                 VStack(alignment: .leading, spacing: 8) {
                     Text("METRIC")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(LColors.textSecondary)
                         .tracking(0.5)
-                    
+
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 10) {
                             ForEach(ReadingGoalMetric.allCases, id: \.self) { option in
@@ -5562,7 +6247,7 @@ struct ReadingGoalSheet: View {
                                         .background(metric == option ? LColors.accent : Color.white.opacity(0.08))
                                         .clipShape(Capsule())
                                         .overlay(
-                                            Capsule().stroke(metric == option ? LColors.accent : LColors.glassBorder, lineWidth: 1)
+                                            Capsule().stroke(metric == option ? LColors.accent : LColors.glassBorder, lineWidth: 1),
                                         )
                                 }
                                 .buttonStyle(.plain)
@@ -5570,13 +6255,13 @@ struct ReadingGoalSheet: View {
                         }
                     }
                 }
-                
+
                 VStack(alignment: .leading, spacing: 8) {
                     Text("TARGET")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(LColors.textSecondary)
                         .tracking(0.5)
-                    
+
                     LystariaNumberField(placeholder: "Enter target", text: $targetValueText)
                         .numericKeyboardIfAvailable()
                 }
@@ -5596,14 +6281,14 @@ struct ReadingGoalSheet: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(!canSave)
-            }
+            },
         )
     }
-    
+
     private func save() {
         guard let currentUserId else { return }
-        guard let targetValue = Int(targetValueText.filter { $0.isNumber }), targetValue > 0 else { return }
-        
+        guard let targetValue = Int(targetValueText.filter(\.isNumber)), targetValue > 0 else { return }
+
         if let existingGoal {
             existingGoal.period = period
             existingGoal.metric = metric
@@ -5615,7 +6300,7 @@ struct ReadingGoalSheet: View {
                 goal.isActive = false
                 goal.updatedAt = Date()
             }
-            
+
             let goal = ReadingGoal(
                 userId: currentUserId,
                 isActive: true,
@@ -5623,21 +6308,22 @@ struct ReadingGoalSheet: View {
                 metric: metric,
                 targetValue: targetValue,
                 createdAt: Date(),
-                updatedAt: Date()
+                updatedAt: Date(),
             )
             modelContext.insert(goal)
         }
-        
+
         try? modelContext.save()
         closeAction()
     }
 }
 
 // MARK: - Keyboard Dismiss Helper
+
 #if canImport(UIKit)
-import UIKit
+    import UIKit
 #endif
 
-fileprivate func dismissKeyboard() {
+private func dismissKeyboard() {
     UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
 }

@@ -142,6 +142,14 @@ final class AuthService {
         )
 
         if let existingUser = try modelContext.fetch(descriptor).first {
+            if let remoteDisplayName = try? await UserProfileService.shared.getDisplayName(userId: appleUserId) {
+                let trimmedRemoteName = remoteDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmedRemoteName.isEmpty, existingUser.displayName != trimmedRemoteName {
+                    existingUser.displayName = trimmedRemoteName
+                    try? modelContext.save()
+                }
+            }
+
             persistSession(
                 appleUserId: appleUserId,
                 email: existingUser.email,

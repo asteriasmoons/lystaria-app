@@ -24,6 +24,11 @@ struct HealthPageView: View {
     @Query(sort: \BodyStateRecord.updatedAt, order: .reverse)
     private var bodyStateRecords: [BodyStateRecord]
 
+    @Query private var userSettingsResults: [UserSettings]
+    private var userSettings: UserSettings? { userSettingsResults.first }
+
+    @State private var showSleepGoalEditor = false
+    @State private var pendingSleepGoal: Double = 8
     @State private var showAddMetricsPopup = false
     @State private var showAddExercisePopup = false
     @State private var showHealthHistoryPopup = false
@@ -241,6 +246,36 @@ struct HealthPageView: View {
                 }
             }
         }
+        .onChange(of: userSettings?.sleepGoalHours) { _, newGoal in
+            if let goal = newGoal, goal > 0 {
+                sleepManager.sleepGoalHours = goal
+            }
+        }
+        .onAppear {
+            if let goal = userSettings?.sleepGoalHours, goal > 0 {
+                sleepManager.sleepGoalHours = goal
+            }
+        }
+        .sheet(isPresented: $showSleepGoalEditor) {
+            SleepGoalEditorSheet(
+                initialGoal: userSettings?.sleepGoalHours ?? sleepManager.sleepGoalHours,
+                onSave: { newGoal in
+                    if let settings = userSettings {
+                        settings.sleepGoalHours = newGoal
+                        try? modelContext.save()
+                    } else {
+                        let settings = UserSettings()
+                        settings.sleepGoalHours = newGoal
+                        modelContext.insert(settings)
+                        try? modelContext.save()
+                    }
+                    sleepManager.sleepGoalHours = newGoal
+                }
+            )
+            .presentationDetents([.height(260)])
+            .presentationDragIndicator(.visible)
+            .preferredColorScheme(.dark)
+        }
     }
 
     private var sleepScoreCard: some View {
@@ -255,10 +290,12 @@ struct HealthPageView: View {
         return GlassCard {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 12) {
-                    Image(systemName: "moon.zzz.fill")
-                        .font(.system(size: 20, weight: .semibold))
+                    Image("zmoon")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 24, height: 24)
                         .foregroundStyle(.white)
-                        .frame(width: 22, height: 22)
 
                     GradientTitle(text: "Sleep Score", size: 24)
                     Spacer()
@@ -274,10 +311,31 @@ struct HealthPageView: View {
                                 .fill(hasData ? AnyShapeStyle(LGradients.blue) : AnyShapeStyle(Color.white.opacity(0.12)))
                         )
                         .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
+
+                    // Edit goal button
+                    Button {
+                        pendingSleepGoal = sleepManager.sleepGoalHours
+                        showSleepGoalEditor = true
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.08))
+                                .overlay(Circle().stroke(LColors.glassBorder, lineWidth: 1))
+                                .frame(width: 34, height: 34)
+
+                            Image("wavyplus")
+                                .renderingMode(.template)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 14, height: 14)
+                                .foregroundStyle(.white)
+                        }
+                    }
+                    .buttonStyle(.plain)
                 }
 
                 HStack(alignment: .center, spacing: 20) {
-                    // Progress ring
+                    // Progress ring with label inside
                     ZStack {
                         Circle()
                             .stroke(Color.white.opacity(0.10), lineWidth: 10)
@@ -292,20 +350,16 @@ struct HealthPageView: View {
                             .rotationEffect(.degrees(-90))
                             .frame(width: 90, height: 90)
 
-                        VStack(spacing: 2) {
-                            Text(hasData ? String(format: "%.1f", hours) : "--")
-                                .font(.system(size: 20, weight: .bold))
-                                .foregroundStyle(.white)
-                            Text("hrs")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(LColors.textSecondary)
-                        }
+                        Text(hasData ? "\(Int((score * 100).rounded()))%" : "--")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(.white)
+                            .minimumScaleFactor(0.7)
+                            .frame(width: 66)
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
                         sleepStatRow(label: "Last Night", value: hasData ? String(format: "%.1fh", hours) : "No data")
                         sleepStatRow(label: "Goal", value: String(format: "%.0fh", sleepManager.sleepGoalHours))
-                        sleepStatRow(label: "Score", value: hasData ? "\(Int((score * 100).rounded()))%" : "--")
                     }
 
                     Spacer(minLength: 0)
@@ -1023,6 +1077,75 @@ struct CurrentFlowInfoPopup: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+// MARK: - Sleep Goal Editor Sheet
+
+struct SleepGoalEditorSheet: View {
+    let initialGoal: Double
+    let onSave: (Double) -> Void
+
+    @State private var selectedHours: Double
+    @Environment(\.dismiss) private var dismiss
+
+    init(initialGoal: Double, onSave: @escaping (Double) -> Void) {
+        self.initialGoal = initialGoal
+        self.onSave = onSave
+        _selectedHours = State(initialValue: initialGoal.rounded())
+    }
+
+    var body: some View {
+        ZStack {
+            LystariaBackground()
+                .ignoresSafeArea()
+
+            VStack(spacing: 24) {
+                GradientTitle(text: "Sleep Goal", size: 24)
+                    .padding(.top, 8)
+
+                // Hour stepper
+                HStack(spacing: 24) {
+                    Button {
+                        if selectedHours > 4 { selectedHours -= 0.5 }
+                    } label: {
+                        Image(systemName: "minus")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(Circle())
+                            .overlay(Circle().stroke(LColors.glassBorder, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+
+                    Text(String(format: selectedHours.truncatingRemainder(dividingBy: 1) == 0 ? "%.0fh" : "%.1fh", selectedHours))
+                        .font(.system(size: 40, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(minWidth: 80)
+
+                    Button {
+                        if selectedHours < 14 { selectedHours += 0.5 }
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(Circle())
+                            .overlay(Circle().stroke(LColors.glassBorder, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                LButton(title: "Save Goal", icon: "checkmark", style: .gradient) {
+                    onSave(selectedHours)
+                    dismiss()
+                }
+                .padding(.horizontal, 32)
+            }
+            .padding(.horizontal, LSpacing.pageHorizontal)
+        }
     }
 }
 

@@ -14,6 +14,7 @@ enum JournalInlineStyleType: String, Codable, CaseIterable {
     case underline
     case link
     case inlineCode
+    case mention // urlString stores JournalBook persistentModelID string
 }
 
 @Model

@@ -11,7 +11,6 @@ struct ReminderTimeBlockView: View {
     @Query var allReminders: [LystariaReminder]
     let onMarkDone: (LystariaReminder) -> Void
 
-    @Query var habits: [Habit]
 
     @State private var selectedDate: Date = .init()
     @State private var editingReminder: LystariaReminder? = nil
@@ -82,7 +81,49 @@ struct ReminderTimeBlockView: View {
             guard let schedule = reminder.schedule else { continue }
 
             switch schedule.kind {
-            case .once, .interval:
+            case .once:
+                guard cal.isDate(reminder.nextRunAt, inSameDayAs: selectedDate) else { continue }
+                let h = cal.component(.hour, from: reminder.nextRunAt)
+                if h == hour { result.append((reminder, reminder.nextRunAt)) }
+
+            case .interval:
+                if reminder.linkedKind == .habit,
+                   let habitId = reminder.linkedHabitId {
+                    let descriptor = FetchDescriptor<Habit>()
+                    let habits = (try? modelContext.fetch(descriptor)) ?? []
+                    if let habit = habits.first(where: { $0.id == habitId }),
+                       let (startH, startM) = ReminderCompute.parseHHMM(habit.reminderIntervalWindowStart),
+                       let (endH, endM) = ReminderCompute.parseHHMM(habit.reminderIntervalWindowEnd) {
+                        let intervalMinutes: Int
+                        if habit.reminderKind == .everyXHours {
+                            intervalMinutes = max(1, habit.reminderIntervalHours) * 60
+                        } else if habit.reminderKind == .everyXMinutes {
+                            intervalMinutes = max(1, habit.reminderIntervalMinutes)
+                        } else {
+                            intervalMinutes = 0
+                        }
+
+                        if intervalMinutes > 0 {
+                            let dayStart = cal.startOfDay(for: selectedDate)
+                            let startDate = cal.date(bySettingHour: startH, minute: startM, second: 0, of: dayStart) ?? dayStart
+                            let endDate = cal.date(bySettingHour: endH, minute: endM, second: 0, of: dayStart) ?? dayStart
+
+                            if endDate >= startDate {
+                                var slot = startDate
+                                while slot <= endDate {
+                                    let slotHour = cal.component(.hour, from: slot)
+                                    if slotHour == hour {
+                                        result.append((reminder, slot))
+                                    }
+                                    guard let nextSlot = cal.date(byAdding: .minute, value: intervalMinutes, to: slot) else { break }
+                                    slot = nextSlot
+                                }
+                                continue
+                            }
+                        }
+                    }
+                }
+
                 guard cal.isDate(reminder.nextRunAt, inSameDayAs: selectedDate) else { continue }
                 let h = cal.component(.hour, from: reminder.nextRunAt)
                 if h == hour { result.append((reminder, reminder.nextRunAt)) }
@@ -119,9 +160,74 @@ struct ReminderTimeBlockView: View {
         }
     }
 
+    private func recordedCompletionDates(for reminder: LystariaReminder) -> [Date] {
+        let raw = reminder.completionTimestampsStorage.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty, raw != "[]", let data = raw.data(using: .utf8) else { return [] }
+
+        if let values = try? JSONDecoder().decode([Double].self, from: data) {
+            return values.map { Date(timeIntervalSince1970: $0) }
+        }
+
+        if let values = try? JSONDecoder().decode([TimeInterval].self, from: data) {
+            return values.map { Date(timeIntervalSince1970: $0) }
+        }
+
+        if let values = try? JSONDecoder().decode([String].self, from: data) {
+            return values.compactMap { value in
+                if let interval = TimeInterval(value) {
+                    return Date(timeIntervalSince1970: interval)
+                }
+                return ISO8601DateFormatter().date(from: value)
+            }
+        }
+
+        return []
+    }
+
+    private func isCompletedOccurrence(_ reminder: LystariaReminder, fireDate: Date) -> Bool {
+        let cal = tzCalendar
+        let fireHour = cal.component(.hour, from: fireDate)
+        let fireMinute = cal.component(.minute, from: fireDate)
+
+        if let completedAt = reminder.lastCompletedAt,
+           cal.isDate(completedAt, inSameDayAs: fireDate)
+        {
+            let completedHour = cal.component(.hour, from: completedAt)
+            let completedMinute = cal.component(.minute, from: completedAt)
+            if completedHour == fireHour && completedMinute == fireMinute {
+                return true
+            }
+        }
+
+        if let ack = reminder.acknowledgedAt,
+           cal.isDate(ack, inSameDayAs: fireDate)
+        {
+            let ackHour = cal.component(.hour, from: ack)
+            let ackMinute = cal.component(.minute, from: ack)
+            if ackHour == fireHour && ackMinute == fireMinute {
+                return true
+            }
+        }
+
+        return recordedCompletionDates(for: reminder).contains { recorded in
+            cal.isDate(recorded, inSameDayAs: fireDate)
+                && cal.component(.hour, from: recorded) == fireHour
+                && cal.component(.minute, from: recorded) == fireMinute
+        }
+    }
+
     private func isCompletedOn(_ reminder: LystariaReminder, date: Date) -> Bool {
-        guard let completedAt = reminder.lastCompletedAt else { return false }
-        return tzCalendar.isDate(completedAt, inSameDayAs: date)
+        if let completedAt = reminder.lastCompletedAt,
+           tzCalendar.isDate(completedAt, inSameDayAs: date)
+        {
+            return true
+        }
+        if let ack = reminder.acknowledgedAt,
+           tzCalendar.isDate(ack, inSameDayAs: date)
+        {
+            return true
+        }
+        return recordedCompletionDates(for: reminder).contains { tzCalendar.isDate($0, inSameDayAs: date) }
     }
 
     private func isOverdue(_ reminder: LystariaReminder, fireDate _: Date) -> Bool {
@@ -305,7 +411,7 @@ struct ReminderTimeBlockView: View {
     private func reminderSlotCard(reminder: LystariaReminder, fireDate: Date) -> some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
             let now = context.date
-            let badgeDone = reminderShowsDoneBadge(reminder)
+            let badgeDone = isCompletedOccurrence(reminder, fireDate: fireDate) || reminderShowsDoneBadge(reminder)
             let circleFilled = reminderCircleIsFilled(reminder)
             let overdue = isOverdue(reminder, fireDate: fireDate)
             let dueNow = !overdue && isDueNow(reminder, fireDate: fireDate, now: now)
@@ -375,7 +481,6 @@ struct ReminderTimeBlockView: View {
                             if !live.isRecurring {
                                 locallyDoneIDs.insert(id)
                             }
-                            logHabitIfLinked(live)
                             onMarkDone(live)
                             // For recurring reminders, clear immediately so circle doesn't stay filled
                             if live.isRecurring {
@@ -415,6 +520,57 @@ struct ReminderTimeBlockView: View {
                     showingDetailPopup = true
                 }
             }
+        }
+    }
+    
+    fileprivate func logHabitProgressFromReminder(_ reminder: LystariaReminder, in modelContext: ModelContext) {
+        guard reminder.linkedKind == .habit,
+              let habitId = reminder.linkedHabitId else { return }
+
+        let descriptor = FetchDescriptor<Habit>()
+        guard let habit = ((try? modelContext.fetch(descriptor)) ?? []).first(where: { $0.id == habitId }) else {
+            return
+        }
+
+        let cal = Calendar.current
+        let todayStart = cal.startOfDay(for: Date())
+        let cap = max(1, habit.timesPerDay)
+
+        if let existingSkip = (habit.skips ?? []).first(where: { cal.isDate($0.dayStart, inSameDayAs: todayStart) }) {
+            modelContext.delete(existingSkip)
+            habit.skips = (habit.skips ?? []).filter { $0.persistentModelID != existingSkip.persistentModelID }
+        }
+
+        if let existingLog = (habit.logs ?? []).first(where: { cal.isDate($0.dayStart, inSameDayAs: todayStart) }) {
+            if existingLog.count < cap {
+                existingLog.count += 1
+                habit.updatedAt = Date()
+
+                _ = try? SelfCarePointsManager.awardHabitLog(
+                    in: modelContext,
+                    habitLogId: existingLog.id.uuidString,
+                    title: habit.title,
+                    loggedAt: Date()
+                )
+            }
+        } else {
+            let newLog = HabitLog(habit: habit, dayStart: todayStart, count: 1)
+            modelContext.insert(newLog)
+
+            if habit.logs == nil {
+                habit.logs = [newLog]
+            } else {
+                habit.logs?.append(newLog)
+            }
+
+            habit.updatedAt = Date()
+
+            _ = try? SelfCarePointsManager.awardHabitLog(
+                in: modelContext,
+                habitLogId: newLog.id.uuidString,
+                title: habit.title,
+                loggedAt: Date()
+            )
         }
     }
 
@@ -659,45 +815,6 @@ struct ReminderTimeBlockView: View {
         return df.string(from: date)
     }
 
-    // MARK: - Habit Logging
-
-    private func logHabitIfLinked(_ reminder: LystariaReminder) {
-        // Only habit-linked reminders should affect habit logs.
-        guard reminder.linkedKind == .habit,
-              let hid = reminder.linkedHabitId,
-              let habit = habits.first(where: { $0.id == hid }) else { return }
-
-        let cal = Calendar.current
-        let todayStart = cal.startOfDay(for: Date())
-        let cap = max(1, habit.timesPerDay)
-
-        // Match HabitsView behavior: if today was marked skipped, remove that skip
-        // when the user completes the habit from a linked reminder.
-        let todaysSkips = (habit.skips ?? []).filter {
-            cal.isDate($0.dayStart, inSameDayAs: todayStart)
-        }
-        for skip in todaysSkips {
-            modelContext.delete(skip)
-        }
-        if !todaysSkips.isEmpty {
-            habit.skips = (habit.skips ?? []).filter {
-                !cal.isDate($0.dayStart, inSameDayAs: todayStart)
-            }
-        }
-
-        if let existing = (habit.logs ?? []).first(where: { cal.isDate($0.dayStart, inSameDayAs: todayStart) }) {
-            if existing.count < cap {
-                existing.count += 1
-                existing.updatedAt = Date()
-            }
-        } else {
-            let newLog = HabitLog(habit: habit, dayStart: todayStart, count: 1)
-            modelContext.insert(newLog)
-        }
-
-        habit.updatedAt = Date()
-        habit.logs = habit.logs
-    }
 
     // MARK: - Time Block Status Badge (smaller, matches schedule kind badge size)
 

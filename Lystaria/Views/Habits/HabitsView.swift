@@ -1065,7 +1065,7 @@ struct HabitCard: View {
     }
 
     private func resetHabitStats() {
-        habit.statsResetAt = todayStart
+        habit.statsResetAt = Date()
         habit.updatedAt = Date()
     }
 
@@ -1120,7 +1120,7 @@ struct HabitCard: View {
         // for the *next* occurrence, so we clear `acknowledgedAt` after advancing.
         r.updatedAt = now
 
-        // Interval-based kinds advance purely by their minute interval from now.
+        // Interval-based kinds advance purely by their minute interval from the reminder's current scheduled time.
         if habit.reminderKind == .everyXHours || habit.reminderKind == .everyXMinutes {
             let intervalMins: Int
             if habit.reminderKind == .everyXHours {
@@ -1129,7 +1129,7 @@ struct HabitCard: View {
                 intervalMins = max(1, habit.reminderIntervalMinutes)
             }
             let next = ReminderCompute.nextRunInterval(
-                after: now.addingTimeInterval(91),
+                after: r.nextRunAt.addingTimeInterval(91),
                 intervalMinutes: intervalMins,
                 windowStart: habit.reminderIntervalWindowStart,
                 windowEnd: habit.reminderIntervalWindowEnd
@@ -1728,6 +1728,22 @@ struct NewHabitSheet: View {
         let (hh, mm) = ReminderCompute.hourMinute(from: date)
         return String(format: "%02d:%02d", hh, mm)
     }
+
+    private func computedIntervalTimesPerDay() -> Int {
+        let (startH, startM) = ReminderCompute.hourMinute(from: intervalWindowStart)
+        let (endH, endM) = ReminderCompute.hourMinute(from: intervalWindowEnd)
+
+        let startTotalMinutes = startH * 60 + startM
+        let endTotalMinutes = endH * 60 + endM
+
+        let intervalMinutes = reminderKind == .everyXHours
+            ? max(1, intervalValue) * 60
+            : max(1, intervalValue)
+
+        guard endTotalMinutes >= startTotalMinutes else { return 1 }
+
+        return max(1, ((endTotalMinutes - startTotalMinutes) / intervalMinutes) + 1)
+    }
     
     var body: some View {
         LystariaFullScreenForm(
@@ -1746,11 +1762,15 @@ struct NewHabitSheet: View {
                     weeklyDays = []
                 }
 
+                let resolvedTimesPerDay = (reminderEnabled && (reminderKind == .everyXHours || reminderKind == .everyXMinutes))
+                    ? computedIntervalTimesPerDay()
+                    : timesPerDay
+
                 let habit = Habit(
                     title: titleTrimmed,
                     details: details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : details,
                     daysPerWeek: daysPerWeek,
-                    timesPerDay: timesPerDay,
+                    timesPerDay: resolvedTimesPerDay,
                     reminderEnabled: reminderEnabled,
                     reminderKind: reminderEnabled ? reminderKind : .none,
                     reminderTimeOfDay: reminderEnabled ? timeStr24(from: reminderTimes.first ?? Date()) : nil,
@@ -1784,12 +1804,17 @@ struct NewHabitSheet: View {
                         } else if now < todayWindowStart {
                             firstRun = todayWindowStart
                         } else if now <= todayWindowEnd {
-                            firstRun = ReminderCompute.nextRunInterval(
-                                after: now,
-                                intervalMinutes: intervalMinutes,
-                                windowStart: habit.reminderIntervalWindowStart,
-                                windowEnd: habit.reminderIntervalWindowEnd
-                            )
+                            let intervalSeconds = TimeInterval(intervalMinutes * 60)
+                            let elapsed = max(0, now.timeIntervalSince(todayWindowStart))
+                            let stepCount = Int(ceil(elapsed / intervalSeconds))
+                            let candidate = todayWindowStart.addingTimeInterval(TimeInterval(stepCount) * intervalSeconds)
+
+                            if candidate <= todayWindowEnd {
+                                firstRun = candidate
+                            } else {
+                                let tomorrow = cal.date(byAdding: .day, value: 1, to: todayStart) ?? todayStart
+                                firstRun = ReminderCompute.merge(day: tomorrow, hour: wsH, minute: wsM)
+                            }
                         } else {
                             let tomorrow = cal.date(byAdding: .day, value: 1, to: todayStart) ?? todayStart
                             firstRun = ReminderCompute.merge(day: tomorrow, hour: wsH, minute: wsM)
@@ -2154,6 +2179,22 @@ struct EditHabitSheet: View {
     private func timeStr24(from date: Date) -> String {
         let (hh, mm) = ReminderCompute.hourMinute(from: date)
         return String(format: "%02d:%02d", hh, mm)
+    }
+
+    private func computedIntervalTimesPerDay() -> Int {
+        let (startH, startM) = ReminderCompute.hourMinute(from: intervalWindowStart)
+        let (endH, endM) = ReminderCompute.hourMinute(from: intervalWindowEnd)
+
+        let startTotalMinutes = startH * 60 + startM
+        let endTotalMinutes = endH * 60 + endM
+
+        let intervalMinutes = reminderKind == .everyXHours
+            ? max(1, intervalValue) * 60
+            : max(1, intervalValue)
+
+        guard endTotalMinutes >= startTotalMinutes else { return 1 }
+
+        return max(1, ((endTotalMinutes - startTotalMinutes) / intervalMinutes) + 1)
     }
 
     private var linkedReminders: [LystariaReminder] {
@@ -2542,11 +2583,15 @@ struct EditHabitSheet: View {
             weeklyDays = []
         }
 
+        let resolvedTimesPerDay = (reminderEnabled && (reminderKind == .everyXHours || reminderKind == .everyXMinutes))
+            ? computedIntervalTimesPerDay()
+            : timesPerDay
+
         habit.title = titleTrimmed
         let detailsTrimmed = details.trimmingCharacters(in: .whitespacesAndNewlines)
         habit.details = detailsTrimmed.isEmpty ? nil : detailsTrimmed
         habit.daysPerWeek = daysPerWeek
-        habit.timesPerDay = timesPerDay
+        habit.timesPerDay = resolvedTimesPerDay
 
         habit.reminderEnabled = reminderEnabled
         habit.reminderKind = reminderEnabled ? reminderKind : .none
@@ -2614,12 +2659,17 @@ struct EditHabitSheet: View {
                 } else if now < todayWindowStart {
                     firstRun = todayWindowStart
                 } else if now <= todayWindowEnd {
-                    firstRun = ReminderCompute.nextRunInterval(
-                        after: now,
-                        intervalMinutes: intervalMinutes,
-                        windowStart: habit.reminderIntervalWindowStart,
-                        windowEnd: habit.reminderIntervalWindowEnd
-                    )
+                    let intervalSeconds = TimeInterval(intervalMinutes * 60)
+                    let elapsed = max(0, now.timeIntervalSince(todayWindowStart))
+                    let stepCount = Int(ceil(elapsed / intervalSeconds))
+                    let candidate = todayWindowStart.addingTimeInterval(TimeInterval(stepCount) * intervalSeconds)
+
+                    if candidate <= todayWindowEnd {
+                        firstRun = candidate
+                    } else {
+                        let tomorrow = cal.date(byAdding: .day, value: 1, to: todayStart) ?? todayStart
+                        firstRun = ReminderCompute.merge(day: tomorrow, hour: wsH, minute: wsM)
+                    }
                 } else {
                     let tomorrow = cal.date(byAdding: .day, value: 1, to: todayStart) ?? todayStart
                     firstRun = ReminderCompute.merge(day: tomorrow, hour: wsH, minute: wsM)

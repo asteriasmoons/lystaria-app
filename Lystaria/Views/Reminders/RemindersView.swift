@@ -66,10 +66,33 @@ struct RemindersView: View {
             return cal.isDate(reminder.nextRunAt, inSameDayAs: date) ? 1 : 0
 
         case .interval:
-            // Interval reminders are continuous — count 1 if nextRunAt is today or it was completed today.
-            let isToday = cal.isDate(reminder.nextRunAt, inSameDayAs: date)
-            let completedToday = isCompletedToday(reminder)
-            return (isToday || completedToday) ? 1 : 0
+            guard cal.isDate(reminder.nextRunAt, inSameDayAs: date) || isCompletedToday(reminder) else { return 0 }
+
+            guard reminder.linkedKind == .habit,
+                  let habitId = reminder.linkedHabitId,
+                  let habit = habits.first(where: { $0.id == habitId }) else {
+                return 1
+            }
+
+            let intervalMinutes: Int
+            if habit.reminderKind == .everyXHours {
+                intervalMinutes = max(1, habit.reminderIntervalHours) * 60
+            } else if habit.reminderKind == .everyXMinutes {
+                intervalMinutes = max(1, habit.reminderIntervalMinutes)
+            } else {
+                return 1
+            }
+
+            guard let (startH, startM) = ReminderCompute.parseHHMM(habit.reminderIntervalWindowStart),
+                  let (endH, endM) = ReminderCompute.parseHHMM(habit.reminderIntervalWindowEnd) else {
+                return 1
+            }
+
+            let startTotalMinutes = startH * 60 + startM
+            let endTotalMinutes = endH * 60 + endM
+            guard endTotalMinutes >= startTotalMinutes else { return 1 }
+
+            return max(1, ((endTotalMinutes - startTotalMinutes) / intervalMinutes) + 1)
 
         case .daily, .weekly, .monthly, .yearly:
             // Only count if nextRunAt is today OR the reminder was completed today
@@ -91,27 +114,61 @@ struct RemindersView: View {
     }
 
     private var upcomingTodayCount: Int {
+        let cal = ReminderCompute.tzCalendar
         let now = Date()
-        let endOfDay = Calendar.current.date(
-            byAdding: .day, value: 1,
-            to: Calendar.current.startOfDay(for: now),
-        )!
+        let endOfDay = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: now))!
+
         return allReminders
             .filter { $0.status != .deleted }
             .filter { $0.nextRunAt >= now && $0.nextRunAt < endOfDay }
             .reduce(0) { sum, reminder in
-                // nextRunAt points to the next pending fire time — count remaining times today.
-                // Count how many timesOfDay are >= nextRunAt's time within today.
                 guard let schedule = reminder.schedule else { return sum + 1 }
-                if schedule.kind == .once || schedule.kind == .interval {
+
+                if schedule.kind == .interval {
+                    guard reminder.linkedKind == .habit,
+                          let habitId = reminder.linkedHabitId,
+                          let habit = habits.first(where: { $0.id == habitId }) else {
+                        return sum + 1
+                    }
+
+                    let intervalMinutes: Int
+                    if habit.reminderKind == .everyXHours {
+                        intervalMinutes = max(1, habit.reminderIntervalHours) * 60
+                    } else if habit.reminderKind == .everyXMinutes {
+                        intervalMinutes = max(1, habit.reminderIntervalMinutes)
+                    } else {
+                        return sum + 1
+                    }
+
+                    guard let (startH, startM) = ReminderCompute.parseHHMM(habit.reminderIntervalWindowStart),
+                          let (endH, endM) = ReminderCompute.parseHHMM(habit.reminderIntervalWindowEnd) else {
+                        return sum + 1
+                    }
+
+                    let nextHH = cal.component(.hour, from: reminder.nextRunAt)
+                    let nextMM = cal.component(.minute, from: reminder.nextRunAt)
+                    let nextTotalMinutes = nextHH * 60 + nextMM
+                    let startTotalMinutes = startH * 60 + startM
+                    let endTotalMinutes = endH * 60 + endM
+
+                    guard endTotalMinutes >= startTotalMinutes else { return sum + 1 }
+                    guard nextTotalMinutes >= startTotalMinutes && nextTotalMinutes <= endTotalMinutes else {
+                        return sum
+                    }
+
+                    let remaining = ((endTotalMinutes - nextTotalMinutes) / intervalMinutes) + 1
+                    return sum + max(1, remaining)
+                }
+
+                if schedule.kind == .once {
                     return sum + 1
                 }
+
                 let times = (schedule.timesOfDay?.isEmpty == false)
                     ? (schedule.timesOfDay ?? [])
                     : (schedule.timeOfDay != nil ? [schedule.timeOfDay!] : [])
                 if times.isEmpty { return sum + 1 }
-                // Count times that are >= nextRunAt's HH:mm
-                let cal = ReminderCompute.tzCalendar
+
                 let nextHH = cal.component(.hour, from: reminder.nextRunAt)
                 let nextMM = cal.component(.minute, from: reminder.nextRunAt)
                 let remaining = times.compactMap { ReminderCompute.parseHHMM($0) }
@@ -385,7 +442,7 @@ struct RemindersView: View {
         GlassCard {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
-                    Image("notiffill")
+                    Image("bellfill")
                         .renderingMode(.template)
                         .resizable()
                         .scaledToFit()
@@ -432,6 +489,9 @@ struct RemindersView: View {
                     let id = reminder.persistentModelID
                     ReminderCard(
                         reminder: reminder,
+                        linkedHabit: reminder.linkedKind == .habit
+                            ? habits.first(where: { $0.id == reminder.linkedHabitId })
+                            : nil,
                         onDone: {
                             if let live = modelContext.model(for: id) as? LystariaReminder {
                                 markDone(live)
@@ -502,42 +562,78 @@ struct RemindersView: View {
         }
     }
 
-    private func logHabitIfLinked(_ reminder: LystariaReminder) {
-        // Only habit-linked reminders should affect habit logs.
+    private func logHabitProgressFromReminder(_ reminder: LystariaReminder, in modelContext: ModelContext) {
         guard reminder.linkedKind == .habit,
-              let hid = reminder.linkedHabitId,
-              let habit = habits.first(where: { $0.id == hid }) else { return }
+              let habitId = reminder.linkedHabitId else { return }
+
+        let descriptor = FetchDescriptor<Habit>()
+        guard let habit = ((try? modelContext.fetch(descriptor)) ?? []).first(where: { $0.id == habitId }) else {
+            return
+        }
 
         let cal = Calendar.current
         let todayStart = cal.startOfDay(for: Date())
-        let cap = max(1, habit.timesPerDay)
 
-        // Match HabitsView behavior: if today was marked skipped, remove that skip
-        // when the user completes the habit from a linked reminder.
-        let todaysSkips = (habit.skips ?? []).filter {
-            cal.isDate($0.dayStart, inSameDayAs: todayStart)
-        }
-        for skip in todaysSkips {
-            modelContext.delete(skip)
-        }
-        if !todaysSkips.isEmpty {
-            habit.skips = (habit.skips ?? []).filter {
-                !cal.isDate($0.dayStart, inSameDayAs: todayStart)
+        // For interval-based habits the real daily target is derived from the window ÷ interval,
+        // NOT from habit.timesPerDay (which stores the base value and may be stale / 1).
+        let cap: Int
+        let kind = habit.reminderKind
+        if kind == .everyXHours || kind == .everyXMinutes {
+            let intervalMins: Int
+            if kind == .everyXHours {
+                intervalMins = max(1, habit.reminderIntervalHours) * 60
+            } else {
+                intervalMins = max(1, habit.reminderIntervalMinutes)
             }
+            if !habit.reminderIntervalWindowStart.isEmpty,
+               !habit.reminderIntervalWindowEnd.isEmpty,
+               let (wsH, wsM) = ReminderCompute.parseHHMM(habit.reminderIntervalWindowStart),
+               let (weH, weM) = ReminderCompute.parseHHMM(habit.reminderIntervalWindowEnd) {
+                let windowMins = (weH * 60 + weM) - (wsH * 60 + wsM)
+                cap = windowMins > 0 ? max(1, (windowMins / intervalMins) + 1) : max(1, habit.timesPerDay)
+            } else {
+                cap = max(1, habit.timesPerDay)
+            }
+        } else {
+            cap = max(1, habit.timesPerDay)
         }
 
-        if let existing = (habit.logs ?? []).first(where: { cal.isDate($0.dayStart, inSameDayAs: todayStart) }) {
-            if existing.count < cap {
-                existing.count += 1
-                existing.updatedAt = Date()
+        if let existingSkip = (habit.skips ?? []).first(where: { cal.isDate($0.dayStart, inSameDayAs: todayStart) }) {
+            modelContext.delete(existingSkip)
+            habit.skips = (habit.skips ?? []).filter { $0.persistentModelID != existingSkip.persistentModelID }
+        }
+
+        if let existingLog = (habit.logs ?? []).first(where: { cal.isDate($0.dayStart, inSameDayAs: todayStart) }) {
+            if existingLog.count < cap {
+                existingLog.count += 1
+                habit.updatedAt = Date()
+
+                _ = try? SelfCarePointsManager.awardHabitLog(
+                    in: modelContext,
+                    habitLogId: existingLog.id.uuidString,
+                    title: habit.title,
+                    loggedAt: Date()
+                )
             }
         } else {
             let newLog = HabitLog(habit: habit, dayStart: todayStart, count: 1)
             modelContext.insert(newLog)
-        }
 
-        habit.updatedAt = Date()
-        habit.logs = habit.logs
+            if habit.logs == nil {
+                habit.logs = [newLog]
+            } else {
+                habit.logs?.append(newLog)
+            }
+
+            habit.updatedAt = Date()
+
+            _ = try? SelfCarePointsManager.awardHabitLog(
+                in: modelContext,
+                habitLogId: newLog.id.uuidString,
+                title: habit.title,
+                loggedAt: Date()
+            )
+        }
     }
 
     private func logMedicationIfLinked(_ reminder: LystariaReminder) {
@@ -660,7 +756,7 @@ struct RemindersView: View {
         }
 
         // If this reminder is linked to a habit, count it as a habit log.
-        logHabitIfLinked(reminder)
+        logHabitProgressFromReminder(reminder, in: modelContext)
         logMedicationIfLinked(reminder)
         let completedOccurrenceDate = reminder.nextRunAt
 
@@ -668,8 +764,27 @@ struct RemindersView: View {
             let now = Date()
             // Skip past the just-completed occurrence so we truly advance to the NEXT one.
             // Use max(now, nextRunAt) so completing early still advances past the scheduled time.
+            // AFTER:
             let base = max(now, reminder.nextRunAt)
-            reminder.nextRunAt = ReminderCompute.nextRun(after: base.addingTimeInterval(91), reminder: reminder)
+
+            let intervalWindowStart: String? = {
+                guard reminder.linkedKind == .habit,
+                      let habitId = reminder.linkedHabitId else { return nil }
+                return habits.first(where: { $0.id == habitId })?.reminderIntervalWindowStart
+            }()
+
+            let intervalWindowEnd: String? = {
+                guard reminder.linkedKind == .habit,
+                      let habitId = reminder.linkedHabitId else { return nil }
+                return habits.first(where: { $0.id == habitId })?.reminderIntervalWindowEnd
+            }()
+
+            reminder.nextRunAt = ReminderCompute.nextRun(
+                after: base.addingTimeInterval(91),
+                reminder: reminder,
+                intervalWindowStart: intervalWindowStart,
+                intervalWindowEnd: intervalWindowEnd
+            )
 
             // Clear acknowledged state so the circle unchecks immediately on re-render.
             reminder.acknowledgedAt = nil
@@ -714,14 +829,33 @@ struct RemindersView: View {
     }
     
     private func markDoneFromTimeBlock(_ reminder: LystariaReminder) {
-        logHabitIfLinked(reminder)
+        logHabitProgressFromReminder(reminder, in: modelContext)
         logMedicationIfLinked(reminder)
         let completedOccurrenceDate = reminder.nextRunAt
 
         if reminder.isRecurring {
             let now = Date()
             let base = max(now, reminder.nextRunAt)
-            reminder.nextRunAt = ReminderCompute.nextRun(after: base.addingTimeInterval(91), reminder: reminder)
+            let intervalWindowStart: String? = {
+                guard reminder.linkedKind == .habit,
+                      let habitId = reminder.linkedHabitId else { return nil }
+                let descriptor = FetchDescriptor<Habit>()
+                return ((try? modelContext.fetch(descriptor)) ?? []).first(where: { $0.id == habitId })?.reminderIntervalWindowStart
+            }()
+
+            let intervalWindowEnd: String? = {
+                guard reminder.linkedKind == .habit,
+                      let habitId = reminder.linkedHabitId else { return nil }
+                let descriptor = FetchDescriptor<Habit>()
+                return ((try? modelContext.fetch(descriptor)) ?? []).first(where: { $0.id == habitId })?.reminderIntervalWindowEnd
+            }()
+
+            reminder.nextRunAt = ReminderCompute.nextRun(
+                after: reminder.nextRunAt.addingTimeInterval(91),
+                reminder: reminder,
+                intervalWindowStart: intervalWindowStart,
+                intervalWindowEnd: intervalWindowEnd
+            )
             reminder.acknowledgedAt = nil
             if reminder.reminderType == .routine {
                 reminder.resetRoutineChecklist(for: "\(reminder.nextRunAt.timeIntervalSince1970)")
@@ -758,12 +892,31 @@ struct RemindersView: View {
     }
 
     private func snooze(_ reminder: LystariaReminder, minutes: Int) {
-        print("[RemindersView] snooze id=\(reminder.id) minutes=\(minutes) old nextRunAt=\(reminder.nextRunAt)")
         let cal = ReminderCompute.tzCalendar
-        reminder.nextRunAt = cal.date(byAdding: .minute, value: minutes, to: reminder.nextRunAt) ?? reminder.nextRunAt
+        let snoozed = cal.date(byAdding: .minute, value: minutes, to: reminder.nextRunAt) ?? reminder.nextRunAt
+
+        // For interval habit reminders, clamp the snoozed time back inside the window
+        // so a snooze near the end of the window doesn't fire after it closes.
+        if reminder.schedule?.kind == .interval,
+           reminder.linkedKind == .habit,
+           let habitId = reminder.linkedHabitId,
+           let habit = habits.first(where: { $0.id == habitId }),
+           let iv = reminder.schedule?.intervalMinutes,
+           !habit.reminderIntervalWindowStart.isEmpty,
+           !habit.reminderIntervalWindowEnd.isEmpty
+        {
+            reminder.nextRunAt = ReminderCompute.nextRunInterval(
+                after: snoozed,
+                intervalMinutes: iv,
+                windowStart: habit.reminderIntervalWindowStart,
+                windowEnd: habit.reminderIntervalWindowEnd
+            )
+        } else {
+            reminder.nextRunAt = snoozed
+        }
+
         reminder.updatedAt = Date()
         try? modelContext.save()
-        print("[RemindersView] snoozed new nextRunAt=\(reminder.nextRunAt)")
         NotificationManager.shared.snoozeReminder(reminder)
     }
 
@@ -1048,6 +1201,7 @@ struct OverviewStatCard: View {
 
 struct ReminderCard: View {
     @Bindable var reminder: LystariaReminder
+    var linkedHabit: Habit? = nil
     @State private var isChecklistExpanded = false
     @State private var showingDeleteConfirm = false
     @State private var showingReschedulePopup = false
@@ -1159,8 +1313,49 @@ struct ReminderCard: View {
 
     private var scheduledTimes: [String] {
         guard let schedule = reminder.schedule else { return [] }
-        // Interval reminders don't have fixed times-of-day pills.
-        if schedule.kind == .interval { return [] }
+
+        // Interval reminders: compute all exact fire times from the habit's window + interval.
+        if schedule.kind == .interval {
+            guard let iv = schedule.intervalMinutes, iv > 0,
+                  let habit = linkedHabit,
+                  !habit.reminderIntervalWindowStart.isEmpty,
+                  !habit.reminderIntervalWindowEnd.isEmpty,
+                  let (wsH, wsM) = ReminderCompute.parseHHMM(habit.reminderIntervalWindowStart),
+                  let (weH, weM) = ReminderCompute.parseHHMM(habit.reminderIntervalWindowEnd)
+            else {
+                // No window configured — fall back to the descriptive pill
+                guard let iv = schedule.intervalMinutes, iv > 0 else { return [] }
+                if iv >= 60 && iv % 60 == 0 {
+                    return ["Every \(iv / 60)h"]
+                } else if iv >= 60 {
+                    return ["Every \(iv / 60)h \(iv % 60)m"]
+                } else {
+                    return ["Every \(iv)m"]
+                }
+            }
+
+            let startTotal = wsH * 60 + wsM
+            let endTotal   = weH * 60 + weM
+            guard endTotal >= startTotal else { return [] }
+
+            let df = DateFormatter()
+            df.timeZone = displayTimeZone
+            df.locale = .current
+            df.timeStyle = .short
+            df.dateStyle = .none
+
+            let day = Date()
+            var times: [String] = []
+            var cursor = startTotal
+            while cursor <= endTotal {
+                let h = cursor / 60
+                let m = cursor % 60
+                let d = ReminderCompute.merge(day: day, hour: h, minute: m, in: displayTimeZone)
+                times.append(df.string(from: d))
+                cursor += iv
+            }
+            return times
+        }
 
         let raw = (schedule.timesOfDay?.isEmpty == false)
             ? (schedule.timesOfDay ?? [])
@@ -1202,17 +1397,20 @@ struct ReminderCard: View {
     @ViewBuilder
     private func timePillsView() -> some View {
         if !scheduledTimes.isEmpty {
-            // Tiny pills that wrap nicely
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 64), spacing: 3)], alignment: .leading, spacing: 3) {
-                ForEach(scheduledTimes, id: \.self) { t in
-                    Text(t)
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .background(Color.white.opacity(0.14))
-                        .clipShape(Capsule())
-                        .overlay(Capsule().stroke(Color.white.opacity(0.18), lineWidth: 1))
+            VStack(alignment: .leading, spacing: 3) {
+                ForEach(Array(stride(from: 0, to: scheduledTimes.count, by: 3)), id: \.self) { rowStart in
+                    HStack(spacing: 3) {
+                        ForEach(rowStart..<min(rowStart + 3, scheduledTimes.count), id: \.self) { i in
+                            Text(scheduledTimes[i])
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 5)
+                                .background(Color.white.opacity(0.14))
+                                .clipShape(Capsule())
+                                .overlay(Capsule().stroke(Color.white.opacity(0.18), lineWidth: 1))
+                        }
+                    }
                 }
             }
         }
@@ -2151,7 +2349,7 @@ struct NewReminderSheet: View {
                     newReminder.linkedMedicationId = selectedMedicationId
                     newReminder.linkedMedicationQuantity = max(1, linkedMedicationQuantity)
                     newReminder.linkedHabitId = nil
-                    // Store per-day overrides on a dedicated link object
+                    // Update overrides on the dedicated link object
                     let link = ReminderMedicationLink(
                         reminder: newReminder,
                         medicationId: selectedMedicationId,
@@ -2736,13 +2934,32 @@ struct EditReminderSheet: View {
                     )
                     currentReminder.medicationLinks = [link]
                 } else {
-                    currentReminder.linkedKindRaw = nil
                     currentReminder.linkedMedicationId = nil
                     currentReminder.linkedMedicationQuantity = 1
+
+                    if currentReminder.linkedKind == .medication {
+                        currentReminder.linkedKindRaw = nil
+                        currentReminder.medicationLinks = nil
+                    }
+
+                    // Restore badge kind for previously broken reminders that still have a linked habit.
+                    if currentReminder.linkedHabitId != nil {
+                        currentReminder.linkedKind = .habit
+                    }
                 }
             } else {
                 currentReminder.linkedMedicationId = nil
                 currentReminder.linkedMedicationQuantity = 1
+
+                if currentReminder.linkedKind == .medication {
+                    currentReminder.linkedKindRaw = nil
+                    currentReminder.medicationLinks = nil
+                }
+
+                // Restore badge kind for previously broken routine reminders that still have a linked habit.
+                if currentReminder.linkedHabitId != nil {
+                    currentReminder.linkedKind = .habit
+                }
             }
 
             let schedule: ReminderSchedule?
@@ -2831,8 +3048,60 @@ private struct ReminderFormKeyboardDismissModifier: ViewModifier {
     }
 }
 
+
 fileprivate func dismissKeyboard() {
     UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+}
+
+fileprivate func logHabitProgressFromReminder(_ reminder: LystariaReminder, in modelContext: ModelContext) {
+    guard reminder.linkedKind == .habit,
+          let habitId = reminder.linkedHabitId else { return }
+
+    let descriptor = FetchDescriptor<Habit>()
+    guard let habit = ((try? modelContext.fetch(descriptor)) ?? []).first(where: { $0.id == habitId }) else {
+        return
+    }
+
+    let cal = Calendar.current
+    let todayStart = cal.startOfDay(for: Date())
+    let cap = max(1, habit.timesPerDay)
+
+    if let existingSkip = (habit.skips ?? []).first(where: { cal.isDate($0.dayStart, inSameDayAs: todayStart) }) {
+        modelContext.delete(existingSkip)
+        habit.skips = (habit.skips ?? []).filter { $0.persistentModelID != existingSkip.persistentModelID }
+    }
+
+    if let existingLog = (habit.logs ?? []).first(where: { cal.isDate($0.dayStart, inSameDayAs: todayStart) }) {
+        if existingLog.count < cap {
+            existingLog.count += 1
+            habit.updatedAt = Date()
+
+            _ = try? SelfCarePointsManager.awardHabitLog(
+                in: modelContext,
+                habitLogId: existingLog.id.uuidString,
+                title: habit.title,
+                loggedAt: Date()
+            )
+        }
+    } else {
+        let newLog = HabitLog(habit: habit, dayStart: todayStart, count: 1)
+        modelContext.insert(newLog)
+
+        if habit.logs == nil {
+            habit.logs = [newLog]
+        } else {
+            habit.logs?.append(newLog)
+        }
+
+        habit.updatedAt = Date()
+
+        _ = try? SelfCarePointsManager.awardHabitLog(
+            in: modelContext,
+            habitLogId: newLog.id.uuidString,
+            title: habit.title,
+            loggedAt: Date()
+        )
+    }
 }
 
 // MARK: - Shared Schedule Form
@@ -3649,354 +3918,6 @@ private func isReminderDueNow(_ reminder: LystariaReminder, now: Date) -> Bool {
 private func isReminderUpcoming(_ reminder: LystariaReminder, now: Date) -> Bool {
     let dueDate = reminder.nextRunAt
     return dueDate > now && !isReminderCompleted(reminder, occurrenceDate: dueDate)
-}
-
-enum ReminderCompute {
-    static var tzCalendar: Calendar {
-        var cal = Calendar.current
-        let tzID = NotificationManager.shared.effectiveTimezoneID
-        cal.timeZone = TimeZone(identifier: tzID) ?? .current
-        return cal
-    }
-
-    static func hourMinute(from date: Date) -> (Int, Int) {
-        let cal = tzCalendar
-        let c = cal.dateComponents([.hour, .minute], from: date)
-        return (c.hour ?? 0, c.minute ?? 0)
-    }
-
-    static func parseHHMM(_ s: String) -> (Int, Int)? {
-        let parts = s.split(separator: ":")
-        guard parts.count == 2,
-              let hh = Int(parts[0]),
-              let mm = Int(parts[1]),
-              (0 ... 23).contains(hh),
-              (0 ... 59).contains(mm) else { return nil }
-        return (hh, mm)
-    }
-
-    static func merge(day: Date, hour: Int, minute: Int) -> Date {
-        var c = tzCalendar.dateComponents([.year, .month, .day], from: day)
-        c.hour = hour
-        c.minute = minute
-        c.second = 0
-        return tzCalendar.date(from: c) ?? day
-    }
-
-    static func merge(day: Date, hour: Int, minute: Int, in timeZone: TimeZone) -> Date {
-        var cal = tzCalendar
-        cal.timeZone = timeZone
-        var c = cal.dateComponents([.year, .month, .day], from: day)
-        c.hour = hour
-        c.minute = minute
-        c.second = 0
-        return cal.date(from: c) ?? day
-    }
-
-    static func firstRun(
-        kind: ReminderScheduleKind,
-        startDay: Date,
-        timesOfDay: [String],
-        daysOfWeek: [Int]?,
-        intervalMinutes: Int?,
-        recurrenceInterval: Int?,
-        dayOfMonth: Int?,
-        anchorMonth: Int?,
-        anchorDay: Int?,
-    ) -> Date {
-        let cal = tzCalendar
-        let now = Date()
-
-        if kind == .interval, let iv = intervalMinutes {
-            let base = cal.date(bySetting: .second, value: 0, of: now) ?? now
-            return cal.date(byAdding: .minute, value: iv, to: base) ?? base
-        }
-
-        // Parse times and sort
-        let parsedTimes: [(h: Int, m: Int)] = timesOfDay
-            .compactMap { parseHHMM($0) }
-            .sorted { a, b in
-                (a.0, a.1) < (b.0, b.1)
-            }
-
-        // Fallback if somehow empty
-        let times = parsedTimes.isEmpty ? [(hourMinute(from: now).0, hourMinute(from: now).1)] : parsedTimes
-
-        let repeatEvery = max(1, recurrenceInterval ?? 1)
-
-        let normalizedStart = cal.startOfDay(for: startDay)
-        var day = normalizedStart
-        var iterations = 0
-
-        // Find the earliest valid run from day forward
-        while true {
-            iterations += 1
-            if iterations > 365 {
-                // Safety cap: if no valid date found within a year, fall back to
-                // tomorrow at the first available time to prevent an infinite loop.
-                let tomorrow = cal.date(byAdding: .day, value: 1, to: now) ?? now
-                return merge(day: tomorrow, hour: times.first!.h, minute: times.first!.m)
-            }
-
-            if kind == .daily {
-                let deltaDays = cal.dateComponents([.day], from: normalizedStart, to: day).day ?? 0
-                if deltaDays % repeatEvery != 0 {
-                    day = cal.date(byAdding: .day, value: 1, to: day) ?? day
-                    continue
-                }
-            }
-
-            if kind == .monthly {
-                let wantedDay = min(dayOfMonth ?? cal.component(.day, from: normalizedStart), 31)
-                let dayComponent = cal.component(.day, from: day)
-                if dayComponent != wantedDay {
-                    let year = cal.component(.year, from: day)
-                    let month = cal.component(.month, from: day)
-                    var comps = DateComponents()
-                    comps.year = year
-                    comps.month = month
-                    comps.day = min(wantedDay, cal.range(of: .day, in: .month, for: day)?.count ?? wantedDay)
-                    let candidateDay = cal.startOfDay(for: cal.date(from: comps) ?? day)
-                    if candidateDay < day {
-                        day = cal.date(byAdding: .day, value: 1, to: day) ?? day
-                    } else {
-                        day = candidateDay
-                    }
-                    continue
-                }
-
-                let startMonthIndex = (cal.component(.year, from: normalizedStart) * 12) + cal.component(.month, from: normalizedStart)
-                let currentMonthIndex = (cal.component(.year, from: day) * 12) + cal.component(.month, from: day)
-                let monthDelta = currentMonthIndex - startMonthIndex
-                if monthDelta % repeatEvery != 0 {
-                    day = cal.date(byAdding: .day, value: 1, to: day) ?? day
-                    continue
-                }
-            }
-
-            if kind == .yearly {
-                let wantedMonth = anchorMonth ?? cal.component(.month, from: normalizedStart)
-                let fallbackDay = anchorDay ?? cal.component(.day, from: normalizedStart)
-                let maxDay = cal.range(of: .day, in: .month, for: cal.date(from: DateComponents(year: cal.component(.year, from: day), month: wantedMonth, day: 1)) ?? day)?.count ?? 31
-                let wantedDay = min(fallbackDay, maxDay)
-
-                let monthComponent = cal.component(.month, from: day)
-                let dayComponent = cal.component(.day, from: day)
-                if monthComponent != wantedMonth || dayComponent != wantedDay {
-                    var comps = DateComponents()
-                    comps.year = cal.component(.year, from: day)
-                    comps.month = wantedMonth
-                    comps.day = wantedDay
-                    let candidateDay = cal.startOfDay(for: cal.date(from: comps) ?? day)
-                    if candidateDay < day {
-                        day = cal.date(byAdding: .day, value: 1, to: day) ?? day
-                    } else {
-                        day = candidateDay
-                    }
-                    continue
-                }
-
-                let yearDelta = cal.component(.year, from: day) - cal.component(.year, from: normalizedStart)
-                if yearDelta % repeatEvery != 0 {
-                    day = cal.date(byAdding: .day, value: 1, to: day) ?? day
-                    continue
-                }
-            }
-
-            // Weekly restriction
-            if kind == .weekly, let days = daysOfWeek, !days.isEmpty {
-                let wanted = Set(days)
-                let weekdayIndex = cal.component(.weekday, from: day) - 1
-                if !wanted.contains(weekdayIndex) {
-                    day = cal.date(byAdding: .day, value: 1, to: day) ?? day
-                    continue
-                }
-            }
-
-            // Try each time for this day
-            var best: Date? = nil
-            for (hh, mm) in times {
-                let candidate = merge(day: day, hour: hh, minute: mm)
-
-                // 90-second tolerance window like before
-                let secondsBehind = now.timeIntervalSince(candidate)
-                if secondsBehind <= 90 {
-                    if best == nil || candidate < best! { best = candidate }
-                }
-            }
-
-            if let best { return best }
-
-            day = cal.date(byAdding: .day, value: 1, to: day) ?? day
-        }
-    }
-
-    static func nextRun(after now: Date, reminder: LystariaReminder) -> Date {
-        guard let schedule = reminder.schedule else { return reminder.nextRunAt }
-        let cal = tzCalendar
-
-        if schedule.kind == .interval, let iv = schedule.intervalMinutes {
-            let base = cal.date(bySetting: .second, value: 0, of: now) ?? now
-            return cal.date(byAdding: .minute, value: iv, to: base) ?? base
-        }
-
-        let timeStrings = (schedule.timesOfDay?.isEmpty == false)
-            ? (schedule.timesOfDay ?? [])
-            : (schedule.timeOfDay != nil ? [schedule.timeOfDay!] : [])
-
-        let parsedTimes: [(h: Int, m: Int)] = timeStrings
-            .compactMap { parseHHMM($0) }
-            .sorted { a, b in
-                (a.0, a.1) < (b.0, b.1)
-            }
-
-        let times = parsedTimes.isEmpty
-            ? [(hourMinute(from: reminder.nextRunAt).0, hourMinute(from: reminder.nextRunAt).1)]
-            : parsedTimes
-
-        let startSearchDay = cal.startOfDay(for: now)
-        let repeatEvery = max(1, schedule.interval ?? 1)
-        let normalizedStart = cal.startOfDay(for: reminder.nextRunAt)
-
-        var day = startSearchDay
-        var iterations = 0
-
-        while true {
-            iterations += 1
-            if iterations > 1500 {
-                let fallbackDay = cal.date(byAdding: .day, value: 1, to: startSearchDay) ?? startSearchDay
-                let first = times.first!
-                return merge(day: fallbackDay, hour: first.h, minute: first.m)
-            }
-
-            if schedule.kind == .daily {
-                let deltaDays = cal.dateComponents([.day], from: normalizedStart, to: day).day ?? 0
-                if deltaDays % repeatEvery != 0 {
-                    day = cal.date(byAdding: .day, value: 1, to: day) ?? day
-                    continue
-                }
-            }
-
-            if schedule.kind == .weekly {
-                let wanted = Set(schedule.daysOfWeek ?? [])
-                if !wanted.isEmpty {
-                    let weekdayIndex = cal.component(.weekday, from: day) - 1
-                    if !wanted.contains(weekdayIndex) {
-                        day = cal.date(byAdding: .day, value: 1, to: day) ?? day
-                        continue
-                    }
-                }
-
-                let deltaDays = cal.dateComponents([.day], from: normalizedStart, to: day).day ?? 0
-                let weekDelta = max(0, deltaDays / 7)
-                if weekDelta % repeatEvery != 0 {
-                    day = cal.date(byAdding: .day, value: 1, to: day) ?? day
-                    continue
-                }
-            }
-
-            if schedule.kind == .monthly {
-                let wantedDay = min(schedule.dayOfMonth ?? cal.component(.day, from: normalizedStart), 31)
-                let dayComponent = cal.component(.day, from: day)
-                if dayComponent != wantedDay {
-                    let year = cal.component(.year, from: day)
-                    let month = cal.component(.month, from: day)
-                    var comps = DateComponents()
-                    comps.year = year
-                    comps.month = month
-                    comps.day = min(wantedDay, cal.range(of: .day, in: .month, for: day)?.count ?? wantedDay)
-                    let candidateDay = cal.startOfDay(for: cal.date(from: comps) ?? day)
-                    if candidateDay < day {
-                        day = cal.date(byAdding: .day, value: 1, to: day) ?? day
-                    } else {
-                        day = candidateDay
-                    }
-                    continue
-                }
-
-                let startMonthIndex = (cal.component(.year, from: normalizedStart) * 12) + cal.component(.month, from: normalizedStart)
-                let currentMonthIndex = (cal.component(.year, from: day) * 12) + cal.component(.month, from: day)
-                let monthDelta = currentMonthIndex - startMonthIndex
-                if monthDelta % repeatEvery != 0 {
-                    day = cal.date(byAdding: .day, value: 1, to: day) ?? day
-                    continue
-                }
-            }
-
-            if schedule.kind == .yearly {
-                let wantedMonth = schedule.anchorMonth ?? cal.component(.month, from: normalizedStart)
-                let fallbackDay = schedule.anchorDay ?? cal.component(.day, from: normalizedStart)
-                let maxDay = cal.range(of: .day, in: .month, for: cal.date(from: DateComponents(year: cal.component(.year, from: day), month: wantedMonth, day: 1)) ?? day)?.count ?? 31
-                let wantedDay = min(fallbackDay, maxDay)
-
-                let monthComponent = cal.component(.month, from: day)
-                let dayComponent = cal.component(.day, from: day)
-                if monthComponent != wantedMonth || dayComponent != wantedDay {
-                    var comps = DateComponents()
-                    comps.year = cal.component(.year, from: day)
-                    comps.month = wantedMonth
-                    comps.day = wantedDay
-                    let candidateDay = cal.startOfDay(for: cal.date(from: comps) ?? day)
-                    if candidateDay < day {
-                        day = cal.date(byAdding: .day, value: 1, to: day) ?? day
-                    } else {
-                        day = candidateDay
-                    }
-                    continue
-                }
-
-                let yearDelta = cal.component(.year, from: day) - cal.component(.year, from: normalizedStart)
-                if yearDelta % repeatEvery != 0 {
-                    day = cal.date(byAdding: .day, value: 1, to: day) ?? day
-                    continue
-                }
-            }
-
-            for (hh, mm) in times {
-                let candidate = merge(day: day, hour: hh, minute: mm)
-                let secondsBehind = now.timeIntervalSince(candidate)
-                if secondsBehind <= 90 {
-                    return candidate
-                }
-            }
-
-            day = cal.date(byAdding: .day, value: 1, to: day) ?? day
-        }
-    }
-
-    /// Window-aware interval next run for habit reminders.
-    /// After adding intervalMinutes to now, if the result falls outside [windowStartHHMM, windowEndHHMM],
-    /// it clamps to the window start on the next day.
-    static func nextRunInterval(
-        after now: Date,
-        intervalMinutes: Int,
-        windowStart: String,
-        windowEnd: String
-    ) -> Date {
-        let cal = tzCalendar
-        let base = cal.date(bySetting: .second, value: 0, of: now) ?? now
-        let candidate = cal.date(byAdding: .minute, value: intervalMinutes, to: base) ?? base
-
-        guard
-            let (wsH, wsM) = parseHHMM(windowStart),
-            let (weH, weM) = parseHHMM(windowEnd)
-        else {
-            return candidate
-        }
-
-        let candidateMinutes = cal.component(.hour, from: candidate) * 60 + cal.component(.minute, from: candidate)
-        let windowStartMinutes = wsH * 60 + wsM
-        let windowEndMinutes = weH * 60 + weM
-
-        // If within the window, return as-is.
-        if candidateMinutes >= windowStartMinutes && candidateMinutes <= windowEndMinutes {
-            return candidate
-        }
-
-        // Otherwise, schedule at window start the next day.
-        let tomorrow = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: candidate)) ?? candidate
-        return merge(day: tomorrow, hour: wsH, minute: wsM)
-    }
 }
 
 enum ReminderStatusBadgeStyle {

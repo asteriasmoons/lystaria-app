@@ -60,6 +60,153 @@ final class CalendarSyncManager {
         }
     }
 
+    // MARK: - Direct EventKit deletion
+    // Called immediately from the UI delete actions so removals
+    // propagate to Apple Calendar without needing a separate sync run.
+    func deleteFromEventKit(identifier: String, span: EKSpan = .thisEvent) {
+        guard hasFullAccess else { return }
+        guard let ekEvent = eventStore.calendarItem(withIdentifier: identifier) as? EKEvent else { return }
+        try? eventStore.remove(ekEvent, span: span, commit: true)
+    }
+
+    // MARK: - Notification scheduling for imported events
+
+    /// Reads the first alarm from an EKEvent, schedules a local notification,
+    /// creates/updates the linked LystariaReminder, and wires reminderServerId.
+    private func scheduleNotificationIfNeeded(
+        for appEvent: CalendarEvent,
+        from ekEvent: EKEvent,
+        modelContext: ModelContext,
+        syncedAt: Date
+    ) {
+        // Only schedule if the event is in the future.
+        guard appEvent.startDate > syncedAt else { return }
+
+        // Find the first absolute-offset alarm.
+        guard let alarm = ekEvent.alarms?.first(where: { $0.relativeOffset <= 0 }) else {
+            // No alarm on this EKEvent — cancel any existing notification we may have scheduled.
+            if let rid = appEvent.reminderServerId {
+                NotificationManager.shared.cancelAllCalendarNotifications(id: rid)
+            }
+            return
+        }
+
+        // Compute the fire date from the relative offset (negative = before event).
+        let fireDate = appEvent.startDate.addingTimeInterval(alarm.relativeOffset)
+        guard fireDate > syncedAt else { return }
+
+        let minutesBefore = Int(-alarm.relativeOffset / 60)
+
+        // Reuse existing reminderServerId or mint a new one.
+        let rid: String
+        if let existing = appEvent.reminderServerId {
+            rid = existing
+        } else {
+            rid = UUID().uuidString
+            appEvent.reminderServerId = rid
+        }
+
+        NotificationManager.shared.cancelAllCalendarNotifications(id: rid)
+
+        let bodyText: String = {
+            var parts: [String] = []
+            if let loc = appEvent.location?.trimmingCharacters(in: .whitespacesAndNewlines), !loc.isEmpty {
+                parts.append(loc)
+            }
+            if let desc = appEvent.eventDescription?.trimmingCharacters(in: .whitespacesAndNewlines), !desc.isEmpty {
+                parts.append(desc)
+            }
+            let combined = parts.joined(separator: "\n")
+            if appEvent.allDay {
+                return combined.isEmpty ? "All-day event" : "All-day event — \(combined)"
+            }
+            return combined.isEmpty ? appEvent.title : combined
+        }()
+
+        // Build or update the LystariaReminder record.
+        let ridUUID = UUID(uuidString: rid)
+        let fetchDescriptor = FetchDescriptor<LystariaReminder>(
+            predicate: #Predicate { $0.linkedHabitId == ridUUID }
+        )
+        let existingReminder = try? modelContext.fetch(fetchDescriptor).first
+
+        let recurrenceRule: RecurrenceRule? = appEvent.recurrence ?? {
+            guard let rrule = appEvent.recurrenceRRule else { return nil }
+            return recurrence(fromRRule: rrule)
+        }()
+
+        let schedule: ReminderSchedule = {
+            guard let rule = recurrenceRule else { return .once }
+            let interval = max(1, rule.interval)
+            switch rule.freq {
+            case .daily:   return ReminderSchedule(kind: .daily, timeOfDay: hhmm(fireDate), interval: interval, daysOfWeek: nil)
+            case .weekly:
+                var cal = Calendar.current
+                cal.timeZone = TimeZone(identifier: NotificationManager.shared.effectiveTimezoneID) ?? .current
+                let wd = rule.byWeekday ?? [cal.component(.weekday, from: appEvent.startDate)]
+                return ReminderSchedule(kind: .weekly, timeOfDay: hhmm(fireDate), interval: interval, daysOfWeek: wd)
+            case .monthly: return ReminderSchedule(kind: .monthly, timeOfDay: hhmm(fireDate), interval: interval, daysOfWeek: nil)
+            case .yearly:  return ReminderSchedule(kind: .yearly, timeOfDay: hhmm(fireDate), interval: interval, daysOfWeek: nil)
+            }
+        }()
+
+        if let r = existingReminder {
+            r.title = appEvent.title
+            r.details = bodyText
+            r.nextRunAt = fireDate
+            r.status = .scheduled
+            r.schedule = schedule
+            r.acknowledgedAt = nil
+            r.timezone = NotificationManager.shared.effectiveTimezoneID
+            r.linkedKindRaw = "event"
+            r.linkedHabitId = UUID(uuidString: rid)
+            r.updatedAt = syncedAt
+        } else {
+            let r = LystariaReminder(
+                title: appEvent.title,
+                details: bodyText,
+                status: .scheduled,
+                nextRunAt: fireDate,
+                schedule: schedule,
+                timezone: NotificationManager.shared.effectiveTimezoneID
+            )
+            r.linkedKindRaw = "event"
+            r.linkedHabitId = UUID(uuidString: rid)
+            r.updatedAt = syncedAt
+            modelContext.insert(r)
+        }
+
+        NotificationManager.shared.requestPermissionIfNeeded()
+
+        if let rule = recurrenceRule {
+            NotificationManager.shared.scheduleRecurringCalendarEvent(
+                id: rid,
+                title: appEvent.title,
+                body: bodyText,
+                startDate: appEvent.startDate,
+                allDay: appEvent.allDay,
+                recurrence: rule,
+                exceptions: appEvent.recurrenceExceptions,
+                minutesBefore: minutesBefore
+            )
+        } else {
+            NotificationManager.shared.scheduleCalendarEvent(
+                id: rid,
+                title: appEvent.title,
+                body: bodyText,
+                fireDate: fireDate
+            )
+        }
+    }
+
+    private func hhmm(_ date: Date) -> String {
+        let df = DateFormatter()
+        df.locale = .current
+        df.timeZone = TimeZone(identifier: NotificationManager.shared.effectiveTimezoneID) ?? .current
+        df.dateFormat = "HH:mm"
+        return df.string(from: date)
+    }
+
     func loadCalendars() {
         refreshAuthorizationStatus()
 
@@ -130,14 +277,22 @@ final class CalendarSyncManager {
         _ appEvent: CalendarEvent,
         targetCalendar: EKCalendar
     ) -> Bool {
-        // STRICT: if it's already linked, it MUST match
+        // Already linked to a different calendar — never export to this one.
         if let linkedIdentifier = appEvent.appleCalendarIdentifier,
-           !linkedIdentifier.isEmpty {
-            return linkedIdentifier == targetCalendar.calendarIdentifier
+           !linkedIdentifier.isEmpty,
+           linkedIdentifier != targetCalendar.calendarIdentifier {
+            return false
         }
 
-        // ONLY allow brand new events to export
+        // Already synced with no pending changes — skip.
+        if appEvent.syncState == .synced && !appEvent.needsSync {
+            return false
+        }
+
+        // Must have something to export: new, modified, or conflicted-resolved.
         return appEvent.syncState == .newLocal
+            || appEvent.syncState == .modifiedLocal
+            || (appEvent.syncState == .synced && appEvent.needsSync)
     }
 
     private func appEventFingerprint(_ appEvent: CalendarEvent) -> String {
@@ -203,8 +358,13 @@ final class CalendarSyncManager {
         let hasLocalChanges = appEvent.syncState == .modifiedLocal || appEvent.syncState == .newLocal || appEvent.needsSync
         guard hasLocalChanges else { return false }
 
+        // If lastExternalHash is nil this is the first sync touch for this event.
+        // Treat it as a conflict only if the event already has a known sync baseline
+        // (lastSyncedAt set), meaning it was previously synced and now has local edits
+        // on top of an externally changed event we haven't seen before.
         guard let lastExternalHash = appEvent.lastExternalHash else {
-            return false
+            // No prior external hash: only conflict if we have a sync baseline but lost the hash.
+            return appEvent.lastSyncedAt != nil && appEvent.needsSync
         }
 
         return lastExternalHash != externalHash
@@ -215,11 +375,19 @@ final class CalendarSyncManager {
         appEventsByLocalId: [String: CalendarEvent],
         targetCalendar: EKCalendar
     ) -> Bool {
+        // Already linked to a different calendar — skip.
         if let linkedIdentifier = exceptionEvent.appleCalendarIdentifier,
-           !linkedIdentifier.isEmpty {
-            return linkedIdentifier == targetCalendar.calendarIdentifier
+           !linkedIdentifier.isEmpty,
+           linkedIdentifier != targetCalendar.calendarIdentifier {
+            return false
         }
 
+        // Already synced with no changes — skip.
+        if exceptionEvent.syncState == .synced && !exceptionEvent.needsSync {
+            return false
+        }
+
+        // Parent must be linked to this calendar.
         if let parentId = exceptionEvent.parentSeriesLocalId,
            let parent = appEventsByLocalId[parentId],
            let linkedIdentifier = parent.appleCalendarIdentifier,
@@ -228,7 +396,7 @@ final class CalendarSyncManager {
         }
 
         return exceptionEvent.syncState == .newLocal
-        
+            || exceptionEvent.syncState == .modifiedLocal
     }
 
     private func applyAppEvent(_ appEvent: CalendarEvent, to ekEvent: EKEvent, in targetCalendar: EKCalendar) {
@@ -298,7 +466,10 @@ final class CalendarSyncManager {
         }
 
         applyAppEvent(appEvent, to: ekEvent, in: targetCalendar)
-        try eventStore.save(ekEvent, span: .thisEvent, commit: false)
+        // Use .futureEvents for recurring masters so the recurrence rule propagates;
+        // .thisEvent for standalone events.
+        let span: EKSpan = appEvent.isRecurringSeriesMaster ? .futureEvents : .thisEvent
+        try eventStore.save(ekEvent, span: span, commit: false)
         markAppEventSyncedAfterExport(appEvent, ekEvent: ekEvent, in: targetCalendar, syncedAt: syncedAt)
         return true
     }
@@ -377,7 +548,10 @@ final class CalendarSyncManager {
         for appEvent in pendingDeletes {
             if let identifier = appEvent.appleCalendarItemIdentifier,
                let ekEvent = eventStore.calendarItem(withIdentifier: identifier) as? EKEvent {
-                try eventStore.remove(ekEvent, span: .futureEvents, commit: false)
+                // Use .futureEvents for recurring masters so the full series is removed;
+                // .thisEvent for standalone events to avoid nuking unrelated occurrences.
+                let span: EKSpan = appEvent.isRecurringSeriesMaster ? .futureEvents : .thisEvent
+                try eventStore.remove(ekEvent, span: span, commit: false)
             }
         }
 
@@ -425,7 +599,7 @@ final class CalendarSyncManager {
     ) -> Int {
         let now = Date()
         let calendar = Calendar.current
-        let start = calendar.date(byAdding: .year, value: -1, to: now) ?? now
+        let start = calendar.startOfDay(for: now)
         let end = calendar.date(byAdding: .year, value: 2, to: now) ?? now
 
         let predicate = eventStore.predicateForEvents(
@@ -438,7 +612,38 @@ final class CalendarSyncManager {
         var importedCount = 0
         var seenRecurringSeriesKeys = Set<String>()
 
+        // Build a lookup of all app-event identifiers that are already known exception records,
+        // so we don't re-import them as new top-level events.
+        let knownExceptionIdentifiers = Set(
+            appEvents
+                .filter { $0.isRecurrenceException }
+                .compactMap { $0.appleCalendarItemIdentifier }
+        )
+
+        // Build identifier → app event lookup for O(1) matching.
+        let appEventsByIdentifier = Dictionary(
+            appEvents.compactMap { e -> (String, CalendarEvent)? in
+                guard let id = e.appleCalendarItemIdentifier else { return nil }
+                return (id, e)
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
+        // Title-based lookup for loose matching (recurring events whose occurrence
+        // startDate won't match the stored master startDate).
+        let appEventsByTitle = Dictionary(
+            grouping: appEvents.filter { $0.appleCalendarIdentifier == targetCalendar.calendarIdentifier },
+            by: { $0.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+        )
+
         for ekEvent in externalEvents {
+            // Skip individual EKEvent occurrences that correspond to app-side exception records.
+            if knownExceptionIdentifiers.contains(ekEvent.calendarItemIdentifier) {
+                if let existing = appEventsByIdentifier[ekEvent.calendarItemIdentifier] {
+                    updateAppEvent(existing, from: ekEvent, in: targetCalendar, syncedAt: now, modelContext: modelContext)
+                }
+                continue
+            }
+
             if let recurringSeriesKey = recurringSeriesImportKey(for: ekEvent, in: targetCalendar) {
                 if seenRecurringSeriesKeys.contains(recurringSeriesKey) {
                     continue
@@ -446,18 +651,27 @@ final class CalendarSyncManager {
                 seenRecurringSeriesKeys.insert(recurringSeriesKey)
             }
 
-            if let existing = appEvents.first(where: { $0.appleCalendarItemIdentifier == ekEvent.calendarItemIdentifier }) {
-                updateAppEvent(existing, from: ekEvent, in: targetCalendar, syncedAt: now)
+            // 1. Exact identifier match — works for both standalone and recurring masters.
+            if let existing = appEventsByIdentifier[ekEvent.calendarItemIdentifier] {
+                updateAppEvent(existing, from: ekEvent, in: targetCalendar, syncedAt: now, modelContext: modelContext)
                 continue
             }
 
-            if let looseMatch = appEvents.first(where: {
-                $0.appleCalendarIdentifier == targetCalendar.calendarIdentifier &&
-                $0.title == trimmedTitle(from: ekEvent.title) &&
-                abs($0.startDate.timeIntervalSince(ekEvent.startDate)) < 60
-            }) {
-                updateAppEvent(looseMatch, from: ekEvent, in: targetCalendar, syncedAt: now)
-                continue
+            // 2. Loose title match — catches recurring events whose stored startDate
+            //    is in the past but share the same title and calendar. We don't compare
+            //    startDate here because the occurrence date differs from the master date.
+            let ekTitle = trimmedTitle(from: ekEvent.title).lowercased()
+            if let candidates = appEventsByTitle[ekTitle] {
+                // For recurring series, prefer a master with an RRULE; for standalone
+                // events, require the start time to be within 60 seconds.
+                let isRecurring = ekEvent.recurrenceRules?.isEmpty == false
+                if isRecurring, let master = candidates.first(where: { $0.isRecurringSeriesMaster || $0.recurrenceRRule != nil }) {
+                    updateAppEvent(master, from: ekEvent, in: targetCalendar, syncedAt: now, modelContext: modelContext)
+                    continue
+                } else if let standalone = candidates.first(where: { abs($0.startDate.timeIntervalSince(ekEvent.startDate)) < 60 }) {
+                    updateAppEvent(standalone, from: ekEvent, in: targetCalendar, syncedAt: now, modelContext: modelContext)
+                    continue
+                }
             }
 
             let newEvent = CalendarEvent(
@@ -488,6 +702,7 @@ final class CalendarSyncManager {
             newEvent.lastSyncedHash = appEventFingerprint(newEvent)
 
             modelContext.insert(newEvent)
+            scheduleNotificationIfNeeded(for: newEvent, from: ekEvent, modelContext: modelContext, syncedAt: now)
             importedCount += 1
         }
 
@@ -498,7 +713,8 @@ final class CalendarSyncManager {
         _ appEvent: CalendarEvent,
         from ekEvent: EKEvent,
         in targetCalendar: EKCalendar,
-        syncedAt: Date
+        syncedAt: Date,
+        modelContext: ModelContext
     ) {
         let externalHash = externalEventFingerprint(ekEvent, in: targetCalendar)
 
@@ -527,7 +743,11 @@ final class CalendarSyncManager {
         appEvent.updatedAt = syncedAt
         appEvent.isRecurringSeriesMaster = (ekEvent.recurrenceRules?.isEmpty == false)
         appEvent.lastExternalHash = externalHash
+        // Snapshot the fingerprint AFTER all fields are updated so it correctly
+        // reflects the state that was just written, not a stale pre-update state.
         appEvent.lastSyncedHash = appEventFingerprint(appEvent)
+
+        scheduleNotificationIfNeeded(for: appEvent, from: ekEvent, modelContext: modelContext, syncedAt: syncedAt)
     }
 
     private func resolvedEndDate(for appEvent: CalendarEvent) -> Date {
@@ -579,20 +799,21 @@ final class CalendarSyncManager {
 
     private func recurringTimeSignature(for ekEvent: EKEvent, recurrence: RecurrenceRule) -> String {
         let calendar = Calendar.current
+        let interval = max(1, recurrence.interval)
 
         if ekEvent.isAllDay {
             switch recurrence.freq {
             case .daily:
-                return "allDay-daily"
+                return "allDay-daily-\(interval)"
             case .weekly:
                 let weekday = calendar.component(.weekday, from: ekEvent.startDate)
-                return "allDay-weekly-\(weekday)"
+                return "allDay-weekly-\(interval)-\(weekday)"
             case .monthly:
                 let day = calendar.component(.day, from: ekEvent.startDate)
-                return "allDay-monthly-\(day)"
+                return "allDay-monthly-\(interval)-\(day)"
             case .yearly:
                 let components = calendar.dateComponents([.month, .day], from: ekEvent.startDate)
-                return "allDay-yearly-\(components.month ?? 0)-\(components.day ?? 0)"
+                return "allDay-yearly-\(interval)-\(components.month ?? 0)-\(components.day ?? 0)"
             }
         }
 
@@ -602,16 +823,16 @@ final class CalendarSyncManager {
 
         switch recurrence.freq {
         case .daily:
-            return "timed-daily-\(hour)-\(minute)"
+            return "timed-daily-\(interval)-\(hour)-\(minute)"
         case .weekly:
             let weekday = calendar.component(.weekday, from: ekEvent.startDate)
-            return "timed-weekly-\(weekday)-\(hour)-\(minute)"
+            return "timed-weekly-\(interval)-\(weekday)-\(hour)-\(minute)"
         case .monthly:
             let day = calendar.component(.day, from: ekEvent.startDate)
-            return "timed-monthly-\(day)-\(hour)-\(minute)"
+            return "timed-monthly-\(interval)-\(day)-\(hour)-\(minute)"
         case .yearly:
             let components = calendar.dateComponents([.month, .day], from: ekEvent.startDate)
-            return "timed-yearly-\(components.month ?? 0)-\(components.day ?? 0)-\(hour)-\(minute)"
+            return "timed-yearly-\(interval)-\(components.month ?? 0)-\(components.day ?? 0)-\(hour)-\(minute)"
         }
     }
 
@@ -637,11 +858,11 @@ final class CalendarSyncManager {
             end = nil
         }
 
-        // FIX 4: Preserve monthly/yearly RRULE structure instead of dropping it
+        // Preserve monthly/yearly RRULE structure instead of dropping it
         let daysOfWeek: [EKRecurrenceDayOfWeek]?
-        let daysOfTheMonth: [NSNumber]?
-        let monthsOfTheYear: [NSNumber]?
-        let setPositions: [NSNumber]?
+        var daysOfTheMonth: [NSNumber]?
+        var monthsOfTheYear: [NSNumber]?
+        var setPositions: [NSNumber]?
 
         if let byWeekday = recurrence.byWeekday, !byWeekday.isEmpty {
             daysOfWeek = byWeekday.compactMap { day in

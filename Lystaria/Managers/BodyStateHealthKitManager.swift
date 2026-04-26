@@ -100,49 +100,44 @@ final class BodyStateHealthKitManager: ObservableObject {
                 restingHeartRate: restingHeartRate
             )
 
+            print("""
+            [BodyState] Refresh at \(Date())
+              todayHRV:          \(todayHRV.map { String(format: "%.1f ms", $0) } ?? "nil (no samples today)")
+              latestHRV (used):  \(latestHRV.map { String(format: "%.1f ms", $0) } ?? "nil")
+              baselineHRV:       \(baselineHRV.map { String(format: "%.1f ms", $0) } ?? "nil")
+              latestHeartRate:   \(latestHeartRate.map { String(format: "%.0f bpm", $0) } ?? "nil")
+              restingHeartRate:  \(restingHeartRate.map { String(format: "%.0f bpm", $0) } ?? "nil")
+              bodyScore:         \(String(format: "%.3f", snapshot.bodyScore)) → \(snapshot.bodyLabel)
+              nervousScore:      \(String(format: "%.3f", snapshot.nervousSystemScore)) → \(snapshot.nervousSystemLabel)
+            """)
+
             let descriptor = FetchDescriptor<BodyStateRecord>()
-            let existing = try modelContext.fetch(descriptor).first
+            let existing = try modelContext.fetch(descriptor)
 
-            if let record = existing {
-                record.updatedAt = Date()
-                record.timestamp = snapshot.updatedAt
-
-                record.bodyScore = snapshot.bodyScore
-                record.nervousSystemScore = snapshot.nervousSystemScore
-
-                record.bodyLabel = snapshot.bodyLabel
-                record.nervousSystemLabel = snapshot.nervousSystemLabel
-
-                record.latestHRV = snapshot.latestHRV ?? 0
-                record.baselineHRV = snapshot.baselineHRV ?? 0
-                record.latestHeartRate = snapshot.latestHeartRate ?? 0
-                record.restingHeartRate = snapshot.restingHeartRate ?? 0
-
-                record.hasLatestHRV = snapshot.latestHRV != nil
-                record.hasBaselineHRV = snapshot.baselineHRV != nil
-                record.hasLatestHeartRate = snapshot.latestHeartRate != nil
-                record.hasRestingHeartRate = snapshot.restingHeartRate != nil
-            } else {
-                let record = BodyStateRecord(
-                    createdAt: Date(),
-                    updatedAt: Date(),
-                    timestamp: snapshot.updatedAt,
-                    bodyScore: snapshot.bodyScore,
-                    nervousSystemScore: snapshot.nervousSystemScore,
-                    bodyLabel: snapshot.bodyLabel,
-                    nervousSystemLabel: snapshot.nervousSystemLabel,
-                    latestHRV: snapshot.latestHRV ?? 0,
-                    baselineHRV: snapshot.baselineHRV ?? 0,
-                    latestHeartRate: snapshot.latestHeartRate ?? 0,
-                    restingHeartRate: snapshot.restingHeartRate ?? 0,
-                    hasLatestHRV: snapshot.latestHRV != nil,
-                    hasBaselineHRV: snapshot.baselineHRV != nil,
-                    hasLatestHeartRate: snapshot.latestHeartRate != nil,
-                    hasRestingHeartRate: snapshot.restingHeartRate != nil
-                )
-
-                modelContext.insert(record)
+            // Delete all existing records and re-insert so SwiftData
+            // always fires the @Query change notification to the view.
+            for record in existing {
+                modelContext.delete(record)
             }
+
+            let record = BodyStateRecord(
+                createdAt: Date(),
+                updatedAt: Date(),
+                timestamp: snapshot.updatedAt,
+                bodyScore: snapshot.bodyScore,
+                nervousSystemScore: snapshot.nervousSystemScore,
+                bodyLabel: snapshot.bodyLabel,
+                nervousSystemLabel: snapshot.nervousSystemLabel,
+                latestHRV: snapshot.latestHRV ?? 0,
+                baselineHRV: snapshot.baselineHRV ?? 0,
+                latestHeartRate: snapshot.latestHeartRate ?? 0,
+                restingHeartRate: snapshot.restingHeartRate ?? 0,
+                hasLatestHRV: snapshot.latestHRV != nil,
+                hasBaselineHRV: snapshot.baselineHRV != nil,
+                hasLatestHeartRate: snapshot.latestHeartRate != nil,
+                hasRestingHeartRate: snapshot.restingHeartRate != nil
+            )
+            modelContext.insert(record)
 
             try modelContext.save()
             lastRefreshDate = Date()
@@ -161,6 +156,8 @@ final class BodyStateHealthKitManager: ObservableObject {
     // MARK: - Queries
 
     /// Average of all HRV samples recorded since midnight today.
+    /// Samples below 15ms are excluded as they are almost always
+    /// motion artifacts or poor sensor contact readings.
     private func fetchTodayAverageHRV() async throws -> Double? {
         let startOfDay = Calendar.current.startOfDay(for: Date())
         let predicate = HKQuery.predicateForSamples(
@@ -169,19 +166,30 @@ final class BodyStateHealthKitManager: ObservableObject {
             options: .strictStartDate
         )
         return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Double?, Error>) in
-            let query = HKStatisticsQuery(
-                quantityType: hrvType,
-                quantitySamplePredicate: predicate,
-                options: .discreteAverage
-            ) { _, statistics, error in
+            let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+            let query = HKSampleQuery(
+                sampleType: self.hrvType,
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: [sort]
+            ) { _, samples, error in
                 if let error {
                     continuation.resume(throwing: error)
                     return
                 }
-                let value = statistics?.averageQuantity()?.doubleValue(for: HKUnit.secondUnit(with: .milli))
-                continuation.resume(returning: value)
+                let unit = HKUnit.secondUnit(with: .milli)
+                let values = (samples as? [HKQuantitySample])?
+                    .map { $0.quantity.doubleValue(for: unit) }
+                    .filter { $0 >= 15.0 } ?? []
+
+                guard !values.isEmpty else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                let average = values.reduce(0, +) / Double(values.count)
+                continuation.resume(returning: average)
             }
-            healthStore.execute(query)
+            self.healthStore.execute(query)
         }
     }
 

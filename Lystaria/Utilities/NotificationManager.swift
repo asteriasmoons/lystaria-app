@@ -447,11 +447,20 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
                         event.updatedAt  = Date()
                         event.needsSync  = true
                     }
-                    let body = event.allDay
-                        ? "All-day event"
-                        : (event.location?.isEmpty == false
-                            ? "Event: \(event.title) • \(event.location!)"
-                            : "Event: \(event.title)")
+                    var bodyParts: [String] = []
+                    if let loc = event.location?.trimmingCharacters(in: .whitespacesAndNewlines), !loc.isEmpty {
+                        bodyParts.append(loc)
+                    }
+                    if let desc = event.eventDescription?.trimmingCharacters(in: .whitespacesAndNewlines), !desc.isEmpty {
+                        bodyParts.append(desc)
+                    }
+                    let combined = bodyParts.joined(separator: "\n")
+                    let body: String
+                    if event.allDay {
+                        body = combined.isEmpty ? "All-day event" : "All-day event — \(combined)"
+                    } else {
+                        body = combined.isEmpty ? event.title : combined
+                    }
                     self.scheduleRecurringCalendarEvent(
                         id: id,
                         title: event.title,
@@ -533,16 +542,19 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
         startDate: Date,
         allDay: Bool,
         recurrence: RecurrenceRule,
-        exceptions: [String]
+        exceptions: [String],
+        minutesBefore: Int = 0
     ) {
         cancelAllCalendarNotifications(id: id)
 
-        let now              = Date()
+        let now               = Date()
         let rollingWindowDays = 60
-        let fiveYearsOut     = tzCalendar.date(byAdding: .year, value: 5, to: now) ?? now
-        let horizonByRolling = tzCalendar.date(byAdding: .day, value: rollingWindowDays, to: now) ?? now
-        let exceptionSet     = Set(exceptions)
+        let fiveYearsOut      = tzCalendar.date(byAdding: .year, value: 5, to: now) ?? now
+        let horizonByRolling  = tzCalendar.date(byAdding: .day, value: rollingWindowDays, to: now) ?? now
+        let exceptionSet      = Set(exceptions)
 
+        // Compute occurrences anchored to the true event startDate so that
+        // weekday/day-of-month/month extraction is always correct.
         let occurrences: [Date]
         if let end = recurrence.end, end.kind == .count {
             let c = max(0, end.count ?? 0)
@@ -572,8 +584,17 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
             )
         }
 
-        let upcoming = occurrences.filter { $0 >= now }.sorted()
-        guard let fireDate = upcoming.first else {
+        // Apply the reminder offset to each occurrence *after* computing them
+        // from the true event anchor, then pick the first fire date still in
+        // the future.  This prevents passing runAt as the anchor (which shifts
+        // weekday/day-of-month by the offset amount and causes wrong-day fires).
+        let offsetSeconds = -minutesBefore * 60
+        let fireDates = occurrences
+            .compactMap { tzCalendar.date(byAdding: .second, value: offsetSeconds, to: $0) }
+            .filter { $0 >= now }
+            .sorted()
+
+        guard let fireDate = fireDates.first else {
             print("⚠️ No upcoming calendar occurrences to schedule for id=\(id)")
             return
         }
@@ -665,13 +686,18 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
             }
 
         case .weekly:
-            let weekdays = rule.byWeekday?.sorted() ?? [cal.component(.weekday, from: startDate) - 1]
+            // byWeekday values use Calendar's 1-based weekday convention (1=Sun … 7=Sat).
+            // The fallback subtracts 1 to match that convention.
+            let weekdays = rule.byWeekday?.sorted() ?? [cal.component(.weekday, from: startDate)]
             while cursor <= untilHorizon {
-                guard let weekInterval = cal.dateInterval(of: .weekOfYear, for: cursor) else { break }
-                let weekStart = weekInterval.start
+                // Always anchor to Sunday of the current week regardless of the
+                // device locale's firstWeekday, so weekday offsets are consistent.
+                let weekdayOfCursor = cal.component(.weekday, from: cursor) // 1=Sun
+                let sundayOfWeek = cal.date(byAdding: .day, value: -(weekdayOfCursor - 1), to: cal.startOfDay(for: cursor)) ?? cursor
                 for wd in weekdays {
-                    let normalizedWD = (1...7).contains(wd) ? wd - 1 : wd
-                    if let day = cal.date(byAdding: .day, value: normalizedWD, to: weekStart) {
+                    // wd is 1-based (1=Sun); offset from Sunday = wd - 1
+                    let offset = max(0, wd - 1)
+                    if let day = cal.date(byAdding: .day, value: offset, to: sundayOfWeek) {
                         let fire = cal.date(bySettingHour: baseHour, minute: baseMinute, second: 0, of: day) ?? day
                         appendIfValid(fire)
                     }
@@ -746,14 +772,14 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
             }
 
         case .weekly:
-            let weekdays = rule.byWeekday?.sorted() ?? [cal.component(.weekday, from: startDate) - 1]
+            let weekdays = rule.byWeekday?.sorted() ?? [cal.component(.weekday, from: startDate)]
             while results.count < count, cursor <= untilHorizon, iterations < maxIterations {
-                guard let weekInterval = cal.dateInterval(of: .weekOfYear, for: cursor) else { break }
-                let weekStart = weekInterval.start
+                let weekdayOfCursor = cal.component(.weekday, from: cursor) // 1=Sun
+                let sundayOfWeek = cal.date(byAdding: .day, value: -(weekdayOfCursor - 1), to: cal.startOfDay(for: cursor)) ?? cursor
                 for wd in weekdays {
                     guard results.count < count else { break }
-                    let normalizedWD = (1...7).contains(wd) ? wd - 1 : wd
-                    if let day = cal.date(byAdding: .day, value: normalizedWD, to: weekStart) {
+                    let offset = max(0, wd - 1)
+                    if let day = cal.date(byAdding: .day, value: offset, to: sundayOfWeek) {
                         let fire = cal.date(bySettingHour: baseHour, minute: baseMinute, second: 0, of: day) ?? day
                         if fire >= startDate { appendIfValid(fire) }
                     }

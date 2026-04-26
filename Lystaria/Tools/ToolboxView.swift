@@ -7,6 +7,7 @@
 
 import SwiftUI
 import UIKit
+import AVFoundation
 
 struct ToolboxView: View {
     @State private var isBreathing = false
@@ -24,6 +25,23 @@ struct ToolboxView: View {
     @State private var isBurningThought = false
     @FocusState private var isThoughtEditorFocused: Bool
     private let maxThoughtCharacters = 120
+
+    // Meditation timer
+    @State private var meditationDuration: Int = 300 // seconds
+    @State private var meditationRemaining: Int = 300
+    @State private var meditationRunning: Bool = false
+    @State private var meditationFinished: Bool = false
+    @State private var meditationTask: Task<Void, Never>? = nil
+    @State private var meditationShowCustomPicker: Bool = false
+    @State private var meditationCustomMinutes: Int = 5
+    @State private var meditationCustomSeconds: Int = 0
+    @State private var meditationIsCustom: Bool = false
+    private let meditationPresets: [(label: String, seconds: Int)] = [
+        ("5 min", 300),
+        ("10 min", 600),
+        ("15 min", 900),
+        ("20 min", 1200)
+    ]
 
     private func triggerSoftHaptic() {
         let generator = UIImpactFeedbackGenerator(style: .soft)
@@ -82,6 +100,7 @@ struct ToolboxView: View {
                         .frame(height: 1)
 
                     distractionLauncherCard
+                    meditationTimerCard
                     breathingCard
                     thoughtBurnCard
 
@@ -103,6 +122,7 @@ struct ToolboxView: View {
         .onDisappear {
             stopBreathing()
             resetBurnAnimation()
+            stopMeditationTimer()
         }
     }
 
@@ -211,6 +231,396 @@ struct ToolboxView: View {
                         .frame(width: 88, height: 88)
                 }
                 .frame(width: 104, height: 104)
+            }
+        }
+    }
+
+    private var meditationTimerCard: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .center, spacing: 10) {
+                    Image(systemName: "timer")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 22, height: 22)
+                        .foregroundStyle(.white)
+
+                    GradientTitle(text: "Meditation Timer", font: .system(size: 20, weight: .bold))
+
+                    Spacer()
+
+                    if meditationFinished {
+                        Text("Complete ✦")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(LGradients.blue)
+                            .clipShape(Capsule())
+                    }
+                }
+
+                Text("Set a silent timer for your meditation session. A gentle sound will chime when time is up.")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(LColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                // Countdown ring + time display
+                ZStack {
+                    Circle()
+                        .stroke(Color.white.opacity(0.06), lineWidth: 6)
+                        .frame(width: 140, height: 140)
+
+                    Circle()
+                        .trim(from: 0, to: meditationRunning || meditationFinished
+                            ? CGFloat(meditationRemaining) / CGFloat(meditationDuration)
+                            : 1)
+                        .stroke(
+                            LGradients.blue,
+                            style: StrokeStyle(lineWidth: 6, lineCap: .round)
+                        )
+                        .frame(width: 140, height: 140)
+                        .rotationEffect(.degrees(-90))
+                        .animation(.linear(duration: 1), value: meditationRemaining)
+
+                    VStack(spacing: 2) {
+                        Text(meditationTimeString)
+                            .font(.system(size: 34, weight: .bold, design: .monospaced))
+                            .foregroundStyle(.white)
+
+                        if meditationFinished {
+                            Text("done")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(LColors.textSecondary)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 4)
+
+                // Preset chips — disabled while running
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(meditationPresets, id: \.seconds) { preset in
+                            Button {
+                                guard !meditationRunning else { return }
+                                triggerLightHaptic()
+                                meditationDuration = preset.seconds
+                                meditationRemaining = preset.seconds
+                                meditationFinished = false
+                                meditationIsCustom = false
+                                meditationShowCustomPicker = false
+                            } label: {
+                                Text(preset.label)
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(
+                                        !meditationIsCustom && meditationDuration == preset.seconds
+                                            ? AnyShapeStyle(LGradients.blue)
+                                            : AnyShapeStyle(Color.white.opacity(0.08))
+                                    )
+                                    .clipShape(Capsule())
+                                    .overlay(
+                                        Capsule()
+                                            .stroke(LColors.glassBorder, lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            .opacity(meditationRunning ? 0.45 : 1)
+                        }
+
+                        // Custom chip
+                        Button {
+                            guard !meditationRunning else { return }
+                            triggerLightHaptic()
+                            withAnimation(.easeInOut(duration: 0.22)) {
+                                meditationShowCustomPicker.toggle()
+                            }
+                            if !meditationShowCustomPicker && meditationIsCustom {
+                                // keep custom active but close picker
+                            }
+                        } label: {
+                            Text("Custom")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(
+                                    meditationIsCustom
+                                        ? AnyShapeStyle(LGradients.blue)
+                                        : AnyShapeStyle(Color.white.opacity(0.08))
+                                )
+                                .clipShape(Capsule())
+                                .overlay(
+                                    Capsule()
+                                        .stroke(LColors.glassBorder, lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .opacity(meditationRunning ? 0.45 : 1)
+                    }
+                }
+
+                // Custom time picker
+                if meditationShowCustomPicker {
+                    VStack(spacing: 12) {
+                        HStack(spacing: 0) {
+                            VStack(spacing: 2) {
+                                Text("MIN")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(LColors.textSecondary)
+
+                                Picker("", selection: $meditationCustomMinutes) {
+                                    ForEach(0..<120) { m in
+                                        Text("\(m)")
+                                            .font(.system(size: 18, weight: .semibold))
+                                            .foregroundStyle(.white)
+                                            .tag(m)
+                                    }
+                                }
+                                .pickerStyle(.wheel)
+                                .frame(width: 80, height: 100)
+                                .clipped()
+                            }
+
+                            Text(":")
+                                .font(.system(size: 22, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(.top, 14)
+
+                            VStack(spacing: 2) {
+                                Text("SEC")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(LColors.textSecondary)
+
+                                Picker("", selection: $meditationCustomSeconds) {
+                                    ForEach([0, 15, 30, 45], id: \.self) { s in
+                                        Text(String(format: "%02d", s))
+                                            .font(.system(size: 18, weight: .semibold))
+                                            .foregroundStyle(.white)
+                                            .tag(s)
+                                    }
+                                }
+                                .pickerStyle(.wheel)
+                                .frame(width: 80, height: 100)
+                                .clipped()
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(Color.white.opacity(0.04))
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(LColors.glassBorder, lineWidth: 1)
+                        )
+
+                        Button {
+                            triggerLightHaptic()
+                            let total = (meditationCustomMinutes * 60) + meditationCustomSeconds
+                            guard total > 0 else { return }
+                            meditationDuration = total
+                            meditationRemaining = total
+                            meditationFinished = false
+                            meditationIsCustom = true
+                            withAnimation(.easeInOut(duration: 0.22)) {
+                                meditationShowCustomPicker = false
+                            }
+                        } label: {
+                            HStack {
+                                Spacer()
+                                Text("Set \(meditationCustomMinutes)m \(meditationCustomSeconds > 0 ? String(format: "%02ds", meditationCustomSeconds) : "")")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(.white)
+                                Spacer()
+                            }
+                            .padding(.vertical, 10)
+                            .background(LGradients.blue)
+                            .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(meditationCustomMinutes == 0 && meditationCustomSeconds == 0)
+                        .opacity(meditationCustomMinutes == 0 && meditationCustomSeconds == 0 ? 0.45 : 1)
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+
+                // Start / Pause / Reset
+                HStack(spacing: 10) {
+                    Button {
+                        triggerLightHaptic()
+                        if meditationRunning {
+                            pauseMeditationTimer()
+                        } else {
+                            startMeditationTimer()
+                        }
+                    } label: {
+                        HStack {
+                            Spacer()
+                            Text(meditationRunning ? "Pause" : (meditationFinished ? "Restart" : "Begin Session"))
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(.white)
+                            Spacer()
+                        }
+                        .padding(.vertical, 12)
+                        .background(LGradients.blue)
+                        .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        triggerLightHaptic()
+                        resetMeditationTimer()
+                    } label: {
+                        HStack {
+                            Spacer()
+                            Text("Reset")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(.white)
+                            Spacer()
+                        }
+                        .padding(.vertical, 12)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(Capsule())
+                        .overlay(
+                            Capsule()
+                                .stroke(LColors.glassBorder, lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private var meditationTimeString: String {
+        let m = meditationRemaining / 60
+        let s = meditationRemaining % 60
+        return String(format: "%02d:%02d", m, s)
+    }
+
+    private func startMeditationTimer() {
+        if meditationFinished {
+            meditationRemaining = meditationDuration
+            meditationFinished = false
+        }
+        guard meditationRemaining > 0 else { return }
+        meditationRunning = true
+
+        meditationTask = Task {
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                } catch {
+                    return
+                }
+                await MainActor.run {
+                    if meditationRemaining > 0 {
+                        meditationRemaining -= 1
+                    }
+                    if meditationRemaining == 0 {
+                        meditationRunning = false
+                        meditationFinished = true
+                        playMeditationCompleteSound()
+                        triggerMeditationCompleteHaptic()
+                    }
+                }
+                if meditationRemaining == 0 { break }
+            }
+        }
+    }
+
+    private func pauseMeditationTimer() {
+        meditationTask?.cancel()
+        meditationTask = nil
+        meditationRunning = false
+    }
+
+    private func stopMeditationTimer() {
+        meditationTask?.cancel()
+        meditationTask = nil
+        meditationRunning = false
+    }
+
+    private func resetMeditationTimer() {
+        stopMeditationTimer()
+        meditationRemaining = meditationDuration
+        meditationFinished = false
+        meditationIsCustom = false
+        meditationShowCustomPicker = false
+    }
+
+    private func playMeditationCompleteSound() {
+        // Three ascending sine tones using AVAudioEngine to match the calm aesthetic
+        let engine = AVAudioEngine()
+        let player = AVAudioPlayerNode()
+        engine.attach(player)
+
+        let sampleRate: Double = 44100
+        let toneDuration: Double = 0.9
+        let gapDuration: Double = 0.35
+        let frequencies: [Double] = [440, 528, 660] // A4, C5ish (healing), E5
+
+        let frameCountPerTone = AVAudioFrameCount(sampleRate * toneDuration)
+        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
+
+        engine.connect(player, to: engine.mainMixerNode, format: format)
+
+        do {
+            try engine.start()
+        } catch {
+            // Fall back to system sound if engine fails
+            AudioServicesPlaySystemSound(1013)
+            return
+        }
+
+        for (index, frequency) in frequencies.enumerated() {
+            guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCountPerTone) else { continue }
+            buffer.frameLength = frameCountPerTone
+
+            let channelData = buffer.floatChannelData![0]
+            for frame in 0..<Int(frameCountPerTone) {
+                let t = Double(frame) / sampleRate
+                // Sine wave with smooth envelope (fade in/out)
+                let envelope: Float
+                let attack = 0.06
+                let release = 0.18
+                if t < attack {
+                    envelope = Float(t / attack)
+                } else if t > toneDuration - release {
+                    envelope = Float((toneDuration - t) / release)
+                } else {
+                    envelope = 1.0
+                }
+                channelData[frame] = envelope * 0.38 * Float(sin(2 * Double.pi * frequency * t))
+            }
+
+            let offsetSamples = AVAudioFramePosition(
+                Double(index) * (toneDuration + gapDuration) * sampleRate
+            )
+            let toneTime = AVAudioTime(sampleTime: offsetSamples, atRate: sampleRate)
+            player.scheduleBuffer(buffer, at: toneTime, options: [], completionHandler: nil)
+        }
+
+        player.play()
+
+        // Stop engine after all tones have played
+        let totalDuration = Double(frequencies.count) * (toneDuration + gapDuration) + 0.5
+        DispatchQueue.main.asyncAfter(deadline: .now() + totalDuration) {
+            engine.stop()
+        }
+    }
+
+    private func triggerMeditationCompleteHaptic() {
+        // Three soft pulses to mirror the three tones
+        let delays: [Double] = [0, 0.5, 1.0]
+        for delay in delays {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                let gen = UINotificationFeedbackGenerator()
+                gen.prepare()
+                gen.notificationOccurred(.success)
             }
         }
     }

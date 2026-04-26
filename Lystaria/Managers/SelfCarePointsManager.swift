@@ -26,6 +26,8 @@ enum SelfCarePointsManager {
     static let healthLogPoints = 10
     static let exerciseLogPoints = 8
     static let moodLogPoints = 10
+    static let readingSessionPoints = 10
+    static let readingTimerSessionPoints = 12
 
     // MARK: - Leveling
 
@@ -429,6 +431,94 @@ enum SelfCarePointsManager {
 
         try modelContext.save()
     }
+    
+    // MARK: - Weekly Reset Scheduler
+
+    private static var resetTimer: Timer?
+
+    /// Call once at app launch (and on foreground) from LystariaApp.
+    /// Schedules a precise snapshot at 11:58 PM Sunday and reset at 11:59 PM Sunday.
+    @MainActor
+    static func scheduleWeeklyResetTimer(modelContainer: ModelContainer) {
+        resetTimer?.invalidate()
+
+        let now = Date()
+        let cal = Calendar.current
+
+        // Find the next Sunday
+        let weekday = cal.component(.weekday, from: now) // 1=Sun
+        let daysUntilSunday = weekday == 1 ? 0 : (8 - weekday) // 0 if today is Sunday
+
+        guard let thisSunday = cal.date(byAdding: .day, value: daysUntilSunday, to: cal.startOfDay(for: now)) else { return }
+
+        // Snapshot fires at 23:58:00 Sunday
+        var snapshotComps = cal.dateComponents([.year, .month, .day], from: thisSunday)
+        snapshotComps.hour = 23
+        snapshotComps.minute = 58
+        snapshotComps.second = 0
+        guard let snapshotFire = cal.date(from: snapshotComps) else { return }
+
+        // Reset fires at 23:59:00 Sunday
+        var resetComps = cal.dateComponents([.year, .month, .day], from: thisSunday)
+        resetComps.hour = 23
+        resetComps.minute = 59
+        resetComps.second = 0
+        guard let resetFire = cal.date(from: resetComps) else { return }
+
+        // If both times are already past for today (e.g. it's Sunday 11:59 PM+), reschedule for next Sunday
+        let snapshotTarget = snapshotFire > now ? snapshotFire :
+            cal.date(byAdding: .day, value: 7, to: snapshotFire) ?? snapshotFire
+        let resetTarget = resetFire > now ? resetFire :
+            cal.date(byAdding: .day, value: 7, to: resetFire) ?? resetFire
+
+        // Schedule snapshot
+        let snapshotDelay = snapshotTarget.timeIntervalSince(now)
+        DispatchQueue.main.asyncAfter(deadline: .now() + snapshotDelay) {
+            Task { @MainActor in
+                _ = try? SelfCarePointsManager.createManualHistorySnapshot(
+                    in: modelContainer.mainContext
+                )
+                print("📸 Weekly snapshot saved at \(Date())")
+            }
+        }
+
+        // Schedule reset
+        let resetDelay = resetTarget.timeIntervalSince(now)
+        DispatchQueue.main.asyncAfter(deadline: .now() + resetDelay) {
+            Task { @MainActor in
+                let context = modelContainer.mainContext
+                guard let userId = try? SelfCarePointsManager.resolveActiveUserId(in: context),
+                      let profile = try? SelfCarePointsManager.fetchProfile(in: context, userId: userId) else { return }
+
+                let now = Date()
+                let cal = Calendar.current
+                let currentWeekKey = SelfCarePointsManager.weekStartDayKey(from: now, calendar: cal)
+
+                SelfCarePointsManager.insertResetLog(
+                    in: context,
+                    userId: userId,
+                    weekStartDayKey: profile.currentWeekStartDayKey,
+                    resetAt: now,
+                    pointsBeforeReset: profile.currentPoints,
+                    levelBeforeReset: profile.level
+                )
+
+                profile.currentPoints = 0
+                profile.level = 0
+                profile.lastWeeklyResetAt = now
+                profile.currentWeekStartDayKey = currentWeekKey
+                profile.updatedAt = now
+
+                try? context.save()
+                print("🔄 Weekly reset executed at \(Date())")
+
+                // Reschedule for next week
+                SelfCarePointsManager.scheduleWeeklyResetTimer(modelContainer: modelContainer)
+            }
+        }
+
+        print("⏱ Weekly reset scheduled: snapshot at \(snapshotTarget), reset at \(resetTarget)")
+    }
 
     // MARK: - Convenience Award Methods
 
@@ -580,6 +670,46 @@ enum SelfCarePointsManager {
             points: exerciseLogPoints,
             title: title,
             earnedAt: createdAt,
+            calendar: calendar
+        )
+    }
+
+    @discardableResult
+    static func awardReadingSession(
+        in modelContext: ModelContext,
+        sessionId: String,
+        title: String = "Reading Session",
+        sessionDate: Date = Date(),
+        calendar: Calendar = .current
+    ) throws -> Bool {
+        try awardPoints(
+            in: modelContext,
+            sourceType: .readingSession,
+            sourceId: sessionId,
+            sourceKey: "readingSession:\(sessionId)",
+            points: readingSessionPoints,
+            title: title,
+            earnedAt: sessionDate,
+            calendar: calendar
+        )
+    }
+
+    @discardableResult
+    static func awardReadingTimerSession(
+        in modelContext: ModelContext,
+        sessionId: String,
+        title: String = "Reading Timer Session",
+        sessionDate: Date = Date(),
+        calendar: Calendar = .current
+    ) throws -> Bool {
+        try awardPoints(
+            in: modelContext,
+            sourceType: .readingTimerSession,
+            sourceId: sessionId,
+            sourceKey: "readingTimerSession:\(sessionId)",
+            points: readingTimerSessionPoints,
+            title: title,
+            earnedAt: sessionDate,
             calendar: calendar
         )
     }

@@ -13,6 +13,7 @@ final class JournalBook {
     var deletedAt: Date?
 
     // MARK: - Fields
+    var uuid: UUID = UUID()
     var title: String = ""
     var coverHex: String = "#6A5CFF"
     var pinOrder: Int = 0

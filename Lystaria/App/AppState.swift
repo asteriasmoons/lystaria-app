@@ -2,8 +2,6 @@
 //  AppState.swift
 //  Lystaria
 //
-//  Created by Asteria Moon on 2/26/26.
-//
 
 import Foundation
 import Combine
@@ -64,6 +62,12 @@ final class AppState: ObservableObject {
         status = .signedIn(user)
     }
 
+    func updateCurrentUserDisplayName(_ newName: String) {
+        guard case .signedIn(let user) = status else { return }
+        user.displayName = newName
+        objectWillChange.send()
+    }
+
     func signOut() {
         print("[AppState] signOut() called")
         bootstrapTask?.cancel()
@@ -71,5 +75,11 @@ final class AppState: ObservableObject {
         hasBootstrapped = true
         status = .signedOut
         print("[AppState] status is now .signedOut")
+    }
+
+    /// Call this after mutating currentUser properties (e.g. displayName)
+    /// so SwiftUI views that depend on currentUser re-render immediately.
+    func userDidChange() {
+        objectWillChange.send()
     }
 }

@@ -76,14 +76,6 @@ private struct WatchHealthCard: View {
     }
 }
 
-// MARK: - Placeholder Views (so build doesn’t break)
-
-struct WatchStepsView: View {
-    var body: some View {
-        Text("Steps")
-    }
-}
-
 #Preview {
     NavigationStack{
         WatchHealthMainView()

@@ -14,6 +14,7 @@ import PhotosUI
 extension Notification.Name {
     static let journalBlockRequestFocusNextParagraph = Notification.Name("JournalBlockRequestFocusNextParagraph")
     static let journalBlockRequestFocus = Notification.Name("JournalBlockRequestFocus")
+    static let journalBlockRequestMentionPicker = Notification.Name("JournalBlockRequestMentionPicker")
 }
 
 struct JournalBlockRow: View {
@@ -30,6 +31,12 @@ struct JournalBlockRow: View {
     @State private var showLinkEditor = false
     @State private var linkDraft = ""
     @State private var selectedPhotoItem: PhotosPickerItem? = nil
+    @State private var showMentionPicker = false
+    @State private var mentionQuery = ""
+    @State private var mentionAtLocation: Int = 0
+
+    @Query(filter: #Predicate<JournalBook> { $0.deletedAt == nil }, sort: \JournalBook.createdAt, order: .reverse)
+    private var allBooks: [JournalBook]
 
     @FocusState private var isFocused: Bool
 
@@ -59,9 +66,135 @@ struct JournalBlockRow: View {
         } message: {
             Text("Select text in the block first, then add a link.")
         }
+        .overlay(alignment: .top) {
+            if showMentionPicker {
+                ZStack(alignment: .top) {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            showMentionPicker = false
+                            mentionQuery = ""
+                        }
+                    mentionPickerOverlay
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .journalBlockRequestMentionPicker)) { note in
+            guard let payload = note.object as? (blockID: UUID, atLocation: Int, query: String),
+                  payload.blockID == block.id else { return }
+            if payload.atLocation == -1 {
+                showMentionPicker = false
+                mentionQuery = ""
+            } else {
+                mentionAtLocation = payload.atLocation
+                mentionQuery = payload.query
+                showMentionPicker = true
+            }
+        }
     }
 
 
+
+    private var filteredMentionBooks: [JournalBook] {
+        guard !mentionQuery.isEmpty else { return allBooks }
+        return allBooks.filter { $0.title.localizedCaseInsensitiveContains(mentionQuery) }
+    }
+
+    private var mentionPickerOverlay: some View {
+        let books = filteredMentionBooks
+        return VStack(alignment: .leading, spacing: 0) {
+            if books.isEmpty {
+                Text("No matching books")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(LColors.textSecondary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+            } else {
+                ForEach(books, id: \.persistentModelID) { book in
+                    Button {
+                        insertMention(book: book)
+                        showMentionPicker = false
+                    } label: {
+                        HStack(spacing: 10) {
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(Color(hex: book.coverHex))
+                                .frame(width: 18, height: 18)
+                            Text(book.title)
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(LColors.textPrimary)
+                                .lineLimit(1)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+
+                    if book.persistentModelID != books.last?.persistentModelID {
+                        Divider().background(LColors.glassBorder)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
+        .shadow(color: .black.opacity(0.3), radius: 12, y: 6)
+        .padding(.horizontal, 4)
+        .frame(maxHeight: 220)
+    }
+
+    private func insertMention(book: JournalBook) {
+        print("🔥 insertMention called: book=\(book.title) uuid=\(book.uuid.uuidString)")
+        let text = block.text as NSString
+        let insertToken = "@\(book.title)"
+        let atLoc = mentionAtLocation
+
+        let queryEndLocation = atLoc + 1 + (mentionQuery as NSString).length
+        let replaceEnd = min(queryEndLocation, text.length)
+        let replaceRange = NSRange(location: atLoc, length: replaceEnd - atLoc)
+
+        let newText = text.replacingCharacters(in: replaceRange, with: insertToken)
+        block.text = newText
+
+        let tokenLength = (insertToken as NSString).length
+        let delta = tokenLength - replaceRange.length
+
+        var updated: [JournalInlineStyle] = []
+        for style in (block.inlineStyles ?? []) {
+            let sEnd = style.rangeLocation + style.rangeLength
+            let rEnd = replaceRange.location + replaceRange.length
+
+            if sEnd <= replaceRange.location {
+                updated.append(style)
+            } else if style.rangeLocation >= rEnd {
+                style.rangeLocation += delta
+                updated.append(style)
+            } else {
+                modelContext.delete(style)
+            }
+        }
+        block.inlineStyles = updated
+
+        let mentionStyle = JournalInlineStyle(
+            type: .mention,
+            rangeLocation: atLoc,
+            rangeLength: tokenLength,
+            urlString: book.uuid.uuidString
+        )
+        mentionStyle.block = block
+        modelContext.insert(mentionStyle)
+        if block.inlineStyles == nil { block.inlineStyles = [] }
+        block.inlineStyles?.append(mentionStyle)
+        print("🔥 mentionStyle saved: typeRaw=\(mentionStyle.typeRaw) urlString=\(mentionStyle.urlString) range=\(mentionStyle.rangeLocation),\(mentionStyle.rangeLength)")
+        print("🔥 block inlineStyles count: \(block.inlineStyles?.count ?? 0)")
+
+        block.touch()
+        mentionQuery = ""
+    }
 
     private var selectionFormatMenu: some View {
         Menu {
@@ -704,10 +837,6 @@ struct JournalBlockRow: View {
             if isCodeBlock {
                 minimumHeight = 64
             } else {
-                // Use the font's actual line height as the minimum so single-line
-                // blocks don't get padded to an arbitrary 44pt tap target.
-                // Headings are already taller than their line height, so this
-                // only affects body-size blocks.
                 minimumHeight = ceil(baseUIFont.lineHeight)
             }
             return CGSize(width: targetWidth, height: max(minimumHeight, fitting.height))
@@ -742,7 +871,6 @@ struct JournalBlockRow: View {
             textView.placeholderLabel.font = baseUIFont
             textView.placeholderLabel.isHidden = !block.text.isEmpty
 
-            // Focus this text view when its block ID is requested.
             let blockID = block.id
             NotificationCenter.default.addObserver(
                 forName: .journalBlockRequestFocus,
@@ -838,11 +966,15 @@ struct JournalBlockRow: View {
                     let monoFont = UIFont.monospacedSystemFont(ofSize: baseUIFont.pointSize * 0.9, weight: .regular)
                     mutable.addAttribute(.font, value: monoFont, range: range)
                     mutable.addAttribute(.backgroundColor, value: UIColor.white.withAlphaComponent(0.1), range: range)
+                case .mention:
+                    mutable.addAttribute(.foregroundColor, value: UIColor.systemBlue, range: range)
+                    mutable.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
                 }
             }
 
             return mutable
         }
+
         final class PlaceholderTextView: UITextView {
             let placeholderLabel = UILabel()
 
@@ -894,8 +1026,6 @@ struct JournalBlockRow: View {
             var parent: RichEditableBlockTextView
             var isApplyingProgrammaticChange = false
 
-            // Stored separately so they always reflect the current block,
-            // not the block captured when makeUIView was called.
             var onCreateParagraphBelow: ((String) -> Void)?
             var onDeleteEmptyBlock: (() -> Void)?
             var onExitList: (() -> Void)?
@@ -903,7 +1033,6 @@ struct JournalBlockRow: View {
             init(parent: RichEditableBlockTextView) {
                 self.parent = parent
                 self.onCreateParagraphBelow = parent.onCreateParagraphBelow
-
                 self.onDeleteEmptyBlock = parent.onDeleteEmptyBlock
                 self.onExitList = parent.onExitList
             }
@@ -926,11 +1055,8 @@ struct JournalBlockRow: View {
                 guard text == "\n" else { return true }
                 guard range.length == 0 else { return true }
 
-                // Code blocks allow raw newlines for multi-line editing.
                 if parent.isCodeBlock { return true }
 
-                // Double-enter on an empty bullet/numbered list block exits
-                // list mode and inserts a paragraph below.
                 let isListBlock = parent.block.type == .bulletedList || parent.block.type == .numberedList
                 let isEmpty = (textView.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 if isListBlock && isEmpty {
@@ -938,22 +1064,15 @@ struct JournalBlockRow: View {
                     return false
                 }
 
-                // Split the block at the cursor: text before cursor stays in the
-                // current block, text after cursor moves into the new block.
                 let fullText = textView.text ?? ""
                 let nsText = fullText as NSString
                 let cursorLocation = range.location
                 let prefixText = nsText.substring(to: cursorLocation)
                 let suffixText = nsText.substring(from: cursorLocation)
 
-                // Update the model and the text view under the programmatic guard
-                // so textViewDidChange does not re-save stale text or trigger
-                // a spurious block insertion.
                 isApplyingProgrammaticChange = true
                 parent.block.text = prefixText
                 parent.block.touch()
-                // Use attributedText so the existing guard in textViewDidChange
-                // stays effective (setting .text can still fire the delegate).
                 let prefixAttributed = NSAttributedString(
                     string: prefixText,
                     attributes: parent.baseAttributes()
@@ -962,8 +1081,6 @@ struct JournalBlockRow: View {
                 textView.invalidateIntrinsicContentSize()
                 isApplyingProgrammaticChange = false
 
-                // Remove or trim any inline styles that now fall outside the
-                // shortened prefix text.
                 let newLength = (prefixText as NSString).length
                 if var styles = parent.block.inlineStyles {
                     styles = styles.filter { $0.rangeLocation < newLength }
@@ -995,6 +1112,37 @@ struct JournalBlockRow: View {
 
                 if let placeholderTextView = textView as? PlaceholderTextView {
                     placeholderTextView.placeholderLabel.isHidden = !newText.isEmpty
+                }
+
+                // Mention detection: find last @ before cursor with no space after it
+                let cursorLoc = textView.selectedRange.location
+                let nsText = newText as NSString
+                var foundAt: Int? = nil
+                var query = ""
+                if cursorLoc > 0 {
+                    let textBeforeCursor = nsText.substring(to: cursorLoc)
+                    if let atRange = textBeforeCursor.range(of: "@", options: .backwards) {
+                        let atIndex = textBeforeCursor.distance(from: textBeforeCursor.startIndex, to: atRange.lowerBound)
+                        let afterAt = String(textBeforeCursor[atRange.upperBound...])
+                        if !afterAt.contains(" ") && !afterAt.contains("\n") {
+                            foundAt = atIndex
+                            query = afterAt
+                        }
+                    }
+                }
+
+                if let atLoc = foundAt {
+                    let payload = (blockID: parent.block.id, atLocation: atLoc, query: query)
+                    NotificationCenter.default.post(
+                        name: .journalBlockRequestMentionPicker,
+                        object: payload
+                    )
+                } else {
+                    let payload = (blockID: parent.block.id, atLocation: -1, query: "")
+                    NotificationCenter.default.post(
+                        name: .journalBlockRequestMentionPicker,
+                        object: payload
+                    )
                 }
             }
 

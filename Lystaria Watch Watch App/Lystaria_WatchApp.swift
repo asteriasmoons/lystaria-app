@@ -17,14 +17,27 @@ struct Lystaria_Watch_Watch_AppApp: App {
                 .modelContainer(for: [
                     MoodLog.self,
                     JournalBook.self,
-                    JournalEntry.self
+                    JournalEntry.self,
+                    Habit.self,
+                    HabitLog.self,
+                    HabitSkip.self,
+                    ReadingStats.self,
+                    DailyReadingProgress.self,
+                    ReadingGoal.self,
+                    ReadingSession.self,
+                    Checklist.self,
+                    ChecklistItem.self,
+                    LystariaReminder.self,
+                    RoutineChecklistItem.self,
+                    ReminderMedicationLink.self,
+                    KanbanBoard.self,
+                    KanbanColumn.self,
+                    CalendarEvent.self,
+                    EventCalendar.self,
+                    EventAttendee.self
                 ])
                 .onAppear {
                     WatchSessionManager.shared.activate()
-
-                    // On every launch, reload the widget with whatever data
-                    // is already stored in the shared plist file. This ensures
-                    // the complication shows data even after the watch app restarts.
                     WidgetCenter.shared.reloadAllTimelines()
                 }
         }

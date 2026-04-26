@@ -373,14 +373,34 @@ struct KanbanView: View {
 
     private func markDone(_ reminder: LystariaReminder) {
         guard canMarkReminderDone(reminder) else { return }
-        logHabitIfLinked(reminder)
+        logHabitProgressFromReminder(reminder)
         logMedicationIfLinked(reminder)
         let completedOccurrenceDate = reminder.nextRunAt
 
         if reminder.isRecurring {
             let now = Date()
             let base = max(now, reminder.nextRunAt)
-            reminder.nextRunAt = ReminderCompute.nextRun(after: base.addingTimeInterval(91), reminder: reminder)
+
+            let intervalWindowStart: String? = {
+                guard reminder.linkedKind == .habit,
+                      let habitId = reminder.linkedHabitId else { return nil }
+                let descriptor = FetchDescriptor<Habit>()
+                return ((try? modelContext.fetch(descriptor)) ?? []).first(where: { $0.id == habitId })?.reminderIntervalWindowStart
+            }()
+
+            let intervalWindowEnd: String? = {
+                guard reminder.linkedKind == .habit,
+                      let habitId = reminder.linkedHabitId else { return nil }
+                let descriptor = FetchDescriptor<Habit>()
+                return ((try? modelContext.fetch(descriptor)) ?? []).first(where: { $0.id == habitId })?.reminderIntervalWindowEnd
+            }()
+
+            reminder.nextRunAt = ReminderCompute.nextRun(
+                after: reminder.nextRunAt.addingTimeInterval(91),
+                reminder: reminder,
+                intervalWindowStart: intervalWindowStart,
+                intervalWindowEnd: intervalWindowEnd
+            )
             reminder.acknowledgedAt = nil
             if reminder.reminderType == .routine {
                 reminder.resetRoutineChecklist(for: "\(reminder.nextRunAt.timeIntervalSince1970)")
@@ -415,42 +435,76 @@ struct KanbanView: View {
 
     // MARK: - Habit/Medication Logging (from RemindersView)
 
-    private func logHabitIfLinked(_ reminder: LystariaReminder) {
-        // Only habit-linked reminders should affect habit logs.
+    private func logHabitProgressFromReminder(_ reminder: LystariaReminder) {
         guard reminder.linkedKind == .habit,
-              let hid = reminder.linkedHabitId,
-              let habit = habits.first(where: { $0.id == hid }) else { return }
+              let habitId = reminder.linkedHabitId else { return }
+
+        let descriptor = FetchDescriptor<Habit>()
+        guard let habit = ((try? modelContext.fetch(descriptor)) ?? []).first(where: { $0.id == habitId }) else {
+            return
+        }
 
         let cal = Calendar.current
         let todayStart = cal.startOfDay(for: Date())
-        let cap = max(1, habit.timesPerDay)
 
-        // Match HabitsView behavior: if today was marked skipped, remove that skip
-        // when the user completes the habit from a linked reminder.
-        let todaysSkips = (habit.skips ?? []).filter {
-            cal.isDate($0.dayStart, inSameDayAs: todayStart)
-        }
-        for skip in todaysSkips {
-            modelContext.delete(skip)
-        }
-        if !todaysSkips.isEmpty {
-            habit.skips = (habit.skips ?? []).filter {
-                !cal.isDate($0.dayStart, inSameDayAs: todayStart)
+        let cap: Int
+        let kind = habit.reminderKind
+        if kind == .everyXHours || kind == .everyXMinutes {
+            let intervalMins: Int
+            if kind == .everyXHours {
+                intervalMins = max(1, habit.reminderIntervalHours) * 60
+            } else {
+                intervalMins = max(1, habit.reminderIntervalMinutes)
             }
+            if !habit.reminderIntervalWindowStart.isEmpty,
+               !habit.reminderIntervalWindowEnd.isEmpty,
+               let (wsH, wsM) = ReminderCompute.parseHHMM(habit.reminderIntervalWindowStart),
+               let (weH, weM) = ReminderCompute.parseHHMM(habit.reminderIntervalWindowEnd) {
+                let windowMins = (weH * 60 + weM) - (wsH * 60 + wsM)
+                cap = windowMins > 0 ? max(1, (windowMins / intervalMins) + 1) : max(1, habit.timesPerDay)
+            } else {
+                cap = max(1, habit.timesPerDay)
+            }
+        } else {
+            cap = max(1, habit.timesPerDay)
         }
 
-        if let existing = (habit.logs ?? []).first(where: { cal.isDate($0.dayStart, inSameDayAs: todayStart) }) {
-            if existing.count < cap {
-                existing.count += 1
-                existing.updatedAt = Date()
+        if let existingSkip = (habit.skips ?? []).first(where: { cal.isDate($0.dayStart, inSameDayAs: todayStart) }) {
+            modelContext.delete(existingSkip)
+            habit.skips = (habit.skips ?? []).filter { $0.persistentModelID != existingSkip.persistentModelID }
+        }
+
+        if let existingLog = (habit.logs ?? []).first(where: { cal.isDate($0.dayStart, inSameDayAs: todayStart) }) {
+            if existingLog.count < cap {
+                existingLog.count += 1
+                habit.updatedAt = Date()
+
+                _ = try? SelfCarePointsManager.awardHabitLog(
+                    in: modelContext,
+                    habitLogId: existingLog.id.uuidString,
+                    title: habit.title,
+                    loggedAt: Date()
+                )
             }
         } else {
             let newLog = HabitLog(habit: habit, dayStart: todayStart, count: 1)
             modelContext.insert(newLog)
-        }
 
-        habit.updatedAt = Date()
-        habit.logs = habit.logs
+            if habit.logs == nil {
+                habit.logs = [newLog]
+            } else {
+                habit.logs?.append(newLog)
+            }
+
+            habit.updatedAt = Date()
+
+            _ = try? SelfCarePointsManager.awardHabitLog(
+                in: modelContext,
+                habitLogId: newLog.id.uuidString,
+                title: habit.title,
+                loggedAt: Date()
+            )
+        }
     }
 
     private func logMedicationIfLinked(_ reminder: LystariaReminder) {

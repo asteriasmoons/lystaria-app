@@ -18,6 +18,8 @@ enum SelfCarePointSourceType: String, Codable, CaseIterable {
     case healthLog = "healthLog"
     case exerciseLog = "exerciseLog"
     case moodLog = "moodLog"
+    case readingSession = "readingSession"
+    case readingTimerSession = "readingTimerSession"
 
     var label: String {
         switch self {
@@ -30,6 +32,8 @@ enum SelfCarePointSourceType: String, Codable, CaseIterable {
         case .healthLog: return "Health Log"
         case .exerciseLog: return "Exercise Log"
         case .moodLog: return "Mood Log"
+        case .readingSession: return "Reading Session"
+        case .readingTimerSession: return "Reading Timer Session"
         }
     }
 }

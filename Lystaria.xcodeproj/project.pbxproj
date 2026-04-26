@@ -103,6 +103,27 @@
 		CF822ED02F90764000CC5B80 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CF29FC612F6D8C3600EC47F8 /* SwiftUI.framework */; };
 		CF822EDF2F90764100CC5B80 /* Lystaria Watch WidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CF822ECE2F90764000CC5B80 /* Lystaria Watch WidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		CF822EE92F9141A800CC5B80 /* SleepHealthKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF822EE82F9141A800CC5B80 /* SleepHealthKitManager.swift */; };
+		CF822EEB2F9268E100CC5B80 /* ReadingGoalSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF822EEA2F9268DB00CC5B80 /* ReadingGoalSnapshot.swift */; };
+		CF822EED2F951CA200CC5B80 /* WatchSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF822EEC2F951C9B00CC5B80 /* WatchSessionManager.swift */; };
+		CF822EF12F95222000CC5B80 /* Habit.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83262F50A4940092FC98 /* Habit.swift */; };
+		CF822EF22F95222600CC5B80 /* HabitLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83272F50A4940092FC98 /* HabitLog.swift */; };
+		CF822EF32F95223000CC5B80 /* HabitSkip.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF29FC812F6E4F0800EC47F8 /* HabitSkip.swift */; };
+		CF822EF92F9531DC00CC5B80 /* DailyReadingProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFF7C5B22F734D7900A67EC3 /* DailyReadingProgress.swift */; };
+		CF822EFA2F95328C00CC5B80 /* ReadingStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D836D2F53B1170092FC98 /* ReadingStats.swift */; };
+		CF822EFE2F953F1500CC5B80 /* ReadingSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF29FC7D2F6DE79C00EC47F8 /* ReadingSession.swift */; };
+		CF822EFF2F953F2E00CC5B80 /* Book.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83232F50A4940092FC98 /* Book.swift */; };
+		CF822F002F953F7A00CC5B80 /* BookNote.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFF7C5B62F737D4500A67EC3 /* BookNote.swift */; };
+		CF822F012F95400300CC5B80 /* BookSeries.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFAF69032F7708D500E74833 /* BookSeries.swift */; };
+		CF822F042F954C4B00CC5B80 /* ChecklistItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83252F50A4940092FC98 /* ChecklistItem.swift */; };
+		CF822F062F95506400CC5B80 /* ReminderCompute.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF822F052F95506000CC5B80 /* ReminderCompute.swift */; };
+		CF822F0B2F9550D200CC5B80 /* Reminder.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D832A2F50A4940092FC98 /* Reminder.swift */; };
+		CF822F0C2F9551CC00CC5B80 /* ReminderCompute.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF822F052F95506000CC5B80 /* ReminderCompute.swift */; };
+		CF822F0E2F9554A200CC5B80 /* KanbanBoard.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8421CA2F638EDB0069F12F /* KanbanBoard.swift */; };
+		CF822F0F2F95556D00CC5B80 /* LystariaTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D834B2F5124EB0092FC98 /* LystariaTheme.swift */; };
+		CF822F142F95776F00CC5B80 /* CalendarEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83242F50A4940092FC98 /* CalendarEvent.swift */; };
+		CF822F152F95778100CC5B80 /* EventCalendar.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF29FC872F6F602C00EC47F8 /* EventCalendar.swift */; };
+		CF822F162F95778D00CC5B80 /* EventAttendee.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF822EBC2F9039AA00CC5B80 /* EventAttendee.swift */; };
+		CF822F182F9579B700CC5B80 /* CalendarEventResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF822F172F9579AF00CC5B80 /* CalendarEventResolver.swift */; };
 		CF84216D2F5F57520069F12F /* AuthUser.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83222F50A4940092FC98 /* AuthUser.swift */; };
 		CF84217C2F5FA7580069F12F /* HealthKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84217B2F5FA7480069F12F /* HealthKitManager.swift */; };
 		CF84217D2F5FA7580069F12F /* HealthKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84217B2F5FA7480069F12F /* HealthKitManager.swift */; };
@@ -239,6 +260,29 @@
 		CFB0B1802F8944E500B42AB3 /* JournalStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFB0B17F2F8944E500B42AB3 /* JournalStats.swift */; };
 		CFB0B1822F897BC800B42AB3 /* VoiceTranscriptionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFB0B1812F897BBF00B42AB3 /* VoiceTranscriptionManager.swift */; };
 		CFB0B1852F8AC14500B42AB3 /* InfoTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFB0B1842F8AC14100B42AB3 /* InfoTabView.swift */; };
+		CFC6B1C62F957DAD00A60409 /* CalendarEventResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF822F172F9579AF00CC5B80 /* CalendarEventResolver.swift */; };
+		CFC6B1C82F95B54500A60409 /* CalendarEventSyncHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC6B1C72F95B54500A60409 /* CalendarEventSyncHelper.swift */; };
+		CFC6B1CB2F95B56F00A60409 /* CalendarConflictResolutionSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC6B1C92F95B56F00A60409 /* CalendarConflictResolutionSheet.swift */; };
+		CFC6B1CC2F95B56F00A60409 /* CalendarSyncSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC6B1CA2F95B56F00A60409 /* CalendarSyncSettingsView.swift */; };
+		CFC6B1CE2F965FC700A60409 /* CalendarManageSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC6B1CD2F965FC700A60409 /* CalendarManageSheet.swift */; };
+		CFC6B1D02F99344200A60409 /* BuddyModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC6B1CF2F99343B00A60409 /* BuddyModels.swift */; };
+		CFC6B1D22F99348C00A60409 /* BuddyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC6B1D12F99348700A60409 /* BuddyService.swift */; };
+		CFC6B1D42F9934D000A60409 /* BuddySocketManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC6B1D32F9934CB00A60409 /* BuddySocketManager.swift */; };
+		CFC6B1E12F993DE800A60409 /* SocketIO in Frameworks */ = {isa = PBXBuildFile; productRef = CFC6B1E02F993DE800A60409 /* SocketIO */; };
+		CFC6B1E82F99AD2E00A60409 /* BuddyGroupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC6B1E22F99AD2E00A60409 /* BuddyGroupView.swift */; };
+		CFC6B1E92F99AD2E00A60409 /* BuddyReadingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC6B1E62F99AD2E00A60409 /* BuddyReadingView.swift */; };
+		CFC6B1EA2F99AD2E00A60409 /* BuddyProgressUpdateSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC6B1E52F99AD2E00A60409 /* BuddyProgressUpdateSheet.swift */; };
+		CFC6B1EB2F99AD2E00A60409 /* BuddyPostAnnouncementSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC6B1E42F99AD2E00A60409 /* BuddyPostAnnouncementSheet.swift */; };
+		CFC6B1EF2F99AD9E00A60409 /* SprintModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC6B1EE2F99AD9900A60409 /* SprintModels.swift */; };
+		CFC6B1F12F99ADD200A60409 /* SprintService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC6B1F02F99ADCD00A60409 /* SprintService.swift */; };
+		CFC6B1F32F99ADFD00A60409 /* SprintSocketManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC6B1F22F99ADF600A60409 /* SprintSocketManager.swift */; };
+		CFC6B1F52F99AE2C00A60409 /* SprintRoomView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC6B1F42F99AE2700A60409 /* SprintRoomView.swift */; };
+		CFC6B1F72F99AE8100A60409 /* SprintStartSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC6B1F62F99AE7B00A60409 /* SprintStartSheet.swift */; };
+		CFC6B1F92F99AEA300A60409 /* SprintJoinSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC6B1F82F99AE9E00A60409 /* SprintJoinSheet.swift */; };
+		CFC6B1FB2F99AEC400A60409 /* SprintEndPageSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC6B1FA2F99AEBD00A60409 /* SprintEndPageSheet.swift */; };
+		CFC6B1FD2F99AEEC00A60409 /* SprintLeaderboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC6B1FC2F99AEE500A60409 /* SprintLeaderboardView.swift */; };
+		CFC6B2012F9A681900A60409 /* SetDisplayNameSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC6B2002F9A680F00A60409 /* SetDisplayNameSheet.swift */; };
+		CFC6B2032F9A684500A60409 /* UserProfileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC6B2022F9A683F00A60409 /* UserProfileService.swift */; };
 		CFDD11AB2F7F22BF0067B262 /* Note.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFDD11AA2F7F22BC0067B262 /* Note.swift */; };
 		CFDD11AE2F7F24040067B262 /* NotesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFDD11AD2F7F24010067B262 /* NotesView.swift */; };
 		CFF7C5AF2F72EA0D00A67EC3 /* Medication.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFF7C5AE2F72EA0800A67EC3 /* Medication.swift */; };
@@ -398,6 +442,10 @@
 		CF822ECE2F90764000CC5B80 /* Lystaria Watch WidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Lystaria Watch WidgetsExtension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		CF822EE52F90790700CC5B80 /* Lystaria Watch WidgetsExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Lystaria Watch WidgetsExtension.entitlements"; sourceTree = "<group>"; };
 		CF822EE82F9141A800CC5B80 /* SleepHealthKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepHealthKitManager.swift; sourceTree = "<group>"; };
+		CF822EEA2F9268DB00CC5B80 /* ReadingGoalSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingGoalSnapshot.swift; sourceTree = "<group>"; };
+		CF822EEC2F951C9B00CC5B80 /* WatchSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchSessionManager.swift; sourceTree = "<group>"; };
+		CF822F052F95506000CC5B80 /* ReminderCompute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderCompute.swift; sourceTree = "<group>"; };
+		CF822F172F9579AF00CC5B80 /* CalendarEventResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarEventResolver.swift; sourceTree = "<group>"; };
 		CF84217B2F5FA7480069F12F /* HealthKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitManager.swift; sourceTree = "<group>"; };
 		CF8421812F5FBD820069F12F /* WaterHealthKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaterHealthKitManager.swift; sourceTree = "<group>"; };
 		CF8421882F6079E60069F12F /* OnboardingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingManager.swift; sourceTree = "<group>"; };
@@ -522,6 +570,27 @@
 		CFB0B17F2F8944E500B42AB3 /* JournalStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalStats.swift; sourceTree = "<group>"; };
 		CFB0B1812F897BBF00B42AB3 /* VoiceTranscriptionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceTranscriptionManager.swift; sourceTree = "<group>"; };
 		CFB0B1842F8AC14100B42AB3 /* InfoTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InfoTabView.swift; sourceTree = "<group>"; };
+		CFC6B1C72F95B54500A60409 /* CalendarEventSyncHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarEventSyncHelper.swift; sourceTree = "<group>"; };
+		CFC6B1C92F95B56F00A60409 /* CalendarConflictResolutionSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarConflictResolutionSheet.swift; sourceTree = "<group>"; };
+		CFC6B1CA2F95B56F00A60409 /* CalendarSyncSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarSyncSettingsView.swift; sourceTree = "<group>"; };
+		CFC6B1CD2F965FC700A60409 /* CalendarManageSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarManageSheet.swift; sourceTree = "<group>"; };
+		CFC6B1CF2F99343B00A60409 /* BuddyModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuddyModels.swift; sourceTree = "<group>"; };
+		CFC6B1D12F99348700A60409 /* BuddyService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuddyService.swift; sourceTree = "<group>"; };
+		CFC6B1D32F9934CB00A60409 /* BuddySocketManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuddySocketManager.swift; sourceTree = "<group>"; };
+		CFC6B1E22F99AD2E00A60409 /* BuddyGroupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuddyGroupView.swift; sourceTree = "<group>"; };
+		CFC6B1E42F99AD2E00A60409 /* BuddyPostAnnouncementSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuddyPostAnnouncementSheet.swift; sourceTree = "<group>"; };
+		CFC6B1E52F99AD2E00A60409 /* BuddyProgressUpdateSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuddyProgressUpdateSheet.swift; sourceTree = "<group>"; };
+		CFC6B1E62F99AD2E00A60409 /* BuddyReadingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuddyReadingView.swift; sourceTree = "<group>"; };
+		CFC6B1EE2F99AD9900A60409 /* SprintModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SprintModels.swift; sourceTree = "<group>"; };
+		CFC6B1F02F99ADCD00A60409 /* SprintService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SprintService.swift; sourceTree = "<group>"; };
+		CFC6B1F22F99ADF600A60409 /* SprintSocketManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SprintSocketManager.swift; sourceTree = "<group>"; };
+		CFC6B1F42F99AE2700A60409 /* SprintRoomView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SprintRoomView.swift; sourceTree = "<group>"; };
+		CFC6B1F62F99AE7B00A60409 /* SprintStartSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SprintStartSheet.swift; sourceTree = "<group>"; };
+		CFC6B1F82F99AE9E00A60409 /* SprintJoinSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SprintJoinSheet.swift; sourceTree = "<group>"; };
+		CFC6B1FA2F99AEBD00A60409 /* SprintEndPageSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SprintEndPageSheet.swift; sourceTree = "<group>"; };
+		CFC6B1FC2F99AEE500A60409 /* SprintLeaderboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SprintLeaderboardView.swift; sourceTree = "<group>"; };
+		CFC6B2002F9A680F00A60409 /* SetDisplayNameSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetDisplayNameSheet.swift; sourceTree = "<group>"; };
+		CFC6B2022F9A683F00A60409 /* UserProfileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileService.swift; sourceTree = "<group>"; };
 		CFDD11AA2F7F22BC0067B262 /* Note.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Note.swift; sourceTree = "<group>"; };
 		CFDD11AD2F7F24010067B262 /* NotesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesView.swift; sourceTree = "<group>"; };
 		CFF7C5AE2F72EA0800A67EC3 /* Medication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Medication.swift; sourceTree = "<group>"; };
@@ -553,13 +622,6 @@
 			);
 			target = CF8B7FA02F6C70EC006A7D3B /* Lystaria Share */;
 		};
-		CF92D5642F75959600174F04 /* Exceptions for "Lystaria Watch Watch App" folder in "Lystaria" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Managers/WatchSessionManager.swift,
-			);
-			target = CF41A5922F4DF57000C96018 /* Lystaria */;
-		};
 		CF92D57A2F75B8E800174F04 /* Exceptions for "Lystaria Watch Watch App" folder in "Lystaria Watch Watch App" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -573,7 +635,6 @@
 		CF0A09E12F5F14B200401658 /* Lystaria Watch Watch App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				CF92D5642F75959600174F04 /* Exceptions for "Lystaria Watch Watch App" folder in "Lystaria" target */,
 				CF92D57A2F75B8E800174F04 /* Exceptions for "Lystaria Watch Watch App" folder in "Lystaria Watch Watch App" target */,
 			);
 			path = "Lystaria Watch Watch App";
@@ -626,6 +687,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CFC6B1E12F993DE800A60409 /* SocketIO in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -739,6 +801,9 @@
 		CF4790AD2F5B676E0026696B /* Managers */ = {
 			isa = PBXGroup;
 			children = (
+				CFC6B1F22F99ADF600A60409 /* SprintSocketManager.swift */,
+				CFC6B1D32F9934CB00A60409 /* BuddySocketManager.swift */,
+				CF822EEC2F951C9B00CC5B80 /* WatchSessionManager.swift */,
 				CF822EE82F9141A800CC5B80 /* SleepHealthKitManager.swift */,
 				CFB0B1812F897BBF00B42AB3 /* VoiceTranscriptionManager.swift */,
 				CF92D5612F7591FD00174F04 /* DailyCompletionArcHelper.swift */,
@@ -862,6 +927,9 @@
 		CF8D83052F50A4640092FC98 /* Calendar */ = {
 			isa = PBXGroup;
 			children = (
+				CFC6B1CD2F965FC700A60409 /* CalendarManageSheet.swift */,
+				CFC6B1C92F95B56F00A60409 /* CalendarConflictResolutionSheet.swift */,
+				CFC6B1CA2F95B56F00A60409 /* CalendarSyncSettingsView.swift */,
 				CF822EC22F90605000CC5B80 /* JoinSharedEventView.swift */,
 				CF822EC32F90605000CC5B80 /* SharedEventDetailView.swift */,
 				CF822EC02F90554800CC5B80 /* SharedEventsAPIService.swift */,
@@ -958,6 +1026,8 @@
 		CF8D83152F50A4640092FC98 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				CFC6B1ED2F99AD6A00A60409 /* Sprints */,
+				CFC6B1E72F99AD2E00A60409 /* BuddyReading */,
 				CFB0B1832F8AC13B00B42AB3 /* Info */,
 				CFDD11AC2F7F231D0067B262 /* Notes */,
 				CF8B7F8C2F6C4A7E006A7D3B /* Bookmark */,
@@ -979,6 +1049,9 @@
 		CF8D831F2F50A4770092FC98 /* Utilities */ = {
 			isa = PBXGroup;
 			children = (
+				CFC6B1C72F95B54500A60409 /* CalendarEventSyncHelper.swift */,
+				CF822F172F9579AF00CC5B80 /* CalendarEventResolver.swift */,
+				CF822F052F95506000CC5B80 /* ReminderCompute.swift */,
 				CFB0B1752F832BC000B42AB3 /* ReadingTimerActivityAttributes.swift */,
 				CFAF69142F79ED0F00E74833 /* MoonPhaseDetailData.swift */,
 				CF92D5182F75660500174F04 /* PremiumView.swift */,
@@ -1003,6 +1076,9 @@
 		CF8D832C2F50A4940092FC98 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				CFC6B1EE2F99AD9900A60409 /* SprintModels.swift */,
+				CFC6B1CF2F99343B00A60409 /* BuddyModels.swift */,
+				CF822EEA2F9268DB00CC5B80 /* ReadingGoalSnapshot.swift */,
 				CF822EBC2F9039AA00CC5B80 /* EventAttendee.swift */,
 				CFB0B17F2F8944E500B42AB3 /* JournalStats.swift */,
 				CFB0B1732F82FE3000B42AB3 /* ReadingPointsEntry.swift */,
@@ -1100,6 +1176,9 @@
 		CF8D833B2F50B0380092FC98 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				CFC6B2022F9A683F00A60409 /* UserProfileService.swift */,
+				CFC6B1F02F99ADCD00A60409 /* SprintService.swift */,
+				CFC6B1D12F99348700A60409 /* BuddyService.swift */,
 				CF8421C32F632DC50069F12F /* HoroscopeService.swift */,
 				CF8D83422F50E78C0092FC98 /* AuthDTOs.swift */,
 				CF8D83402F50D7570092FC98 /* AuthService.swift */,
@@ -1132,6 +1211,30 @@
 				CFB0B1842F8AC14100B42AB3 /* InfoTabView.swift */,
 			);
 			path = Info;
+			sourceTree = "<group>";
+		};
+		CFC6B1E72F99AD2E00A60409 /* BuddyReading */ = {
+			isa = PBXGroup;
+			children = (
+				CFC6B1E22F99AD2E00A60409 /* BuddyGroupView.swift */,
+				CFC6B1E42F99AD2E00A60409 /* BuddyPostAnnouncementSheet.swift */,
+				CFC6B1E52F99AD2E00A60409 /* BuddyProgressUpdateSheet.swift */,
+				CFC6B1E62F99AD2E00A60409 /* BuddyReadingView.swift */,
+			);
+			path = BuddyReading;
+			sourceTree = "<group>";
+		};
+		CFC6B1ED2F99AD6A00A60409 /* Sprints */ = {
+			isa = PBXGroup;
+			children = (
+				CFC6B2002F9A680F00A60409 /* SetDisplayNameSheet.swift */,
+				CFC6B1FC2F99AEE500A60409 /* SprintLeaderboardView.swift */,
+				CFC6B1FA2F99AEBD00A60409 /* SprintEndPageSheet.swift */,
+				CFC6B1F82F99AE9E00A60409 /* SprintJoinSheet.swift */,
+				CFC6B1F62F99AE7B00A60409 /* SprintStartSheet.swift */,
+				CFC6B1F42F99AE2700A60409 /* SprintRoomView.swift */,
+			);
+			path = Sprints;
 			sourceTree = "<group>";
 		};
 		CFDD11AC2F7F231D0067B262 /* Notes */ = {
@@ -1210,6 +1313,7 @@
 			);
 			name = Lystaria;
 			packageProductDependencies = (
+				CFC6B1E02F993DE800A60409 /* SocketIO */,
 			);
 			productName = Lystaria;
 			productReference = CF41A5932F4DF57000C96018 /* Lystaria.app */;
@@ -1296,6 +1400,7 @@
 			mainGroup = CF41A58A2F4DF57000C96018;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				CFC6B1D52F99350700A60409 /* XCRemoteSwiftPackageReference "socket" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = CF41A5942F4DF57000C96018 /* Products */;
@@ -1365,11 +1470,29 @@
 				CF8421822F5FBD8B0069F12F /* WaterHealthKitManager.swift in Sources */,
 				CF8B7F7A2F6B4345006A7D3B /* JournalBlock.swift in Sources */,
 				CF84216D2F5F57520069F12F /* AuthUser.swift in Sources */,
+				CF822F0B2F9550D200CC5B80 /* Reminder.swift in Sources */,
+				CF822EFF2F953F2E00CC5B80 /* Book.swift in Sources */,
+				CF822F0E2F9554A200CC5B80 /* KanbanBoard.swift in Sources */,
+				CF822EF12F95222000CC5B80 /* Habit.swift in Sources */,
+				CF822F0F2F95556D00CC5B80 /* LystariaTheme.swift in Sources */,
+				CF822F142F95776F00CC5B80 /* CalendarEvent.swift in Sources */,
+				CF822F0C2F9551CC00CC5B80 /* ReminderCompute.swift in Sources */,
+				CF822EFA2F95328C00CC5B80 /* ReadingStats.swift in Sources */,
+				CF822F002F953F7A00CC5B80 /* BookNote.swift in Sources */,
+				CF822EF32F95223000CC5B80 /* HabitSkip.swift in Sources */,
+				CF822F042F954C4B00CC5B80 /* ChecklistItem.swift in Sources */,
+				CFC6B1C62F957DAD00A60409 /* CalendarEventResolver.swift in Sources */,
+				CF822EF22F95222600CC5B80 /* HabitLog.swift in Sources */,
+				CF822EFE2F953F1500CC5B80 /* ReadingSession.swift in Sources */,
 				CF92D56F2F75AD8500174F04 /* HealthWidgetSync.swift in Sources */,
 				CF0A09F22F5F1C5800401658 /* MoodLog.swift in Sources */,
 				CFAF69132F79787F00E74833 /* ReadingGoal.swift in Sources */,
+				CF822F152F95778100CC5B80 /* EventCalendar.swift in Sources */,
 				CF84217D2F5FA7580069F12F /* HealthKitManager.swift in Sources */,
+				CF822F162F95778D00CC5B80 /* EventAttendee.swift in Sources */,
+				CF822F012F95400300CC5B80 /* BookSeries.swift in Sources */,
 				CF13B6522F678C27008D3CE9 /* JournalEntry.swift in Sources */,
+				CF822EF92F9531DC00CC5B80 /* DailyReadingProgress.swift in Sources */,
 				CF92D53A2F75837200174F04 /* MoodStreak.swift in Sources */,
 				CF8B7F7B2F6B4375006A7D3B /* JournalInlineStyle.swift in Sources */,
 				CF13B6562F678D53008D3CE9 /* JournalBook.swift in Sources */,
@@ -1400,7 +1523,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				CF8B7FBE2F6C78E7006A7D3B /* SharedFolderStore.swift in Sources */,
+				CFC6B1D42F9934D000A60409 /* BuddySocketManager.swift in Sources */,
 				CFB0B1742F82FE3000B42AB3 /* ReadingPointsEntry.swift in Sources */,
+				CFC6B1D22F99348C00A60409 /* BuddyService.swift in Sources */,
 				CF13B61B2F63B9EC008D3CE9 /* MoodLogWriter.swift in Sources */,
 				CF8D836C2F53AA600092FC98 /* DailyIntention.swift in Sources */,
 				CF8D83412F50D75D0092FC98 /* AuthService.swift in Sources */,
@@ -1413,6 +1538,10 @@
 				CF8B7FB92F6C7441006A7D3B /* SharedBookmarkImportManager.swift in Sources */,
 				CF822EC12F90555100CC5B80 /* SharedEventsAPIService.swift in Sources */,
 				CF29FC882F6F603000EC47F8 /* EventCalendar.swift in Sources */,
+				CFC6B1E82F99AD2E00A60409 /* BuddyGroupView.swift in Sources */,
+				CFC6B1E92F99AD2E00A60409 /* BuddyReadingView.swift in Sources */,
+				CFC6B1EA2F99AD2E00A60409 /* BuddyProgressUpdateSheet.swift in Sources */,
+				CFC6B1EB2F99AD2E00A60409 /* BuddyPostAnnouncementSheet.swift in Sources */,
 				CF8B7F922F6C4DAF006A7D3B /* BookmarkDetailView.swift in Sources */,
 				CF8421892F6079EC0069F12F /* OnboardingManager.swift in Sources */,
 				CF13B6712F69B610008D3CE9 /* HealthMetricsHistoryPopupView.swift in Sources */,
@@ -1421,6 +1550,7 @@
 				CF8421A02F607BD80069F12F /* OnboardingPages.swift in Sources */,
 				CF13B6642F69ACBA008D3CE9 /* ExerciseLogEntry.swift in Sources */,
 				CF8421B82F6266380069F12F /* DashboardView.swift in Sources */,
+				CFC6B1C82F95B54500A60409 /* CalendarEventSyncHelper.swift in Sources */,
 				CF13B6312F65AE5C008D3CE9 /* CheckInReadingIntent.swift in Sources */,
 				CF8D835C2F5129B10092FC98 /* CalendarTabView.swift in Sources */,
 				CF822EBF2F90552200CC5B80 /* SharedEventDTO.swift in Sources */,
@@ -1456,11 +1586,14 @@
 				CF8B7F602F6B058E006A7D3B /* BodyStateHealthKitManager.swift in Sources */,
 				CFDD11AB2F7F22BF0067B262 /* Note.swift in Sources */,
 				CF13B6462F675D8A008D3CE9 /* DashboardConsistencyModels.swift in Sources */,
+				CFC6B1F72F99AE8100A60409 /* SprintStartSheet.swift in Sources */,
 				CF6E9D632F8EA3B400140B17 /* MedicationDoseScheduleGrid.swift in Sources */,
 				CF8B7F632F6B3402006A7D3B /* JournalBlockRow.swift in Sources */,
 				CF8D837C2F53E1E60092FC98 /* SignInView.swift in Sources */,
+				CFC6B1FB2F99AEC400A60409 /* SprintEndPageSheet.swift in Sources */,
 				CF13B65F2F68BE6E008D3CE9 /* JournalPrompt.swift in Sources */,
 				CF8D833D2F50B0620092FC98 /* APIClient.swift in Sources */,
+				CFC6B1F52F99AE2C00A60409 /* SprintRoomView.swift in Sources */,
 				CF8D832D2F50A4940092FC98 /* Habit.swift in Sources */,
 				CF8421AF2F61CD660069F12F /* WelcomeView.swift in Sources */,
 				CF8D832E2F50A4940092FC98 /* MoodLog.swift in Sources */,
@@ -1468,6 +1601,7 @@
 				CFB0B1762F832BCE00B42AB3 /* ReadingTimerActivityAttributes.swift in Sources */,
 				CF8421B42F61E7830069F12F /* SettingsView.swift in Sources */,
 				CFF7C5B52F734DA000A67EC3 /* WeeklyReadingSnapshot.swift in Sources */,
+				CFC6B1F12F99ADD200A60409 /* SprintService.swift in Sources */,
 				CFDD11AE2F7F24040067B262 /* NotesView.swift in Sources */,
 				CF8B7FB32F6C7371006A7D3B /* SharedBookmarkPayload.swift in Sources */,
 				CFAF691A2F7AA6D500E74833 /* SymptomLoggerView.swift in Sources */,
@@ -1512,11 +1646,13 @@
 				CF13B6442F671ACE008D3CE9 /* MoonPhaseData.swift in Sources */,
 				CF8B7F852F6B7C87006A7D3B /* SelfCarePointsView.swift in Sources */,
 				CFAF69152F79ED1900E74833 /* MoonPhaseDetailData.swift in Sources */,
+				CFC6B1D02F99344200A60409 /* BuddyModels.swift in Sources */,
 				CF20514A2F578DFB006B71AA /* JournalCard.swift in Sources */,
 				CF13B6372F65C044008D3CE9 /* ChecklistItemWriter.swift in Sources */,
 				CF8D83392F50A4A40092FC98 /* LystariaApp.swift in Sources */,
 				CF13B6272F6442C6008D3CE9 /* JournalBookEntity.swift in Sources */,
 				CF8B7FC22F6C797E006A7D3B /* SharedFolderExportManager.swift in Sources */,
+				CF822EED2F951CA200CC5B80 /* WatchSessionManager.swift in Sources */,
 				CF8D83322F50A4940092FC98 /* ChecklistItem.swift in Sources */,
 				CFF7C5B12F72F19300A67EC3 /* MedicationPageView.swift in Sources */,
 				CF8B7F652F6B346B006A7D3B /* JournalBlockEditorView.swift in Sources */,
@@ -1529,30 +1665,38 @@
 				CF13B63E2F65C73F008D3CE9 /* LocationSearchSheet.swift in Sources */,
 				CF8B7F752F6B3AA6006A7D3B /* JournalCardBlockPreviewSupport.swift in Sources */,
 				CF13B6392F65C064008D3CE9 /* ChecklistItemIntent.swift in Sources */,
+				CFC6B1CE2F965FC700A60409 /* CalendarManageSheet.swift in Sources */,
 				CF29FC9F2F70AC9300EC47F8 /* Lenormand.swift in Sources */,
 				CF8421832F5FBD8B0069F12F /* WaterHealthKitManager.swift in Sources */,
 				CFAF69242F7DDAFB00E74833 /* WaterBottlePlanEntry.swift in Sources */,
 				CF13B66F2F69B54A008D3CE9 /* AddExercisePopupView.swift in Sources */,
 				CFB0B1822F897BC800B42AB3 /* VoiceTranscriptionManager.swift in Sources */,
+				CFC6B1EF2F99AD9E00A60409 /* SprintModels.swift in Sources */,
 				CF8421C72F636DD00069F12F /* ToolboxView.swift in Sources */,
 				CF29FC992F70905A00EC47F8 /* HealthWidgetSync.swift in Sources */,
 				CF13B6832F6A2DFF008D3CE9 /* JournalPromptUsage.swift in Sources */,
 				CFB0B17E2F87163A00B42AB3 /* ReminderTimeBlockView.swift in Sources */,
 				CF8D834C2F5124EB0092FC98 /* LystariaTheme.swift in Sources */,
+				CFC6B1F32F99ADFD00A60409 /* SprintSocketManager.swift in Sources */,
+				CFC6B1F92F99AEA300A60409 /* SprintJoinSheet.swift in Sources */,
 				CF8B7F672F6B34BF006A7D3B /* JournalInlineStyle.swift in Sources */,
 				CF8B7F9C2F6C6A35006A7D3B /* BookmarkIconLibrary.swift in Sources */,
 				CF13B6402F65CECB008D3CE9 /* CalendarEventDetailOverlay.swift in Sources */,
+				CFC6B2012F9A681900A60409 /* SetDisplayNameSheet.swift in Sources */,
 				CF8B7F982F6C507B006A7D3B /* BookmarkWebView.swift in Sources */,
 				CF92D5152F748C2B00174F04 /* PremiumLockModifier.swift in Sources */,
 				CFF7C5AF2F72EA0D00A67EC3 /* Medication.swift in Sources */,
 				CF13B6422F671AA6008D3CE9 /* MoonPhaseCalculator.swift in Sources */,
 				CF8D83342F50A4940092FC98 /* Reminder.swift in Sources */,
 				CF8421BC2F631C090069F12F /* StoredTarot.swift in Sources */,
+				CFC6B1CB2F95B56F00A60409 /* CalendarConflictResolutionSheet.swift in Sources */,
+				CFC6B1CC2F95B56F00A60409 /* CalendarSyncSettingsView.swift in Sources */,
 				CF92D5112F746E8F00174F04 /* LimitCleanup.swift in Sources */,
 				CF13B65B2F68645C008D3CE9 /* DailyTarotRecord.swift in Sources */,
 				CF8D835A2F5129A50092FC98 /* JournalTabView.swift in Sources */,
 				CF8D838A2F560F700092FC98 /* RemindersView.swift in Sources */,
 				CF29FC802F6E141200EC47F8 /* ReadingGoal.swift in Sources */,
+				CFC6B1FD2F99AEEC00A60409 /* SprintLeaderboardView.swift in Sources */,
 				CF8D83352F50A4940092FC98 /* Book.swift in Sources */,
 				CF8B7F962F6C4ED7006A7D3B /* AddEditBookmarkFolderView.swift in Sources */,
 				CF8421CB2F638EE00069F12F /* KanbanBoard.swift in Sources */,
@@ -1570,6 +1714,7 @@
 				CF8B7F9A2F6C5F6D006A7D3B /* BookmarkFolderDetailView.swift in Sources */,
 				CF13B67B2F69B779008D3CE9 /* ExerciseLogCard.swift in Sources */,
 				CFAF691E2F7C6B3600E74833 /* BookEntity.swift in Sources */,
+				CF822F182F9579B700CC5B80 /* CalendarEventResolver.swift in Sources */,
 				CF0A09D12F5C8C7400401658 /* BookSummarySheet.swift in Sources */,
 				CF8B7FB62F6C73AE006A7D3B /* SharedBookmarkInbox.swift in Sources */,
 				CF8B7F792F6B3ADD006A7D3B /* JournalBlockPreviewPage.swift in Sources */,
@@ -1577,7 +1722,9 @@
 				CF822EC52F90605000CC5B80 /* SharedEventDetailView.swift in Sources */,
 				CF0B8E672F6CBD1500D5D2C8 /* LogExerciseIntent.swift in Sources */,
 				CFAF69042F7708D900E74833 /* BookSeries.swift in Sources */,
+				CF822EEB2F9268E100CC5B80 /* ReadingGoalSnapshot.swift in Sources */,
 				CF8B7F692F6B34DF006A7D3B /* RichBlockTextView.swift in Sources */,
+				CF822F062F95506400CC5B80 /* ReminderCompute.swift in Sources */,
 				CF8B7F6B2F6B3501006A7D3B /* JournalBlockDisplayView.swift in Sources */,
 				CF8B7F902F6C4C1A006A7D3B /* BookmarkCard.swift in Sources */,
 				CF8B7F812F6B732E006A7D3B /* SelfCarePointEntry.swift in Sources */,
@@ -1588,6 +1735,7 @@
 				CF2051482F578D59006B71AA /* JournalEditorSheet.swift in Sources */,
 				CF13B6352F65B582008D3CE9 /* SetDailyIntentionIntent.swift in Sources */,
 				CF92D5172F7565A600174F04 /* PremiumManager.swift in Sources */,
+				CFC6B2032F9A684500A60409 /* UserProfileService.swift in Sources */,
 				CF29FC7E2F6DE7A100EC47F8 /* ReadingSession.swift in Sources */,
 				CF13B6772F69B6FA008D3CE9 /* ExerciseDetailPopupView.swift in Sources */,
 				CF8421C02F6329610069F12F /* DailyHoroscope.swift in Sources */,
@@ -1944,6 +2092,7 @@
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = PLRRW8XCVU;
 				ENABLE_APP_SANDBOX = YES;
+				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
@@ -2022,6 +2171,7 @@
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = PLRRW8XCVU;
 				ENABLE_APP_SANDBOX = YES;
+				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
@@ -2279,6 +2429,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		CFC6B1D52F99350700A60409 /* XCRemoteSwiftPackageReference "socket" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/socketio/socket.io-client-swift";
+			requirement = {
+				branch = master;
+				kind = branch;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		CFC6B1E02F993DE800A60409 /* SocketIO */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CFC6B1D52F99350700A60409 /* XCRemoteSwiftPackageReference "socket" */;
+			productName = SocketIO;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = CF41A58B2F4DF57000C96018 /* Project object */;
 }
