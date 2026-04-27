@@ -350,52 +350,6 @@ struct ReadingTabView: View {
                 }
                 .buttonStyle(.plain)
                 .onboardingTarget("bookmarkIcon")
-                
-                // In headerSection, after the bookmarks button and before the notes button:
-
-                Button {
-                    showBuddyReadingView = true
-                } label: {
-                    ZStack {
-                        Circle()
-                            .fill(Color.white.opacity(0.08))
-                            .overlay(
-                                Circle().stroke(LColors.glassBorder, lineWidth: 1),
-                            )
-                            .frame(width: 34, height: 34)
-
-                        Image("groupfill")
-                            .renderingMode(.template)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 16, height: 16)
-                            .foregroundColor(.white)
-                    }
-                }
-                .buttonStyle(.plain)
-                .onboardingTarget("groupIcon")
-                
-                Button {
-                    showSprintRoomView = true
-                } label: {
-                    ZStack {
-                        Circle()
-                            .fill(Color.white.opacity(0.08))
-                            .overlay(
-                                Circle().stroke(LColors.glassBorder, lineWidth: 1),
-                            )
-                            .frame(width: 34, height: 34)
-
-                        Image("sparkfill")
-                            .renderingMode(.template)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 16, height: 16)
-                            .foregroundColor(.white)
-                    }
-                }
-                .buttonStyle(.plain)
-                .onboardingTarget("boltIcon")
 
                 Button {
                     showNotesView = true
@@ -417,6 +371,37 @@ struct ReadingTabView: View {
                 }
                 .buttonStyle(.plain)
                 .onboardingTarget("notesIcon")
+
+                Menu {
+                    Button {
+                        showBuddyReadingView = true
+                    } label: {
+                        Label("Buddy Reading", image: "groupfill")
+                    }
+
+                    Button {
+                        showSprintRoomView = true
+                    } label: {
+                        Label("Sprint Room", image: "sparkfill")
+                    }
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.08))
+                            .overlay(
+                                Circle().stroke(LColors.glassBorder, lineWidth: 1),
+                            )
+                            .frame(width: 34, height: 34)
+                        Image("dotsfill")
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 15, height: 15)
+                            .foregroundColor(.white)
+                    }
+                }
+                .buttonStyle(.plain)
+                .onboardingTarget("readingMenuIcon")
             }
             .padding(.top, 24)
 
@@ -504,9 +489,11 @@ struct ReadingTabView: View {
                 }
                 .navigationDestination(isPresented: $showBuddyReadingView) {
                     BuddyReadingView()
+                        .environmentObject(onboarding)
                 }
                 .navigationDestination(isPresented: $showSprintRoomView) {
                     SprintRoomView()
+                        .environmentObject(onboarding)
                 }
         }
         .sheet(isPresented: $showReadingTimerSheet) {
@@ -520,21 +507,22 @@ struct ReadingTabView: View {
 
     /// Extracted to break the modifier chain that was causing the type-checker timeout.
     private var mainContent: some View {
-        ZStack {
+        ZStack(alignment: .bottomTrailing) {
             LystariaBackground()
             mainScrollContent
             readingPopupsOverlay
+
+            if !showBookSummaryPopup && !showBookRecommendationsPopup {
+                FloatingActionButton {
+                    handleAddBookTap()
+                }
+                .padding(.trailing, 26)
+                .padding(.bottom, 26)
+                .zIndex(10000)
+            }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showBookSummaryPopup)
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showBookRecommendationsPopup)
-        .overlay(alignment: .bottomTrailing) {
-            FloatingActionButton {
-                handleAddBookTap()
-            }
-            .padding(.trailing, 26)
-            .padding(.bottom, 100)
-            .zIndex(10000)
-        }
         .overlay { sheetOverlaysA }
         .overlay { sheetOverlaysB }
         .onChange(of: selectedStatus) { _, _ in visibleBookCount = 4 }
@@ -745,221 +733,183 @@ struct ReadingTabView: View {
                 headerSection
                 topToggleSection
 
-                GlassCard {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack(alignment: .center, spacing: 12) {
-                            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                HStack(alignment: .top, spacing: 12) {
+                    GlassCard {
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(spacing: 8) {
                                 Image("booksfill")
                                     .renderingMode(.template)
                                     .resizable()
                                     .scaledToFit()
-                                    .frame(width: 24, height: 24)
+                                    .frame(width: 16, height: 16)
                                     .foregroundStyle(.white)
-                                    .padding(.top, 1)
+                                GradientTitle(text: "Streak", font: .system(size: 13, weight: .bold))
+                                Spacer()
+                            }
+
+                            HStack(spacing: 8) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("NOW")
+                                        .font(.system(size: 9, weight: .bold))
+                                        .foregroundStyle(LColors.textSecondary)
+                                        .tracking(0.6)
+                                    Text("\(streakDays)")
+                                        .font(.system(size: 24, weight: .black))
+                                        .foregroundStyle(LColors.textPrimary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(10)
+                                .background(LColors.glassSurface)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay(RoundedRectangle(cornerRadius: 12).stroke(LColors.glassBorder, lineWidth: 1))
 
                                 VStack(alignment: .leading, spacing: 4) {
-                                    GradientTitle(text: "Reading Streak", font: .system(size: 14, weight: .bold))
+                                    Text("BEST")
+                                        .font(.system(size: 9, weight: .bold))
+                                        .foregroundStyle(LColors.textSecondary)
+                                        .tracking(0.6)
+                                    Text("\(bestStreakDays)")
+                                        .font(.system(size: 24, weight: .black))
+                                        .foregroundStyle(LColors.textPrimary)
                                 }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(10)
+                                .background(LColors.glassSurface)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay(RoundedRectangle(cornerRadius: 12).stroke(LColors.glassBorder, lineWidth: 1))
                             }
-
-                            Spacer()
 
                             Text(readingStreakStatusText)
-                                .font(.system(size: 9, weight: .semibold))
-                                .foregroundStyle(LColors.textPrimary)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 9)
-                                .background(Color.white.opacity(0.08))
-                                .clipShape(Capsule())
-                                .overlay(
-                                    Capsule()
-                                        .stroke(LColors.glassBorder, lineWidth: 1),
-                                )
-                        }
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(LColors.textSecondary)
+                                .lineLimit(1)
 
-                        HStack(spacing: 10) {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("CURRENT STREAK")
-                                    .font(.system(size: 11, weight: .bold))
-                                    .foregroundStyle(LColors.textSecondary)
-                                    .tracking(0.8)
-
-                                Text("\(streakDays)")
-                                    .font(.system(size: 28, weight: .black))
-                                    .foregroundStyle(LColors.textPrimary)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(12)
-                            .background(LColors.glassSurface)
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(LColors.glassBorder, lineWidth: 1),
-                            )
-
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("BEST DAYS")
-                                    .font(.system(size: 11, weight: .bold))
-                                    .foregroundStyle(LColors.textSecondary)
-                                    .tracking(0.8)
-
-                                Text("\(bestStreakDays)")
-                                    .font(.system(size: 28, weight: .black))
-                                    .foregroundStyle(LColors.textPrimary)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(12)
-                            .background(LColors.glassSurface)
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(LColors.glassBorder, lineWidth: 1),
-                            )
-                        }
-
-                        Text(readingStreakSupportText)
-                            .font(.subheadline)
-                            .foregroundStyle(LColors.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        HStack(spacing: 10) {
-                            Button {
-                                do {
-                                    guard let currentUserId else {
-                                        print("[ReadingTabView] No signed-in Apple user ID available")
-                                        return
+                            HStack(spacing: 8) {
+                                Button {
+                                    do {
+                                        guard let currentUserId else {
+                                            print("[ReadingTabView] No signed-in Apple user ID available")
+                                            return
+                                        }
+                                        let didCheckIn = try ReadingCheckInWriter.checkInToday(
+                                            modelContext: modelContext,
+                                            userId: currentUserId,
+                                        )
+                                        if didCheckIn {
+                                            syncBestReadingStreakIfNeeded()
+                                            print("[ReadingTabView] Reading check-in complete")
+                                        } else {
+                                            print("[ReadingTabView] Check-in ignored (already checked in today)")
+                                        }
+                                    } catch {
+                                        print("[ReadingTabView] Failed to check in: \(error)")
                                     }
-                                    let didCheckIn = try ReadingCheckInWriter.checkInToday(
-                                        modelContext: modelContext,
-                                        userId: currentUserId,
-                                    )
-                                    if didCheckIn {
-                                        syncBestReadingStreakIfNeeded()
-                                        print("[ReadingTabView] Reading check-in complete")
-                                    } else {
-                                        print("[ReadingTabView] Check-in ignored (already checked in today)")
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: alreadyCheckedInToday ? "checkmark.circle" : "checkmark.circle.fill")
+                                            .font(.system(size: 11))
+                                        Text(alreadyCheckedInToday ? "Checked In" : "Check In")
+                                            .font(.system(size: 11, weight: .semibold))
                                     }
-                                } catch {
-                                    print("[ReadingTabView] Failed to check in: \(error)")
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 7)
+                                    .frame(maxWidth: .infinity)
+                                    .background(alreadyCheckedInToday ? Color.gray.opacity(0.35) : LColors.accent)
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(LColors.glassBorder, lineWidth: 1))
                                 }
-                            } label: {
-                                HStack(spacing: 8) {
-                                    Image(systemName: alreadyCheckedInToday ? "checkmark.circle" : "checkmark.circle.fill")
-                                    Text(alreadyCheckedInToday ? "Checked In" : "Check In")
-                                        .font(.system(size: 14, weight: .semibold))
-                                }
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 10)
-                                .background(alreadyCheckedInToday ? Color.gray.opacity(0.35) : LColors.accent)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(LColors.glassBorder, lineWidth: 1),
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(alreadyCheckedInToday)
+                                .buttonStyle(.plain)
+                                .disabled(alreadyCheckedInToday)
 
-                            Button {
-                                if let record = currentStats {
-                                    record.streakDays = 0
-                                    record.lastCheckInDate = nil
-                                    record.updatedAt = Date()
-                                    try? modelContext.save()
-                                    print("[ReadingTabView] Reset: streak is now 0")
-                                }
-                            } label: {
-                                HStack(spacing: 8) {
+                                Button {
+                                    if let record = currentStats {
+                                        record.streakDays = 0
+                                        record.lastCheckInDate = nil
+                                        record.updatedAt = Date()
+                                        try? modelContext.save()
+                                        print("[ReadingTabView] Reset: streak is now 0")
+                                    }
+                                } label: {
                                     Image(systemName: "arrow.counterclockwise")
-                                    Text("Reset")
-                                        .font(.system(size: 14, weight: .semibold))
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(LColors.textSecondary)
+                                        .frame(width: 30, height: 30)
+                                        .background(Color.white.opacity(0.08))
+                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(LColors.glassBorder, lineWidth: 1))
                                 }
-                                .foregroundStyle(LColors.textPrimary)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 10)
-                                .background(Color.white.opacity(0.08))
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(LColors.glassBorder, lineWidth: 1),
-                                )
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
-
-                            Spacer()
                         }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     }
-                }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 220)
 
-                GlassCard {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack(alignment: .center, spacing: 12) {
-                            HStack(alignment: .center, spacing: 10) {
+                    // ── Mini Points Card ──────────────────────────────────
+                    GlassCard {
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(spacing: 8) {
                                 Image("trophyfill")
                                     .renderingMode(.template)
                                     .resizable()
                                     .scaledToFit()
-                                    .frame(width: 24, height: 24)
-
-                                GradientTitle(text: "Reading Points", font: .system(size: 14, weight: .bold))
+                                    .frame(width: 16, height: 16)
+                                    .foregroundStyle(.white)
+                                GradientTitle(text: "Points", font: .system(size: 13, weight: .bold))
+                                Spacer()
                             }
 
-                            Spacer()
-                        }
+                            HStack(spacing: 8) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("PTS")
+                                        .font(.system(size: 9, weight: .bold))
+                                        .foregroundStyle(LColors.textSecondary)
+                                        .tracking(0.6)
+                                    Text("\(totalReadingPoints)")
+                                        .font(.system(size: 24, weight: .black))
+                                        .foregroundStyle(LColors.textPrimary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(10)
+                                .background(LColors.glassSurface)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay(RoundedRectangle(cornerRadius: 12).stroke(LColors.glassBorder, lineWidth: 1))
 
-                        Text("Earned through reading timer sessions")
-                            .font(.subheadline)
-                            .foregroundStyle(LColors.textSecondary)
-
-                        HStack(spacing: 10) {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("TOTAL POINTS")
-                                    .font(.system(size: 11, weight: .bold))
-                                    .foregroundStyle(LColors.textSecondary)
-                                    .tracking(0.8)
-
-                                Text("\(totalReadingPoints)")
-                                    .font(.system(size: 28, weight: .black))
-                                    .foregroundStyle(LColors.textPrimary)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("MINS")
+                                        .font(.system(size: 9, weight: .bold))
+                                        .foregroundStyle(LColors.textSecondary)
+                                        .tracking(0.6)
+                                    Text("\(totalReadingPointsMinutes)")
+                                        .font(.system(size: 24, weight: .black))
+                                        .foregroundStyle(LColors.textPrimary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(10)
+                                .background(LColors.glassSurface)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay(RoundedRectangle(cornerRadius: 12).stroke(LColors.glassBorder, lineWidth: 1))
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(12)
-                            .background(LColors.glassSurface)
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(LColors.glassBorder, lineWidth: 1),
-                            )
 
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("MINUTES READ")
-                                    .font(.system(size: 11, weight: .bold))
-                                    .foregroundStyle(LColors.textSecondary)
-                                    .tracking(0.8)
-
-                                Text("\(totalReadingPointsMinutes)")
-                                    .font(.system(size: 28, weight: .black))
-                                    .foregroundStyle(LColors.textPrimary)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(12)
-                            .background(LColors.glassSurface)
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(LColors.glassBorder, lineWidth: 1),
-                            )
-                        }
-
-                        HStack(spacing: 10) {
-                            Text("Sessions logged: \(totalReadingPointsSessions)")
-                                .font(.system(size: 12, weight: .semibold))
+                            Text("\(totalReadingPointsSessions) sessions logged")
+                                .font(.system(size: 10, weight: .semibold))
                                 .foregroundStyle(LColors.textSecondary)
+                                .lineLimit(1)
 
-                            Spacer()
+                            Text("Earned through reading timer sessions")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(LColors.textSecondary)
+                                .lineLimit(2)
+                                .fixedSize(horizontal: false, vertical: true)
+
+                            Spacer(minLength: 0)
                         }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 220)
                 }
 
                 GlassCard {

@@ -91,15 +91,10 @@ struct OnboardingPages {
                 message: "Create colorful sticky notes in the app and view them. Pick your own color, pin or favorite your note and filter them by views too."
                ),
             OnboardingStep(
-                targetID: "groupIcon",
-                title: "Buddy Reading",
-                message: "Group up to read books together and chat about your interests and progress"
-              ),
-            OnboardingStep(
-                targetID: "boltIcon",
-                title: "Sprinting",
-                message: "Participate in global reading sprints and view the leaderboard to see where you're at in the global reading community"
-               )
+                targetID: "readingMenuIcon",
+                title: "Reading Menu",
+                message: "Group up to read books together and chat about your interests and progress in buddy reads or do reading sprints with people globally."
+              )
             ]
         )
     static let health = OnboardingPage(
@@ -122,7 +117,34 @@ struct OnboardingPages {
             )
         ]
     )
-  static let medicine = OnboardingPage(
+    static let buddyReading = OnboardingPage(
+        pageID: "onboarding_buddyReading",
+        steps: [
+            OnboardingStep(
+                targetID: "buddyChangeNameIcon",
+                title: "Display Name",
+                message: "Change the display name others see when you post an announcement or join a buddy read group."
+            ),
+            OnboardingStep(
+                targetID: "buddyRefreshIcon",
+                title: "Refresh Board",
+                message: "Refresh the announcement board to see the latest posts from other readers looking for a buddy."
+            )
+        ]
+    )
+
+    static let sprintRoom = OnboardingPage(
+        pageID: "onboarding_sprintRoom",
+        steps: [
+            OnboardingStep(
+                targetID: "sprintMenuIcon",
+                title: "Sprint Menu",
+                message: "Access the leaderboard, view your personal sprint points, change your display name, refresh the room, or clear the chat if you're an admin."
+            )
+        ]
+    )
+
+    static let medicine = OnboardingPage(
     pageID: "onboarding_medicine",
     steps: [
         OnboardingStep(

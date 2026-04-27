@@ -4,8 +4,10 @@
 import SwiftUI
 import UserNotifications
 
+@MainActor
 struct SprintRoomView: View {
     @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var onboarding: OnboardingManager
 
     @State private var messages: [SprintMessage] = []
     @State private var activeSprint: Sprint? = nil
@@ -24,6 +26,10 @@ struct SprintRoomView: View {
     @State private var showChangeDisplayName = false
     @State private var localDisplayNameOverride: String = ""
     @State private var showClearConfirm = false
+    @State private var showMyPoints = false
+    @State private var showRoomMenu = false
+    @State private var myLeaderboardEntry: SprintLeaderboardEntry? = nil
+    @State private var isLoadingPoints = false
 
     private let socketManager = SprintSocketManager.shared
 
@@ -139,6 +145,12 @@ struct SprintRoomView: View {
         .navigationDestination(isPresented: $showLeaderboard) {
             SprintLeaderboardView()
         }
+        .sheet(isPresented: $showMyPoints) {
+            SprintMyPointsSheet(entry: myLeaderboardEntry, userId: userId, displayName: displayName)
+                .presentationDetents([.height(300)])
+                .presentationDragIndicator(.visible)
+                .preferredColorScheme(.dark)
+        }
         .onAppear {
             socketManager.connect()
             registerSocketCallbacks()
@@ -164,6 +176,17 @@ struct SprintRoomView: View {
         .animation(.easeInOut(duration: 0.3), value: showFloatingSubmit)
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showSetDisplayName)
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showChangeDisplayName)
+        .overlayPreferenceValue(OnboardingTargetKey.self) { anchors in
+            ZStack {
+                OnboardingOverlay(anchors: anchors)
+                    .environmentObject(onboarding)
+            }
+            .task(id: anchors.count) {
+                if anchors.count > 0 {
+                    onboarding.start(page: OnboardingPages.sprintRoom)
+                }
+            }
+        }
     }
 
     // MARK: - Header
@@ -173,59 +196,55 @@ struct SprintRoomView: View {
             GradientTitle(text: "Sprint Room", font: .largeTitle.bold())
             Spacer()
 
-            Button { showLeaderboard = true } label: {
-                ZStack {
-                    Circle()
-                        .fill(Color.white.opacity(0.08))
-                        .overlay(Circle().stroke(LColors.glassBorder, lineWidth: 1))
-                        .frame(width: 34, height: 34)
-                    Image(systemName: "trophy.fill")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.white)
+            Menu {
+                Button {
+                    showLeaderboard = true
+                } label: {
+                    Label("Leaderboard", systemImage: "trophy.fill")
                 }
-            }
-            .buttonStyle(.plain)
 
-            if isAdminUser {
-                Button { showClearConfirm = true } label: {
-                    ZStack {
-                        Circle()
-                            .fill(Color.white.opacity(0.08))
-                            .overlay(Circle().stroke(LColors.glassBorder, lineWidth: 1))
-                            .frame(width: 34, height: 34)
-                        Image(systemName: "trash")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(.white)
+                Button {
+                    showMyPoints = true
+                } label: {
+                    Label("My Points", systemImage: "star.fill")
+                }
+
+                Button {
+                    showChangeDisplayName = true
+                } label: {
+                    Label("Change Display Name", systemImage: "person.crop.circle")
+                }
+
+                Button {
+                    Task { await loadAll() }
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+
+                if isAdminUser {
+                    Divider()
+                    Button(role: .destructive) {
+                        showClearConfirm = true
+                    } label: {
+                        Label("Clear Chat", systemImage: "trash")
                     }
                 }
-                .buttonStyle(.plain)
-            }
-
-            Button { showChangeDisplayName = true } label: {
+            } label: {
                 ZStack {
                     Circle()
                         .fill(Color.white.opacity(0.08))
                         .overlay(Circle().stroke(LColors.glassBorder, lineWidth: 1))
                         .frame(width: 34, height: 34)
-                    Image(systemName: "person.crop.circle")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.white)
+                    Image("dotsfill")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 15, height: 15)
+                        .foregroundStyle(.white)
                 }
             }
             .buttonStyle(.plain)
-
-            Button { Task { await loadAll() } } label: {
-                ZStack {
-                    Circle()
-                        .fill(Color.white.opacity(0.08))
-                        .overlay(Circle().stroke(LColors.glassBorder, lineWidth: 1))
-                        .frame(width: 34, height: 34)
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.white)
-                }
-            }
-            .buttonStyle(.plain)
+            .onboardingTarget("sprintMenuIcon")
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 14)
@@ -438,81 +457,95 @@ struct SprintRoomView: View {
 
     private func registerSocketCallbacks() {
         socketManager.onMessage = { [self] message in
-            if !messages.contains(where: { $0.id == message.id }) {
-                messages.append(message)
+            DispatchQueue.main.async {
+                if !messages.contains(where: { $0.id == message.id }) {
+                    messages.append(message)
+                }
             }
         }
 
         socketManager.onSprintStarted = { [self] sprint, message in
-            activeSprint = sprint
-            startCountdown()
-            if !messages.contains(where: { $0.id == message.id }) {
-                messages.append(message)
+            DispatchQueue.main.async {
+                activeSprint = sprint
+                startCountdown()
+                if !messages.contains(where: { $0.id == message.id }) {
+                    messages.append(message)
+                }
             }
         }
 
         socketManager.onSprintActive = { [self] _, message in
-            if let sprint = activeSprint {
-                activeSprint = Sprint(
-                    id: sprint.id,
-                    startedByUserId: sprint.startedByUserId,
-                    startedByDisplayName: sprint.startedByDisplayName,
-                    durationMinutes: sprint.durationMinutes,
-                    startsAt: sprint.startsAt,
-                    endsAt: sprint.endsAt,
-                    status: "active",
-                    participants: sprint.participants,
-                    createdAt: sprint.createdAt
-                )
-            }
-            if !messages.contains(where: { $0.id == message.id }) {
-                messages.append(message)
+            DispatchQueue.main.async {
+                if let sprint = activeSprint {
+                    activeSprint = Sprint(
+                        id: sprint.id,
+                        startedByUserId: sprint.startedByUserId,
+                        startedByDisplayName: sprint.startedByDisplayName,
+                        durationMinutes: sprint.durationMinutes,
+                        startsAt: sprint.startsAt,
+                        endsAt: sprint.endsAt,
+                        status: "active",
+                        participants: sprint.participants,
+                        createdAt: sprint.createdAt
+                    )
+                }
+                if !messages.contains(where: { $0.id == message.id }) {
+                    messages.append(message)
+                }
             }
         }
 
         socketManager.onSprintWarning = { [self] _, message in
-            if let sprint = activeSprint {
-                activeSprint = Sprint(
-                    id: sprint.id,
-                    startedByUserId: sprint.startedByUserId,
-                    startedByDisplayName: sprint.startedByDisplayName,
-                    durationMinutes: sprint.durationMinutes,
-                    startsAt: sprint.startsAt,
-                    endsAt: sprint.endsAt,
-                    status: "submitting",
-                    participants: sprint.participants,
-                    createdAt: sprint.createdAt
-                )
-                if isParticipant && !hasSubmittedEndPage {
-                    showEndPageSheet = true
+            DispatchQueue.main.async {
+                if let sprint = activeSprint {
+                    activeSprint = Sprint(
+                        id: sprint.id,
+                        startedByUserId: sprint.startedByUserId,
+                        startedByDisplayName: sprint.startedByDisplayName,
+                        durationMinutes: sprint.durationMinutes,
+                        startsAt: sprint.startsAt,
+                        endsAt: sprint.endsAt,
+                        status: "submitting",
+                        participants: sprint.participants,
+                        createdAt: sprint.createdAt
+                    )
+                    if isParticipant && !hasSubmittedEndPage {
+                        showEndPageSheet = true
+                    }
                 }
-            }
-            if !messages.contains(where: { $0.id == message.id }) {
-                messages.append(message)
+                if !messages.contains(where: { $0.id == message.id }) {
+                    messages.append(message)
+                }
             }
         }
 
         socketManager.onSprintFinished = { [self] _, _, message in
-            countdownTimer?.invalidate()
-            sprintTimeRemaining = ""
-            Task { activeSprint = try? await SprintService.shared.getActiveSprint() }
-            hasSubmittedEndPage = false
-            if !messages.contains(where: { $0.id == message.id }) {
-                messages.append(message)
+            DispatchQueue.main.async {
+                countdownTimer?.invalidate()
+                sprintTimeRemaining = ""
+                Task { activeSprint = try? await SprintService.shared.getActiveSprint() }
+                hasSubmittedEndPage = false
+                if !messages.contains(where: { $0.id == message.id }) {
+                    messages.append(message)
+                }
             }
         }
 
         socketManager.onSprintJoined = { [self] _, _, _, message in
-            Task { activeSprint = try? await SprintService.shared.getActiveSprint() }
-            if !messages.contains(where: { $0.id == message.id }) {
-                messages.append(message)
+            DispatchQueue.main.async {
+                Task { activeSprint = try? await SprintService.shared.getActiveSprint() }
+                if !messages.contains(where: { $0.id == message.id }) {
+                    messages.append(message)
+                }
             }
         }
 
         socketManager.onPageSubmitted = { _, _ in }
 
         socketManager.onChatCleared = { [self] in
-            messages = []
+            DispatchQueue.main.async {
+                messages = []
+            }
         }
     }
 
@@ -520,10 +553,9 @@ struct SprintRoomView: View {
 
     private func loadAll() async {
         isLoading = true
-        async let sprint = SprintService.shared.getActiveSprint()
-        async let msgs = SprintService.shared.getMessages()
-        activeSprint = try? await sprint
-        messages = (try? await msgs) ?? []
+        activeSprint = try? await SprintService.shared.getActiveSprint()
+        messages = (try? await SprintService.shared.getMessages()) ?? []
+        myLeaderboardEntry = try? await SprintService.shared.getUserLeaderboardEntry(userId: userId)
         isLoading = false
 
         if let sprint = activeSprint {
@@ -654,6 +686,102 @@ struct SprintRoomView: View {
             body: "3 minutes left — enter your end page now.",
             fireDate: fireDate
         )
+    }
+}
+
+// MARK: - My Points Sheet
+
+struct SprintMyPointsSheet: View {
+    let initialEntry: SprintLeaderboardEntry?
+    let userId: String
+    let displayName: String
+
+    @State private var entry: SprintLeaderboardEntry?
+    @State private var isLoading = false
+
+    init(entry: SprintLeaderboardEntry?, userId: String, displayName: String) {
+        self.initialEntry = entry
+        self.userId = userId
+        self.displayName = displayName
+        _entry = State(initialValue: entry)
+    }
+
+    var body: some View {
+        ZStack {
+            LystariaBackground()
+                .ignoresSafeArea()
+
+            VStack(spacing: 24) {
+                GradientTitle(text: "My Sprint Points", size: 22)
+                    .padding(.top, 8)
+
+                if isLoading {
+                    ProgressView()
+                        .scaleEffect(0.9)
+                        .tint(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 20)
+                } else if let entry {
+                    HStack(spacing: 16) {
+                        pointsStat(value: "\(entry.totalPoints)", label: "Total Points", icon: "star.fill", color: LColors.accent)
+                        pointsStat(value: "\(entry.totalPagesRead)", label: "Pages Read", icon: "book.fill", color: .purple)
+                        pointsStat(value: "\(entry.sprintsParticipated)", label: "Sprints", icon: "bolt.fill", color: .orange)
+                    }
+                    .padding(.horizontal, LSpacing.pageHorizontal)
+
+                    Text("Keep sprinting to climb the leaderboard!")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .multilineTextAlignment(.center)
+                } else {
+                    VStack(spacing: 10) {
+                        Image(systemName: "bolt.slash")
+                            .font(.system(size: 32))
+                            .foregroundStyle(LColors.textSecondary)
+                        Text("No sprint data yet.")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(LColors.textSecondary)
+                        Text("Join a sprint to start earning points!")
+                            .font(.system(size: 13))
+                            .foregroundStyle(LColors.textSecondary)
+                    }
+                }
+
+                Spacer()
+            }
+            .padding(.top, 16)
+        }
+        .task {
+            guard entry == nil else { return }
+            isLoading = true
+            entry = try? await SprintService.shared.getUserLeaderboardEntry(userId: userId)
+            isLoading = false
+        }
+    }
+
+    private func pointsStat(value: String, label: String, icon: String, color: Color) -> some View {
+        VStack(spacing: 8) {
+            ZStack {
+                Circle()
+                    .fill(color.opacity(0.15))
+                    .frame(width: 48, height: 48)
+                Image(systemName: icon)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(color)
+            }
+            Text(value)
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(.white)
+            Text(label)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(LColors.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 16)
+        .background(Color.white.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(LColors.glassBorder, lineWidth: 1))
     }
 }
 

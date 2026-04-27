@@ -103,11 +103,11 @@ struct BuddyPostAnnouncementSheet: View {
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("CURRENT CHAPTER / PAGE")
+                    Text("CURRENT PAGE")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(LColors.textSecondary)
                         .tracking(0.5)
-                    LystariaNumberField(placeholder: "e.g. 5", text: $currentChapterText)
+                    LystariaNumberField(placeholder: "e.g. 42", text: $currentChapterText)
                         .numericKeyboardIfAvailable()
                 }
 
@@ -180,8 +180,6 @@ struct BuddyPostAnnouncementSheet: View {
         isPosting = true
         errorMessage = nil
 
-        let chapter = Int(currentChapterText.filter(\.isNumber))
-
         let body = PostAnnouncementBody(
             ownerUserId: userId,
             ownerDisplayName: displayName,
@@ -190,8 +188,8 @@ struct BuddyPostAnnouncementSheet: View {
             bookCoverUrl: nil,
             bookKey: nil,
             message: message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : message,
-            currentChapter: chapter,
-            currentPage: nil,
+            currentChapter: nil,
+            currentPage: Int(currentChapterText.filter(\Character.isNumber)),
             maxMembers: maxMembers
         )
 

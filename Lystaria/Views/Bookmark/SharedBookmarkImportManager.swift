@@ -14,71 +14,79 @@ import UIKit
 enum SharedBookmarkImportManager {
     static func importPendingBookmark(modelContext: ModelContext) {
         do {
-            guard let payload = try SharedBookmarkInbox.load() else { return }
+            let payloads = try SharedBookmarkInbox.loadAll()
+            guard !payloads.isEmpty else { return }
 
             let descriptor = FetchDescriptor<BookmarkFolder>()
             let folders = try modelContext.fetch(descriptor)
 
-            let trimmedSystemKey = payload.targetFolderSystemKey.trimmingCharacters(in: .whitespacesAndNewlines)
-            let trimmedFolderName = payload.targetFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
-
-            let targetFolder: BookmarkFolder
-            if !trimmedSystemKey.isEmpty,
-               let matchingBySystemKey = folders.first(where: { folder in
-                   folder.systemKey == trimmedSystemKey
-               }) {
-                targetFolder = matchingBySystemKey
-            } else if !trimmedFolderName.isEmpty,
-                      let matchingByName = folders.first(where: { folder in
-                          folder.name.trimmingCharacters(in: .whitespacesAndNewlines)
-                              .localizedCaseInsensitiveCompare(trimmedFolderName) == .orderedSame
-                      }) {
-                targetFolder = matchingByName
-            } else if let inbox = folders.first(where: { $0.systemKey == "inbox" }) {
-                targetFolder = inbox
-            } else {
-                let newInbox = BookmarkFolder(
-                    name: "Inbox",
-                    systemKey: "inbox",
-                    iconName: "tray.full.fill",
-                    createdAt: Date(),
-                    updatedAt: Date()
-                )
-                modelContext.insert(newInbox)
-                targetFolder = newInbox
+            var inserted: [BookmarkItem] = []
+            for payload in payloads {
+                if let bookmark = importSingle(payload: payload, folders: folders, modelContext: modelContext) {
+                    inserted.append(bookmark)
+                }
             }
 
-            let finalTitle = payload.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ? payload.url
-                : payload.title
-
-            let bookmark = BookmarkItem(
-                title: finalTitle,
-                bookmarkDescription: payload.bookmarkDescription,
-                link: payload.url,
-                tagsRaw: payload.tagsRaw,
-                notes: "",
-                isFavorite: false,
-                createdAt: Date(),
-                updatedAt: Date(),
-                folder: targetFolder
-            )
-
-            modelContext.insert(bookmark)
             try modelContext.save()
-
-            Task {
-                await fetchMetadataAndApply(to: bookmark, modelContext: modelContext)
-            }
-
             try SharedBookmarkInbox.clear()
+
+            for bookmark in inserted {
+                Task {
+                    await fetchMetadataAndApply(to: bookmark, modelContext: modelContext)
+                }
+            }
         } catch {
             print("Shared bookmark import failed: \(error)")
         }
     }
-    
 
-    @MainActor
+    private static func importSingle(payload: SharedBookmarkPayload, folders: [BookmarkFolder], modelContext: ModelContext) -> BookmarkItem? {
+        let trimmedSystemKey = payload.targetFolderSystemKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedFolderName = payload.targetFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let targetFolder: BookmarkFolder
+        if !trimmedSystemKey.isEmpty,
+           let matchingBySystemKey = folders.first(where: { $0.systemKey == trimmedSystemKey }) {
+            targetFolder = matchingBySystemKey
+        } else if !trimmedFolderName.isEmpty,
+                  let matchingByName = folders.first(where: {
+                      $0.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                          .localizedCaseInsensitiveCompare(trimmedFolderName) == .orderedSame
+                  }) {
+            targetFolder = matchingByName
+        } else if let inbox = folders.first(where: { $0.systemKey == "inbox" }) {
+            targetFolder = inbox
+        } else {
+            let newInbox = BookmarkFolder(
+                name: "Inbox",
+                systemKey: "inbox",
+                iconName: "tray.full.fill",
+                createdAt: Date(),
+                updatedAt: Date()
+            )
+            modelContext.insert(newInbox)
+            targetFolder = newInbox
+        }
+
+        let finalTitle = payload.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? payload.url
+            : payload.title
+
+        let bookmark = BookmarkItem(
+            title: finalTitle,
+            bookmarkDescription: payload.bookmarkDescription,
+            link: payload.url,
+            tagsRaw: payload.tagsRaw,
+            notes: "",
+            isFavorite: false,
+            createdAt: Date(),
+            updatedAt: Date(),
+            folder: targetFolder
+        )
+
+        modelContext.insert(bookmark)
+        return bookmark
+    }
     static func fetchMetadataAndApply(to bookmark: BookmarkItem, modelContext: ModelContext) async {
         guard let url = normalizedURL(from: bookmark.link) else { return }
 

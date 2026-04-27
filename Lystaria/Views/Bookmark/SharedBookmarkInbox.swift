@@ -9,7 +9,7 @@ import Foundation
 
 enum SharedBookmarkInbox {
     static let appGroupID = "group.com.asteriasmoons.LystariaDev"
-    static let payloadKey = "shared_bookmark_payload"
+    static let payloadKey = "shared_bookmark_payload_queue"
 
     static var sharedDefaults: UserDefaults? {
         UserDefaults(suiteName: appGroupID)
@@ -22,12 +22,14 @@ enum SharedBookmarkInbox {
             ])
         }
 
-        let data = try JSONEncoder().encode(payload)
+        var queue = (try? loadAll()) ?? []
+        queue.append(payload)
+        let data = try JSONEncoder().encode(queue)
         sharedDefaults.set(data, forKey: payloadKey)
         sharedDefaults.synchronize()
     }
 
-    static func load() throws -> SharedBookmarkPayload? {
+    static func loadAll() throws -> [SharedBookmarkPayload] {
         guard let sharedDefaults else {
             throw NSError(domain: "SharedBookmarkInbox", code: 2, userInfo: [
                 NSLocalizedDescriptionKey: "Could not resolve shared App Group user defaults."
@@ -35,15 +37,22 @@ enum SharedBookmarkInbox {
         }
 
         guard let data = sharedDefaults.data(forKey: payloadKey) else {
-            return nil
+            return []
         }
 
-        return try JSONDecoder().decode(SharedBookmarkPayload.self, from: data)
+        // Support legacy single-payload format gracefully.
+        if let single = try? JSONDecoder().decode(SharedBookmarkPayload.self, from: data) {
+            return [single]
+        }
+
+        return (try? JSONDecoder().decode([SharedBookmarkPayload].self, from: data)) ?? []
     }
 
     static func clear() throws {
         guard let sharedDefaults else { return }
         sharedDefaults.removeObject(forKey: payloadKey)
+        // Also clear old single-payload key if present from a previous install.
+        sharedDefaults.removeObject(forKey: "shared_bookmark_payload")
         sharedDefaults.synchronize()
     }
 }

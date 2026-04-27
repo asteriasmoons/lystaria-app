@@ -15,7 +15,7 @@
             </dict>
         </dict>
         <key>NSExtensionPrincipalClass</key>
-        <string>$(PRODUCT_MODULE_NAME).ShareViewController</string>
+        <string>Lystaria_Share.ShareViewController</string>
         <key>NSExtensionPointIdentifier</key>
         <string>com.apple.share-services</string>
     </dict>

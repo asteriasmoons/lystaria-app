@@ -99,6 +99,11 @@ final class SprintService {
         let response = try await get("/api/sprint/leaderboard", as: SprintLeaderboardResponse.self)
         return response.leaderboard ?? []
     }
+
+    func getUserLeaderboardEntry(userId: String) async throws -> SprintLeaderboardEntry? {
+        let response = try await get("/api/sprint/leaderboard/\(userId)", as: SprintLeaderboardEntryResponse.self)
+        return response.entry
+    }
 }
 
 enum SprintServiceError: Error {

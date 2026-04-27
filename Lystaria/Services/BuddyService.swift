@@ -73,9 +73,9 @@ final class BuddyService {
         return response.announcements ?? []
     }
 
-    func getMyAnnouncement(userId: String) async throws -> BuddyAnnouncement? {
-        let response = try await get("/api/buddy/announcements/mine", query: ["userId": userId], as: BuddyAnnouncementResponse.self)
-        return response.announcement
+    func getMyAnnouncement(userId: String) async throws -> [BuddyAnnouncement] {
+        let response = try await get("/api/buddy/announcements/mine", query: ["userId": userId], as: BuddyAnnouncementsResponse.self)
+        return response.announcements ?? []
     }
 
     func removeAnnouncement(id: String, userId: String) async throws {

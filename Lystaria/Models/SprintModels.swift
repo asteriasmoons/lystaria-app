@@ -125,10 +125,14 @@ struct SprintLeaderboardResponse: Codable {
     let leaderboard: [SprintLeaderboardEntry]?
 }
 
+struct SprintLeaderboardEntryResponse: Codable {
+    let success: Bool
+    let entry: SprintLeaderboardEntry?
+}
+
 struct SprintSuccessResponse: Codable {
     let success: Bool
 }
-
 // MARK: - Request bodies
 
 struct StartSprintBody: Encodable {

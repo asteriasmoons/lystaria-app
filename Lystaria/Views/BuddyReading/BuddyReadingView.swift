@@ -7,9 +7,10 @@ import SwiftUI
 
 struct BuddyReadingView: View {
     @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var onboarding: OnboardingManager
     
     @State private var board: [BuddyAnnouncement] = []
-    @State private var myAnnouncement: BuddyAnnouncement? = nil
+    @State private var myAnnouncements: [BuddyAnnouncement] = []
     @State private var myGroup: BuddyGroup? = nil
     @State private var isLoading = false
     @State private var showPostSheet = false
@@ -43,6 +44,17 @@ struct BuddyReadingView: View {
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showPostSheet)
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showSetDisplayName)
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showChangeDisplayName)
+        .overlayPreferenceValue(OnboardingTargetKey.self) { anchors in
+            ZStack {
+                OnboardingOverlay(anchors: anchors)
+                    .environmentObject(onboarding)
+            }
+            .task(id: anchors.count) {
+                if anchors.count > 0 {
+                    onboarding.start(page: OnboardingPages.buddyReading)
+                }
+            }
+        }
     }
     
     // MARK: - Main content
@@ -82,6 +94,7 @@ struct BuddyReadingView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .onboardingTarget("buddyChangeNameIcon")
                 
                 Button {
                     Task { await loadAll() }
@@ -97,6 +110,7 @@ struct BuddyReadingView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .onboardingTarget("buddyRefreshIcon")
             }
             .padding(.top, 24)
             
@@ -154,68 +168,63 @@ struct BuddyReadingView: View {
                             pendingRequestsBanner(group: group, pending: group.pendingMembers)
                         }
                     }
-                    
-                } else if let announcement = myAnnouncement {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Your announcement is live on the board")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(LColors.textSecondary)
-                        
-                        HStack(spacing: 6) {
-                            Image(systemName: "book.closed.fill")
-                                .font(.system(size: 12))
-                                .foregroundStyle(LColors.accent)
-                            Text(announcement.bookTitle)
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(LColors.textPrimary)
-                        }
-                        
-                        if let msg = announcement.message, !msg.isEmpty {
-                            Text("\"\(msg)\"")
-                                .font(.subheadline)
-                                .foregroundStyle(LColors.textSecondary)
-                                .lineLimit(2)
-                        }
-                        
-                        HStack(spacing: 10) {
-                            Button {
-                                Task { await removeMyAnnouncement() }
-                            } label: {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "minus.circle")
-                                    Text("Remove")
-                                        .font(.system(size: 13, weight: .semibold))
+                }
+
+                // Announcements + post button — always visible regardless of group status
+                VStack(alignment: .leading, spacing: 12) {
+                    if !myAnnouncements.isEmpty {
+                        ForEach(myAnnouncements) { announcement in
+                            HStack(spacing: 10) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "book.closed.fill")
+                                            .font(.system(size: 12))
+                                            .foregroundStyle(LColors.accent)
+                                        Text(announcement.bookTitle)
+                                            .font(.system(size: 14, weight: .bold))
+                                            .foregroundStyle(LColors.textPrimary)
+                                    }
+                                    if let msg = announcement.message, !msg.isEmpty {
+                                        Text("\"\(msg)\"")
+                                            .font(.subheadline)
+                                            .foregroundStyle(LColors.textSecondary)
+                                            .lineLimit(1)
+                                    }
                                 }
-                                .foregroundStyle(LColors.textPrimary)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 10)
-                                .background(Color.white.opacity(0.08))
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(LColors.glassBorder, lineWidth: 1)
-                                )
+                                Spacer()
+                                Button {
+                                    Task { await removeAnnouncement(announcement) }
+                                } label: {
+                                    Image(systemName: "minus.circle")
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundStyle(LColors.textSecondary)
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
+                            .padding(10)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(LColors.glassBorder, lineWidth: 1))
                         }
                     }
-                    
-                } else {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Post what you're reading and find a buddy to read along with.")
-                            .font(.subheadline)
-                            .foregroundStyle(LColors.textSecondary)
-                        
+
+                    if myAnnouncements.count < 3 {
+                        if myGroup == nil && myAnnouncements.isEmpty {
+                            Text("Post what you're reading and find a buddy to read along with.")
+                                .font(.subheadline)
+                                .foregroundStyle(LColors.textSecondary)
+                        }
+
                         Button {
                             showPostSheet = true
                         } label: {
                             HStack(spacing: 8) {
-                                Image("pluswavy")
+                                Image("wavyplus")
                                     .renderingMode(.template)
                                     .resizable()
                                     .scaledToFit()
                                     .frame(width: 14, height: 14)
-                                Text("Post Announcement")
+                                Text(myAnnouncements.isEmpty ? "Post Announcement" : "Post Another")
                                     .font(.system(size: 13, weight: .semibold))
                             }
                             .foregroundStyle(.white)
@@ -383,7 +392,7 @@ struct BuddyReadingView: View {
                     displayName: displayName,
                     onClose: { showPostSheet = false },
                     onPost: { announcement in
-                        myAnnouncement = announcement
+                        myAnnouncements.append(announcement)
                         showPostSheet = false
                         Task { await loadBoard() }
                     }
@@ -422,7 +431,7 @@ struct BuddyReadingView: View {
     
     @discardableResult
     private func loadMyAnnouncement() async -> Void {
-        myAnnouncement = try? await BuddyService.shared.getMyAnnouncement(userId: userId)
+        myAnnouncements = (try? await BuddyService.shared.getMyAnnouncement(userId: userId)) ?? []
     }
     
     @discardableResult
@@ -430,11 +439,10 @@ struct BuddyReadingView: View {
         myGroup = try? await BuddyService.shared.getMyGroup(userId: userId)
     }
     
-    private func removeMyAnnouncement() async {
-        guard let id = myAnnouncement?.id else { return }
+    private func removeAnnouncement(_ announcement: BuddyAnnouncement) async {
         do {
-            try await BuddyService.shared.removeAnnouncement(id: id, userId: userId)
-            myAnnouncement = nil
+            try await BuddyService.shared.removeAnnouncement(id: announcement.id, userId: userId)
+            myAnnouncements.removeAll { $0.id == announcement.id }
             await loadBoard()
         } catch {
             errorMessage = "Failed to remove announcement"
