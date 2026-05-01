@@ -61,6 +61,7 @@
 		CF13B67D2F69B7CB008D3CE9 /* HealthFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B67C2F69B7C5008D3CE9 /* HealthFormatting.swift */; };
 		CF13B67F2F69DCF7008D3CE9 /* ChecklistEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B67E2F69DCF1008D3CE9 /* ChecklistEntity.swift */; };
 		CF13B6832F6A2DFF008D3CE9 /* JournalPromptUsage.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B6822F6A2DF9008D3CE9 /* JournalPromptUsage.swift */; };
+		CF175FF02FA3A16500C58C6C /* TagFlowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF175FEF2FA3A16500C58C6C /* TagFlowLayout.swift */; };
 		CF20513E2F5787DD006B71AA /* JournalBook.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF20513D2F5787D9006B71AA /* JournalBook.swift */; };
 		CF2051402F5788CE006B71AA /* JournalBookEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF20513F2F5788C6006B71AA /* JournalBookEditorSheet.swift */; };
 		CF2051422F5788F9006B71AA /* Color+Hex.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF2051412F5788F3006B71AA /* Color+Hex.swift */; };
@@ -411,6 +412,7 @@
 		CF13B67C2F69B7C5008D3CE9 /* HealthFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthFormatting.swift; sourceTree = "<group>"; };
 		CF13B67E2F69DCF1008D3CE9 /* ChecklistEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChecklistEntity.swift; sourceTree = "<group>"; };
 		CF13B6822F6A2DF9008D3CE9 /* JournalPromptUsage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalPromptUsage.swift; sourceTree = "<group>"; };
+		CF175FEF2FA3A16500C58C6C /* TagFlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagFlowLayout.swift; sourceTree = "<group>"; };
 		CF20513D2F5787D9006B71AA /* JournalBook.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalBook.swift; sourceTree = "<group>"; };
 		CF20513F2F5788C6006B71AA /* JournalBookEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalBookEditorSheet.swift; sourceTree = "<group>"; };
 		CF2051412F5788F3006B71AA /* Color+Hex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Hex.swift"; sourceTree = "<group>"; };
@@ -879,6 +881,7 @@
 		CF8B7F612F6B33E5006A7D3B /* Helpers */ = {
 			isa = PBXGroup;
 			children = (
+				CF175FEF2FA3A16500C58C6C /* TagFlowLayout.swift */,
 				CF29FCA02F718C7B00EC47F8 /* DividerStyle.swift */,
 				CF8B7F782F6B3AD4006A7D3B /* JournalBlockPreviewPage.swift */,
 				CF8B7F762F6B3ABE006A7D3B /* JournalBlockEditorPage.swift */,
@@ -1626,6 +1629,7 @@
 				CF8D834A2F5124C70092FC98 /* LystariaComponents.swift in Sources */,
 				CF2051402F5788CE006B71AA /* JournalBookEditorSheet.swift in Sources */,
 				CF822EBD2F9039B000CC5B80 /* EventAttendee.swift in Sources */,
+				CF175FF02FA3A16500C58C6C /* TagFlowLayout.swift in Sources */,
 				CF20514C2F578E11006B71AA /* JournalPreviewSheet.swift in Sources */,
 				CF8D83862F54C4A10092FC98 /* NotificationManager.swift in Sources */,
 				CF13B6792F69B75F008D3CE9 /* HealthMetricsCard.swift in Sources */,

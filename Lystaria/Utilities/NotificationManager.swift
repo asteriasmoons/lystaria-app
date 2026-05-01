@@ -38,7 +38,7 @@
 //   - "DONE"   → marks the reminder as acknowledged
 //   - "SNOOZE" → reschedules for 10 minutes later
 //
-// Calendar notifications use no category (no action buttons needed).
+// Calendar event reminder notifications use category "EVENT_REMINDER" with Done only.
 
 import Foundation
 import SwiftData
@@ -77,6 +77,9 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
 
     /// Category identifier for reminder notifications (Done / Snooze actions).
     static let reminderCategoryID = "REMINDER"
+
+    /// Category identifier for calendar event reminder notifications (Done only).
+    static let calendarEventCategoryID = "EVENT_REMINDER"
 
     /// Action identifiers.
     static let doneActionID  = "DONE"
@@ -136,7 +139,7 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
         let center = UNUserNotificationCenter.current()
 
         // Register reminder actions (Done / Snooze).
-        // Calendar notifications intentionally use no category.
+        // Calendar notifications now use "EVENT_REMINDER" category with Done only.
         let doneAction = UNNotificationAction(
             identifier: Self.doneActionID,
             title: "Done ✓",
@@ -153,7 +156,15 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
             intentIdentifiers: [],
             options: [.customDismissAction]
         )
-        center.setNotificationCategories([reminderCategory])
+
+        let calendarEventCategory = UNNotificationCategory(
+            identifier: Self.calendarEventCategoryID,
+            actions: [doneAction],
+            intentIdentifiers: [],
+            options: [.customDismissAction]
+        )
+
+        center.setNotificationCategories([reminderCategory, calendarEventCategory])
 
         center.delegate = self
 
@@ -521,13 +532,44 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
 
     /// Cancels pending and delivered notifications for a calendar event.
     func cancelAllCalendarNotifications(id: String) {
-        let center     = UNUserNotificationCenter.current()
-        let idsToRemove = [
-            "lystaria.calendar." + id,        // one-shot
-            "lystaria.calendar." + id + ".0"  // recurring next occurrence
-        ]
-        center.removePendingNotificationRequests(withIdentifiers: idsToRemove)
-        center.removeDeliveredNotifications(withIdentifiers: idsToRemove)
+        let center = UNUserNotificationCenter.current()
+        let baseID = "lystaria.calendar." + id
+
+        // Remove the known fixed identifiers immediately.
+        // iOS ignores identifiers that do not exist, so this is safe.
+        center.removePendingNotificationRequests(withIdentifiers: [
+            baseID,          // one-shot
+            baseID + ".0"   // recurring next occurrence
+        ])
+        center.removeDeliveredNotifications(withIdentifiers: [
+            baseID,
+            baseID + ".0"
+        ])
+
+        // Also remove anything that starts with this event's base ID.
+        // This protects edits/deletes from older identifier variants that may
+        // have been created by previous app builds or scheduling code.
+        center.getPendingNotificationRequests { requests in
+            let matchingIDs = requests
+                .map(\.identifier)
+                .filter { $0 == baseID || $0.hasPrefix(baseID + ".") }
+
+            if !matchingIDs.isEmpty {
+                center.removePendingNotificationRequests(withIdentifiers: matchingIDs)
+                print("🔕 Cancelled \(matchingIDs.count) pending calendar notification(s) for: \(baseID)")
+            }
+        }
+
+        center.getDeliveredNotifications { notifications in
+            let matchingIDs = notifications
+                .map { $0.request.identifier }
+                .filter { $0 == baseID || $0.hasPrefix(baseID + ".") }
+
+            if !matchingIDs.isEmpty {
+                center.removeDeliveredNotifications(withIdentifiers: matchingIDs)
+                print("🔕 Removed \(matchingIDs.count) delivered calendar notification(s) for: \(baseID)")
+            }
+        }
     }
 
     // ─────────────────────────────────────────────
@@ -603,7 +645,7 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
         content.title = title
         content.body  = body
         content.sound = .default
-        content.categoryIdentifier = Self.reminderCategoryID
+        content.categoryIdentifier = Self.calendarEventCategoryID
         content.userInfo = [
             "calendarEventID": id,
             "kind": "calendar"
@@ -630,11 +672,16 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
     func scheduleCalendarEvent(id: String, title: String, body: String, fireDate: Date) {
         cancelAllCalendarNotifications(id: id)
 
+        guard fireDate > Date() else {
+            print("⏭ Skipping past calendar event notification for id=\(id) fireDate=\(fireDate)")
+            return
+        }
+
         let content = UNMutableNotificationContent()
         content.title = title
         content.body  = body
         content.sound = .default
-        content.categoryIdentifier = Self.reminderCategoryID
+        content.categoryIdentifier = Self.calendarEventCategoryID
         content.userInfo = [
             "calendarEventID": id,
             "kind": "calendar"
@@ -1123,13 +1170,30 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
 
         print("📬 didReceive: id=\(notifID) action=\(actionID)")
 
+        let isCalendarNotification = (userInfo["kind"] as? String) == "calendar"
+
         if actionID == UNNotificationDefaultActionIdentifier {
-            print("📬👆 Body tapped — setting pendingDeepLink = .reminders")
-            Task { @MainActor in
-                print("📬🔀 MainActor: assigning pendingDeepLink = .reminders")
-                NotificationManager.shared.pendingDeepLink = .reminders
+            if isCalendarNotification {
+                print("📬👆 Calendar notification body tapped")
+            } else {
+                print("📬👆 Reminder notification body tapped — setting pendingDeepLink = .reminders")
+                Task { @MainActor in
+                    print("📬🔀 MainActor: assigning pendingDeepLink = .reminders")
+                    NotificationManager.shared.pendingDeepLink = .reminders
+                }
             }
         } else {
+            if isCalendarNotification {
+                if actionID == Self.doneActionID {
+                    print("📬✅ Calendar event reminder marked done: \(notifID)")
+                    center.removeDeliveredNotifications(withIdentifiers: [notifID])
+                } else {
+                    print("📬🎬 Ignoring unsupported calendar action: \(actionID)")
+                }
+                completionHandler()
+                return
+            }
+
             print("📬🎬 Action button tapped: \(actionID)")
             let info: [String: Any] = ["actionID": actionID, "userInfo": userInfo]
             DispatchQueue.main.async {

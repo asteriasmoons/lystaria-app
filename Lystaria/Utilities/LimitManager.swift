@@ -13,23 +13,61 @@ import Combine
 final class LimitManager: ObservableObject {
     static let shared = LimitManager()
 
-    
-    @AppStorage("isPremiumDevBypass") var isPremiumDevBypass: Bool = false
-    @ObservedObject private var premiumManager = PremiumManager.shared
+    // MARK: - AppStorage-backed inputs
+    // @AppStorage on a non-View type doesn't trigger objectWillChange automatically,
+    // but we pair each one with a Combine publisher via UserDefaults KVO so that
+    // any write — from any view or any @AppStorage binding in the app — causes
+    // hasPremiumAccess to recompute and objectWillChange to fire.
 
-    @AppStorage("appleUserId") var currentAppleUserId: String = ""
+    @Published private(set) var hasPremiumAccess: Bool = false
 
-    private let adminAppleUserId: String = "001664.f2fefbb84f024544b98e865fa6c6b49e.1524"
+    private let adminAppleUserId = "001664.f2fefbb84f024544b98e865fa6c6b49e.1524"
+    private var cancellables = Set<AnyCancellable>()
 
-    private var isAdminUser: Bool {
-        currentAppleUserId == adminAppleUserId
+    private init() {
+        // Initial computation
+        recomputeAccess()
+
+        // Observe PremiumManager.isPremium (Combine publisher — reliable)
+        PremiumManager.shared.$isPremium
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.recomputeAccess() }
+            .store(in: &cancellables)
+
+        // Observe every UserDefaults write via KVO publishers
+        // NSObject.KeyValueObservingPublisher is synchronous and fires on the
+        // thread that made the write, then we hop to main.
+        let defaults = UserDefaults.standard
+
+        defaults.publisher(for: \.forceFreeMode, options: [.new])
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.recomputeAccess() }
+            .store(in: &cancellables)
+
+        defaults.publisher(for: \.isPremiumDevBypass, options: [.new])
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.recomputeAccess() }
+            .store(in: &cancellables)
+
+        defaults.publisher(for: \.appleUserId, options: [.new])
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.recomputeAccess() }
+            .store(in: &cancellables)
     }
 
-    var hasPremiumAccess: Bool {
-        premiumManager.isPremium || isPremiumDevBypass || isAdminUser
-    }
+    private func recomputeAccess() {
+        let defaults = UserDefaults.standard
+        let forceFree  = defaults.bool(forKey: "forceFreeMode")
+        let devBypass  = defaults.bool(forKey: "isPremiumDevBypass")
+        let userId     = defaults.string(forKey: "appleUserId") ?? ""
+        let isPremium  = PremiumManager.shared.isPremium
+        let isAdmin    = userId == adminAppleUserId
 
-    private init() {}
+        let newValue = !forceFree && (isPremium || devBypass || isAdmin)
+        if hasPremiumAccess != newValue {
+            hasPremiumAccess = newValue
+        }
+    }
 
     // MARK: - Premium Gates
 
@@ -44,10 +82,26 @@ final class LimitManager: ObservableObject {
         case readingRecommendations
         case stepsGoalCalendar
         case waterGoalCalendar
+        case sleepScore
+        case dailyCompletion
+        case readingGoal
+        case buddyReading
+        case sprintRoom
     }
 
     func canAccess(_ gate: PremiumGate) -> Bool {
-        hasPremiumAccess
+        // Free for all users
+        if gate == .selfCareSystem
+            || gate == .dashboardSelfCareCard
+            || gate == .profileSelfCarePointsButton
+            || gate == .dashboardDailyBalanceCard
+            || gate == .dashboardDailyTarotCard
+            || gate == .sleepScore
+            || gate == .dailyCompletion
+            || gate == .readingGoal {
+            return true
+        }
+        return hasPremiumAccess
     }
 
     // MARK: - Count / Daily Limits
@@ -70,6 +124,9 @@ final class LimitManager: ObservableObject {
         case kanbanBoardsTotal
         case kanbanColumnsPerBoard
         case medicationCardsTotal
+        case notesTabsTotal
+        case notesVisibleTotal
+        case symptomLogsTotal
     }
 
     struct Decision {
@@ -83,13 +140,13 @@ final class LimitManager: ObservableObject {
 
         switch feature {
         case .healthMetricsPerDay:
-            return 3
-        case .exercisesPerDay:
-            return 3
-        case .bookCardsTotal:
             return 4
+        case .exercisesPerDay:
+            return 4
+        case .bookCardsTotal:
+            return 6
         case .bookmarkFoldersTotal:
-            return 2
+            return 4
         case .bookmarksTotal:
             return 20
         case .journalBooksTotal:
@@ -99,7 +156,7 @@ final class LimitManager: ObservableObject {
         case .moodEntriesPerDay:
             return 1
         case .habitsTotal:
-            return 3
+            return 5
         case .checklistTabsTotal:
             return 2
         case .checklistItemsTotalAcrossAllTabs:
@@ -109,13 +166,19 @@ final class LimitManager: ObservableObject {
         case .calendarEventsTotal:
             return 20
         case .remindersTotal:
-            return 5
+            return 10
         case .kanbanBoardsTotal:
             return 2
         case .kanbanColumnsPerBoard:
             return 3
         case .medicationCardsTotal:
-            return 4
+            return 6
+        case .notesTabsTotal:
+            return 1
+        case .notesVisibleTotal:
+            return 10
+        case .symptomLogsTotal:
+            return 6
         }
     }
 
@@ -143,9 +206,9 @@ final class LimitManager: ObservableObject {
 
         switch feature {
         case .healthHistory:
-            return 3
+            return 7
         case .moodHistory:
-            return 5
+            return 7
         }
     }
 
@@ -162,5 +225,19 @@ final class LimitManager: ObservableObject {
 
     func isSameDay(_ lhs: Date, _ rhs: Date) -> Bool {
         Calendar.current.isDate(lhs, inSameDayAs: rhs)
+    }
+}
+
+// MARK: - UserDefaults KVO key paths
+// Required for UserDefaults.publisher(for: \.key) to compile.
+extension UserDefaults {
+    @objc dynamic var forceFreeMode: Bool {
+        return bool(forKey: "forceFreeMode")
+    }
+    @objc dynamic var isPremiumDevBypass: Bool {
+        return bool(forKey: "isPremiumDevBypass")
+    }
+    @objc dynamic var appleUserId: String {
+        return string(forKey: "appleUserId") ?? ""
     }
 }

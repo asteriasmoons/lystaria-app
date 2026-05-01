@@ -39,29 +39,27 @@ struct JournalBlockPreviewPage: View {
 
                     // Tags row
                     if !entry.tags.isEmpty {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(entry.tags, id: \.self) { tag in
-                                    HStack(spacing: 6) {
-                                        Image("tagheart")
-                                            .resizable()
-                                            .renderingMode(.template)
-                                            .scaledToFit()
-                                            .frame(width: 14, height: 14)
-                                            .foregroundStyle(.white)
-                                        Text(tag)
-                                            .font(.system(size: 12, weight: .semibold))
-                                    }
-                                    .foregroundStyle(LColors.textPrimary)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(Color.white.opacity(0.08))
-                                    .clipShape(Capsule())
-                                    .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
+                        TagFlowLayout(spacing: 8) {
+                            ForEach(entry.tags, id: \.self) { tag in
+                                HStack(spacing: 6) {
+                                    Image("tagheart")
+                                        .resizable()
+                                        .renderingMode(.template)
+                                        .scaledToFit()
+                                        .frame(width: 14, height: 14)
+                                        .foregroundStyle(.white)
+                                    Text(tag)
+                                        .font(.system(size: 12, weight: .semibold))
                                 }
+                                .foregroundStyle(LColors.textPrimary)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Color.white.opacity(0.08))
+                                .clipShape(Capsule())
+                                .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
                             }
-                            .padding(.horizontal, 20)
                         }
+                        .padding(.horizontal, 20)
                         .padding(.bottom, 12)
                     }
 

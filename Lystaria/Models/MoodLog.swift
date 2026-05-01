@@ -72,11 +72,11 @@ final class MoodLog {
 
     static let moodValues: [String] = [
         "happy","content","inspired","productive","loved","grateful","optimistic","confident","motivated","proud",
-        "energized","hopeful","playful","satisfied",
+        "energized","hopeful","playful","satisfied","joyful","curious","amused","radiant","peaceful","uplifted",
         "okay","neutral","reflective","distracted","confused","calm","thoughtful","mellow","settled",
-        "indifferent","reserved","detached","apathetic","composed",
+        "indifferent","reserved","detached","apathetic","composed","nostalgic","uncertain","withdrawn","restless","flat","disconnected",
         "sad","irritated","disappointed","angry","insecure","overwhelmed","stressed","scared","lonely","discouraged",
-        "drained","frustrated","restless","defeated"
+        "drained","frustrated","defeated","anxious","ashamed","bitter","helpless","guilty","humiliated","resentful"
     ]
 
     static let moodActivities: [String] = [
@@ -105,6 +105,12 @@ final class MoodLog {
         "hopeful": 4.0,
         "playful": 4.0,
         "satisfied": 3.8,
+        "joyful": 4.5,
+        "curious": 4.0,
+        "amused": 3.9,
+        "radiant": 4.4,
+        "peaceful": 3.9,
+        "uplifted": 4.1,
 
         "okay": 3.2,
         "neutral": 3.0,
@@ -120,6 +126,12 @@ final class MoodLog {
         "detached": 2.8,
         "apathetic": 2.4,
         "composed": 3.3,
+        "nostalgic": 3.0,
+        "uncertain": 2.7,
+        "withdrawn": 2.6,
+        "restless": 2.2,
+        "flat": 2.5,
+        "disconnected": 2.6,
 
         "sad": 1.8,
         "irritated": 2.0,
@@ -133,8 +145,14 @@ final class MoodLog {
         "discouraged": 1.8,
         "drained": 1.8,
         "frustrated": 1.9,
-        "restless": 2.2,
-        "defeated": 1.6
+        "defeated": 1.6,
+        "anxious": 1.7,
+        "ashamed": 1.8,
+        "bitter": 1.9,
+        "helpless": 1.6,
+        "guilty": 1.8,
+        "humiliated": 1.6,
+        "resentful": 1.9
     ]
     
     private struct MoodDefinition {
@@ -158,6 +176,12 @@ final class MoodLog {
         "hopeful": .init(valence: 2, intensity: 2),
         "playful": .init(valence: 2, intensity: 2),
         "satisfied": .init(valence: 2, intensity: 1),
+        "joyful": .init(valence: 3, intensity: 4),
+        "curious": .init(valence: 2, intensity: 3),
+        "amused": .init(valence: 2, intensity: 2),
+        "radiant": .init(valence: 3, intensity: 4),
+        "peaceful": .init(valence: 2, intensity: 1),
+        "uplifted": .init(valence: 2, intensity: 3),
 
         "okay": .init(valence: 1, intensity: 1),
         "neutral": .init(valence: 1, intensity: 1),
@@ -168,6 +192,12 @@ final class MoodLog {
         "settled": .init(valence: 1, intensity: 1),
         "reserved": .init(valence: 1, intensity: 1),
         "composed": .init(valence: 1, intensity: 2),
+        "nostalgic": .init(valence: 1, intensity: 2),
+        "uncertain": .init(valence: -1, intensity: 2),
+        "withdrawn": .init(valence: -1, intensity: 1),
+        "restless": .init(valence: -1, intensity: 3),
+        "flat": .init(valence: -1, intensity: 1),
+        "disconnected": .init(valence: -1, intensity: 1),
 
         "distracted": .init(valence: -1, intensity: 2),
         "confused": .init(valence: -1, intensity: 2),
@@ -183,13 +213,19 @@ final class MoodLog {
         "discouraged": .init(valence: -2, intensity: 2),
         "drained": .init(valence: -2, intensity: 2),
         "frustrated": .init(valence: -2, intensity: 3),
-        "restless": .init(valence: -1, intensity: 3),
 
         "angry": .init(valence: -3, intensity: 4),
         "overwhelmed": .init(valence: -3, intensity: 5),
         "stressed": .init(valence: -2, intensity: 4),
         "scared": .init(valence: -3, intensity: 4),
-        "defeated": .init(valence: -3, intensity: 3)
+        "defeated": .init(valence: -3, intensity: 3),
+        "anxious": .init(valence: -3, intensity: 4),
+        "ashamed": .init(valence: -2, intensity: 3),
+        "bitter": .init(valence: -2, intensity: 3),
+        "helpless": .init(valence: -3, intensity: 3),
+        "guilty": .init(valence: -2, intensity: 3),
+        "humiliated": .init(valence: -3, intensity: 4),
+        "resentful": .init(valence: -2, intensity: 3)
     ]
 
     // MARK: - Initializers

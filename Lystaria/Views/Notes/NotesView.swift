@@ -11,6 +11,7 @@ import Foundation
 
 struct NotesView: View {
     @Environment(\.modelContext) private var modelContext
+    @ObservedObject private var limits = LimitManager.shared
     
     @Query(sort: \Note.updatedAt, order: .reverse)
     private var notes: [Note]
@@ -52,6 +53,10 @@ struct NotesView: View {
         GridItem(.flexible(), spacing: 14)
     ]
     
+    private var canAddTab: Bool {
+        limits.canCreate(.notesTabsTotal, currentCount: notesTabs.count).allowed
+    }
+
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             LystariaBackground()
@@ -248,6 +253,7 @@ struct NotesView: View {
                 Spacer()
                 
                 Button {
+                    guard canAddTab else { return }
                     newTabName = ""
                     tabPopupMode = .create
                     showingTabPopup = true
@@ -270,6 +276,7 @@ struct NotesView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .opacity(canAddTab ? 1 : 0.4)
             }
             
             Rectangle()
@@ -333,37 +340,54 @@ struct NotesView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
                 ForEach(notesTabs, id: \.self) { tab in
+                    let isRoot = tab == rootTabName
+                    let isLocked = !limits.hasPremiumAccess && !isRoot
+
                     Button {
+                        guard !isLocked else { return }
                         selectedTab = tab
                         visibleCount = 6
                     } label: {
-                        Text(tab)
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
-                            .background(
-                                RoundedRectangle(cornerRadius: LSpacing.buttonRadius)
-                                    .fill(Color.white.opacity(selectedTab == tab ? 0.22 : 0.10))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: LSpacing.buttonRadius)
-                                            .stroke(Color.white.opacity(selectedTab == tab ? 0.24 : 0.16), lineWidth: 1)
-                                    )
-                            )
+                        HStack(spacing: 6) {
+                            if isLocked {
+                                Image("lockfill")
+                                    .renderingMode(.template)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 10, height: 10)
+                                    .foregroundStyle(.white.opacity(0.5))
+                            }
+                            Text(tab)
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(.white.opacity(isLocked ? 0.4 : 1))
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: LSpacing.buttonRadius)
+                                .fill(Color.white.opacity(selectedTab == tab ? 0.22 : 0.10))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: LSpacing.buttonRadius)
+                                        .stroke(Color.white.opacity(selectedTab == tab ? 0.24 : 0.16), lineWidth: 1)
+                                )
+                        )
+                        .opacity(isLocked ? 0.5 : 1)
                     }
                     .buttonStyle(.plain)
                     .contextMenu {
-                        Button("Rename") {
-                            renamingTabName = tab
-                            renamedTabName = tab
-                            tabPopupMode = .rename
-                            showingTabPopup = true
-                        }
-                        
-                        if tab != rootTabName || notesTabs.count > 1 {
-                            Button("Delete", role: .destructive) {
-                                tabPendingDeletion = tab
-                                showDeleteTabConfirmation = true
+                        if !isLocked {
+                            Button("Rename") {
+                                renamingTabName = tab
+                                renamedTabName = tab
+                                tabPopupMode = .rename
+                                showingTabPopup = true
+                            }
+
+                            if tab != rootTabName || notesTabs.count > 1 {
+                                Button("Delete", role: .destructive) {
+                                    tabPendingDeletion = tab
+                                    showDeleteTabConfirmation = true
+                                }
                             }
                         }
                     }
@@ -440,8 +464,15 @@ struct NotesView: View {
                 if filteredNotes.count > visibleCount {
                     HStack {
                         Spacer()
-                        LoadMoreButton {
-                            visibleCount += 6
+                        if !limits.hasPremiumAccess && filteredNotes.count > (limits.limit(for: .notesVisibleTotal) ?? 10) && visibleNotes.count >= (limits.limit(for: .notesVisibleTotal) ?? 10) {
+                            Text("Upgrade to Premium to see all \(filteredNotes.count) notes")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(LColors.textSecondary)
+                                .multilineTextAlignment(.center)
+                        } else {
+                            LoadMoreButton {
+                                visibleCount += 6
+                            }
                         }
                         Spacer()
                     }
@@ -772,7 +803,9 @@ struct NotesView: View {
         }.count
 
         let effectiveCount = visibleCount + (collapsedPinnedCount * 2)
-        return Array(filteredNotes.prefix(effectiveCount))
+        let noteLimit = limits.limit(for: .notesVisibleTotal) ?? 10
+        let cap = limits.hasPremiumAccess ? effectiveCount : min(effectiveCount, noteLimit)
+        return Array(filteredNotes.prefix(cap))
     }
 
     private var filteredNotes: [Note] {

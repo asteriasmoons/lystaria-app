@@ -515,10 +515,10 @@ struct RemindersView: View {
                             }
                         },
                     )
-                    .premiumLocked(!limits.hasPremiumAccess && index >= 5)
+                    .premiumLocked(!limits.hasPremiumAccess && index >= (limits.limit(for: .remindersTotal) ?? Int.max))
                 }
 
-                if filtered.count > 5 {
+                if filtered.count > (limits.limit(for: .remindersTotal) ?? 0) {
                     HStack {
                         Text("Showing \(min(visibleCount, filtered.count)) of \(filtered.count)")
                             .font(.system(size: 12, weight: .semibold))
@@ -744,6 +744,70 @@ struct RemindersView: View {
         return data.flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
     }
 
+    // Anchored interval advancement: always advances from the previous completed occurrence,
+    // staying aligned to the interval grid within the window.
+    private func nextAnchoredIntervalRun(
+        afterCompletedOccurrence completedOccurrenceDate: Date,
+        now: Date,
+        intervalMinutes: Int,
+        windowStart: String,
+        windowEnd: String
+    ) -> Date {
+        let cal = ReminderCompute.tzCalendar
+        let safeInterval = max(1, intervalMinutes)
+
+        guard let (startH, startM) = ReminderCompute.parseHHMM(windowStart),
+              let (endH, endM) = ReminderCompute.parseHHMM(windowEnd) else {
+            return ReminderCompute.nextRunInterval(
+                after: completedOccurrenceDate,
+                intervalMinutes: safeInterval,
+                windowStart: windowStart,
+                windowEnd: windowEnd
+            )
+        }
+
+        let startTotal = startH * 60 + startM
+        let endTotal = endH * 60 + endM
+        guard endTotal >= startTotal else {
+            return ReminderCompute.nextRunInterval(
+                after: completedOccurrenceDate,
+                intervalMinutes: safeInterval,
+                windowStart: windowStart,
+                windowEnd: windowEnd
+            )
+        }
+
+        let threshold = max(now, completedOccurrenceDate)
+
+        for dayOffset in 0...7 {
+            guard let day = cal.date(byAdding: .day, value: dayOffset, to: cal.startOfDay(for: threshold)) else {
+                continue
+            }
+
+            var cursor = startTotal
+            while cursor <= endTotal {
+                let hour = cursor / 60
+                let minute = cursor % 60
+                let candidate = ReminderCompute.merge(day: day, hour: hour, minute: minute, in: cal.timeZone)
+
+                if candidate > threshold {
+                    return candidate
+                }
+
+                cursor += safeInterval
+            }
+        }
+
+        // Last-resort fallback should still stay anchored to the completed occurrence,
+        // not the current clock time, so it does not create off-grid times.
+        return ReminderCompute.nextRunInterval(
+            after: completedOccurrenceDate,
+            intervalMinutes: safeInterval,
+            windowStart: windowStart,
+            windowEnd: windowEnd
+        )
+    }
+
     private func markDone(_ reminder: LystariaReminder) {
         print("[RemindersView] markDone id=\(reminder.id) title=\(reminder.title)")
 
@@ -779,12 +843,30 @@ struct RemindersView: View {
                 return habits.first(where: { $0.id == habitId })?.reminderIntervalWindowEnd
             }()
 
-            reminder.nextRunAt = ReminderCompute.nextRun(
-                after: base.addingTimeInterval(91),
-                reminder: reminder,
-                intervalWindowStart: intervalWindowStart,
-                intervalWindowEnd: intervalWindowEnd
-            )
+            if reminder.schedule?.kind == .interval,
+               let intervalMinutes = reminder.schedule?.intervalMinutes
+            {
+                let windowStart = (intervalWindowStart?.isEmpty == false) ? intervalWindowStart! : "00:00"
+                let windowEnd = (intervalWindowEnd?.isEmpty == false) ? intervalWindowEnd! : "23:59"
+
+                // Interval habit reminders must stay anchored to the configured window grid.
+                // Example: 10 AM, 1 PM, 4 PM should advance from 1 PM to 4 PM,
+                // not recalculate from the current clock time and create a 2 PM reminder.
+                reminder.nextRunAt = nextAnchoredIntervalRun(
+                    afterCompletedOccurrence: completedOccurrenceDate,
+                    now: now,
+                    intervalMinutes: max(1, intervalMinutes),
+                    windowStart: windowStart,
+                    windowEnd: windowEnd
+                )
+            } else {
+                reminder.nextRunAt = ReminderCompute.nextRun(
+                    after: base.addingTimeInterval(91),
+                    reminder: reminder,
+                    intervalWindowStart: intervalWindowStart,
+                    intervalWindowEnd: intervalWindowEnd
+                )
+            }
 
             // Clear acknowledged state so the circle unchecks immediately on re-render.
             reminder.acknowledgedAt = nil
@@ -850,12 +932,33 @@ struct RemindersView: View {
                 return ((try? modelContext.fetch(descriptor)) ?? []).first(where: { $0.id == habitId })?.reminderIntervalWindowEnd
             }()
 
-            reminder.nextRunAt = ReminderCompute.nextRun(
-                after: reminder.nextRunAt.addingTimeInterval(91),
-                reminder: reminder,
-                intervalWindowStart: intervalWindowStart,
-                intervalWindowEnd: intervalWindowEnd
-            )
+            if reminder.schedule?.kind == .interval,
+               let intervalMinutes = reminder.schedule?.intervalMinutes
+            {
+                let windowStart = (intervalWindowStart?.isEmpty == false) ? intervalWindowStart! : "00:00"
+                let windowEnd = (intervalWindowEnd?.isEmpty == false) ? intervalWindowEnd! : "23:59"
+
+                // Interval habit reminders must stay anchored to the configured window grid.
+                // Example: 10 AM, 1 PM, 4 PM should advance from 1 PM to 4 PM,
+                // not recalculate from the current clock time and create a 2 PM reminder.
+                reminder.nextRunAt = nextAnchoredIntervalRun(
+                    afterCompletedOccurrence: completedOccurrenceDate,
+                    now: now,
+                    intervalMinutes: max(1, intervalMinutes),
+                    windowStart: windowStart,
+                    windowEnd: windowEnd
+                )
+            } else {
+                // Non-interval recurring reminders should behave like the normal Reminder card path:
+                // completing early advances past the scheduled occurrence, and completing overdue advances
+                // from now so the reminder does not stay behind in the past.
+                reminder.nextRunAt = ReminderCompute.nextRun(
+                    after: base.addingTimeInterval(91),
+                    reminder: reminder,
+                    intervalWindowStart: intervalWindowStart,
+                    intervalWindowEnd: intervalWindowEnd
+                )
+            }
             reminder.acknowledgedAt = nil
             if reminder.reminderType == .routine {
                 reminder.resetRoutineChecklist(for: "\(reminder.nextRunAt.timeIntervalSince1970)")
@@ -3904,6 +4007,13 @@ private func isReminderOverdue(_ reminder: LystariaReminder, now: Date) -> Bool 
 
 /// Returns true when the reminder is due today right now and is not overdue/completed.
 private func isReminderDueNow(_ reminder: LystariaReminder, now: Date) -> Bool {
+    guard reminder.status == .scheduled else { return false }
+
+    if let acknowledgedAt = reminder.acknowledgedAt,
+       acknowledgedAt >= reminder.nextRunAt {
+        return false
+    }
+
     let cal = ReminderCompute.tzCalendar
     let todayStart = cal.startOfDay(for: now)
     let dueDate = reminder.nextRunAt
@@ -3916,6 +4026,13 @@ private func isReminderDueNow(_ reminder: LystariaReminder, now: Date) -> Bool {
 
 /// Returns true when the reminder is still ahead today/in the future and not completed.
 private func isReminderUpcoming(_ reminder: LystariaReminder, now: Date) -> Bool {
+    guard reminder.status == .scheduled else { return false }
+
+    if let acknowledgedAt = reminder.acknowledgedAt,
+       acknowledgedAt >= reminder.nextRunAt {
+        return false
+    }
+
     let dueDate = reminder.nextRunAt
     return dueDate > now && !isReminderCompleted(reminder, occurrenceDate: dueDate)
 }

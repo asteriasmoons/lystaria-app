@@ -90,7 +90,7 @@ struct AddExercisePopupView: View {
         let durationValue = Int(duration) ?? 0
         let repsValue = Int(reps) ?? 0
 
-        // Enforce daily exercise limit (3 per day)
+        // Enforce daily exercise limit
         let descriptor = FetchDescriptor<ExerciseLogEntry>()
         let entries = (try? modelContext.fetch(descriptor)) ?? []
         let todayCount = entries.filter { limits.isSameDay($0.createdAt, Date()) }.count

@@ -42,24 +42,22 @@ struct JournalCard: View {
                     }
 
                     if !entry.tags.isEmpty {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(entry.tags, id: \.self) { tag in
-                                    Button { onTagSelect(tag) } label: {
-                                        Text("#\(tag)")
-                                            .font(.system(size: 12, weight: .bold))
-                                            .lineLimit(1)
-                                            .foregroundStyle(LGradients.tag)
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 6)
-                                            .background(Color.white.opacity(0.06))
-                                            .clipShape(Capsule())
-                                            .overlay(
-                                                Capsule().stroke(LGradients.tag, lineWidth: 1)
-                                            )
-                                    }
-                                    .buttonStyle(.plain)
+                        TagFlowLayout(spacing: 8) {
+                            ForEach(entry.tags, id: \.self) { tag in
+                                Button { onTagSelect(tag) } label: {
+                                    Text("#\(tag)")
+                                        .font(.system(size: 12, weight: .bold))
+                                        .lineLimit(1)
+                                        .foregroundStyle(LGradients.tag)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 6)
+                                        .background(Color.white.opacity(0.06))
+                                        .clipShape(Capsule())
+                                        .overlay(
+                                            Capsule().stroke(LGradients.tag, lineWidth: 1)
+                                        )
                                 }
+                                .buttonStyle(.plain)
                             }
                         }
                     }

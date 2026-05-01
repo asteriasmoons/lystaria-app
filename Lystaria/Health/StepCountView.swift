@@ -183,14 +183,36 @@ struct StepCountView: View {
                                 }
                             }
 
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("\(Int(displayedSteps))")
-                                    .font(.system(size: 42, weight: .bold))
-                                    .foregroundStyle(.white)
+                            HStack {
+                                Spacer()
+                                ZStack {
+                                // Track ring
+                                Circle()
+                                    .stroke(Color.white.opacity(0.10), lineWidth: 14)
+                                    .frame(width: 110, height: 110)
 
-                                Text("steps")
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundStyle(LColors.textSecondary)
+                                // Progress ring
+                                Circle()
+                                    .trim(from: 0, to: stepGoal > 0 ? min(displayedSteps / stepGoal, 1.0) : 0)
+                                    .stroke(
+                                        LGradients.blue,
+                                        style: StrokeStyle(lineWidth: 14, lineCap: .round)
+                                    )
+                                    .frame(width: 110, height: 110)
+                                    .rotationEffect(.degrees(-90))
+                                    .animation(.easeOut(duration: 0.6), value: displayedSteps)
+
+                                VStack(alignment: .center, spacing: 2) {
+                                    Text("\(Int(displayedSteps))")
+                                        .font(.system(size: 22, weight: .bold))
+                                        .foregroundStyle(.white)
+
+                                    Text("steps")
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundStyle(LColors.textSecondary)
+                                }
+                            }
+                                Spacer()
                             }
 
                             Button {

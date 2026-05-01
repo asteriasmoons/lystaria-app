@@ -53,7 +53,7 @@ struct HabitsView: View {
                         let allowedIds = Set(
                             habits
                                 .sorted { $0.createdAt < $1.createdAt }
-                                .prefix(3)
+                                .prefix(limits.limit(for: .habitsTotal) ?? Int.max)
                                 .map { $0.persistentModelID }
                         )
 
@@ -1102,14 +1102,22 @@ struct HabitCard: View {
         guard habit.reminderEnabled else { return }
 
         let now = Date()
-        let grace: TimeInterval = 15 * 60 // allow early/late logging window
+        let cal = Calendar.current
+        let grace: TimeInterval = 15 * 60 // allow near-due / just-fired logging window
 
-        // Find the soonest-due (or just-fired) linked reminder that hasn't been acknowledged for its current occurrence.
+        // Find the linked habit reminder that this log should acknowledge.
+        // This covers both:
+        // - due / just-fired reminders within the grace window
+        // - reminders still coming later today, so logging early cancels today's pending notification
         let candidates = linkedHabitReminders
             .filter { r in
-                r.status == .scheduled
-                && r.nextRunAt <= now.addingTimeInterval(grace)
-                && (r.acknowledgedAt == nil || r.acknowledgedAt! < r.nextRunAt)
+                guard r.status == .scheduled else { return false }
+                guard r.acknowledgedAt == nil || r.acknowledgedAt! < r.nextRunAt else { return false }
+
+                let isNearDueOrJustFired = r.nextRunAt <= now.addingTimeInterval(grace)
+                let isLaterToday = cal.isDate(r.nextRunAt, inSameDayAs: now) && r.nextRunAt > now
+
+                return isNearDueOrJustFired || isLaterToday
             }
             .sorted { $0.nextRunAt < $1.nextRunAt }
 
@@ -1120,7 +1128,10 @@ struct HabitCard: View {
         // for the *next* occurrence, so we clear `acknowledgedAt` after advancing.
         r.updatedAt = now
 
-        // Interval-based kinds advance purely by their minute interval from the reminder's current scheduled time.
+        // Interval-based habit reminders must respect their interval AND their allowed window.
+        // If the user logs early, advance from the scheduled occurrence that was just satisfied,
+        // not from the current clock time. This prevents a later same-day notification from firing
+        // after the habit was already completed, while keeping every-X-hours/minutes schedules intact.
         if habit.reminderKind == .everyXHours || habit.reminderKind == .everyXMinutes {
             let intervalMins: Int
             if habit.reminderKind == .everyXHours {
@@ -1128,11 +1139,15 @@ struct HabitCard: View {
             } else {
                 intervalMins = max(1, habit.reminderIntervalMinutes)
             }
+
+            let windowStart = habit.reminderIntervalWindowStart.isEmpty ? "00:00" : habit.reminderIntervalWindowStart
+            let windowEnd = habit.reminderIntervalWindowEnd.isEmpty ? "23:59" : habit.reminderIntervalWindowEnd
+
             let next = ReminderCompute.nextRunInterval(
-                after: r.nextRunAt.addingTimeInterval(91),
+                after: r.nextRunAt,
                 intervalMinutes: intervalMins,
-                windowStart: habit.reminderIntervalWindowStart,
-                windowEnd: habit.reminderIntervalWindowEnd
+                windowStart: windowStart,
+                windowEnd: windowEnd
             )
             r.nextRunAt = next
             r.acknowledgedAt = nil
@@ -1165,9 +1180,12 @@ struct HabitCard: View {
             return
         }
 
+        // Daily and weekly habit reminders advance based on their own schedule type.
+        // Use the completed occurrence as the anchor, then move past it by a small amount
+        // so firstRun calculates the next valid scheduled day/time.
         let next = ReminderCompute.firstRun(
             kind: scheduleKind,
-            startDay: now.addingTimeInterval(1),
+            startDay: r.nextRunAt.addingTimeInterval(91),
             timesOfDay: [hhmm],
             daysOfWeek: selectedDays,
             intervalMinutes: nil,

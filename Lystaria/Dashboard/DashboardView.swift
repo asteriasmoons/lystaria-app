@@ -19,7 +19,7 @@ struct DailyLenormandTip: Identifiable, Hashable, Codable {
 
 struct DashboardView: View {
     @Environment(\.modelContext) private var modelContext
-    @StateObject private var limits = LimitManager.shared
+    @ObservedObject private var limits = LimitManager.shared
 
     // MARK: - Data Queries
 
@@ -103,6 +103,8 @@ struct DashboardView: View {
 
     @State private var waterGoalMoodAverageValue: Double? = nil
     @State private var stepGoalMoodAverageValue: Double? = nil
+    @State private var waterGoalMoodSummary: MoodDimensionSummary?
+    @State private var stepGoalMoodSummary: MoodDimensionSummary?
     @State private var waterActiveDayStartsCache: Set<Date> = []
     @State private var stepActiveDayStartsCache: Set<Date> = []
 
@@ -567,6 +569,89 @@ struct DashboardView: View {
         }
     }
 
+    private struct MoodDimensionSummary {
+        let averageScore: Double
+        let averageTone: Double
+        let averageIntensity: Double
+    }
+
+    private var moodDayToneAverages: [Date: Double] {
+        let grouped = Dictionary(grouping: moodLogs) {
+            dashboardCalendar.startOfDay(for: $0.createdAt)
+        }
+
+        return grouped.reduce(into: [Date: Double]()) { partial, pair in
+            let values = pair.value.map(\.valence)
+            guard !values.isEmpty else { return }
+            partial[pair.key] = values.reduce(0, +) / Double(values.count)
+        }
+    }
+
+    private var moodDayIntensityAverages: [Date: Double] {
+        let grouped = Dictionary(grouping: moodLogs) {
+            dashboardCalendar.startOfDay(for: $0.createdAt)
+        }
+
+        return grouped.reduce(into: [Date: Double]()) { partial, pair in
+            let values = pair.value.map(\.intensity)
+            guard !values.isEmpty else { return }
+            partial[pair.key] = values.reduce(0, +) / Double(values.count)
+        }
+    }
+
+    private func moodSummary(on days: Set<Date>) -> MoodDimensionSummary? {
+        let normalizedDays = Set(days.map { dashboardCalendar.startOfDay(for: $0) })
+        let matchingScores = moodDayAverages
+            .filter { normalizedDays.contains(dashboardCalendar.startOfDay(for: $0.key)) }
+            .map(\.value)
+
+        guard !matchingScores.isEmpty else { return nil }
+
+        let matchingTones = moodDayToneAverages
+            .filter { normalizedDays.contains(dashboardCalendar.startOfDay(for: $0.key)) }
+            .map(\.value)
+
+        let matchingIntensities = moodDayIntensityAverages
+            .filter { normalizedDays.contains(dashboardCalendar.startOfDay(for: $0.key)) }
+            .map(\.value)
+
+        let averageScore = matchingScores.reduce(0, +) / Double(matchingScores.count)
+        let averageTone = matchingTones.isEmpty ? 0 : matchingTones.reduce(0, +) / Double(matchingTones.count)
+        let averageIntensity = matchingIntensities.isEmpty ? 0 : matchingIntensities.reduce(0, +) / Double(matchingIntensities.count)
+
+        return MoodDimensionSummary(
+            averageScore: averageScore,
+            averageTone: averageTone,
+            averageIntensity: averageIntensity
+        )
+    }
+
+    private func toneLabel(for value: Double) -> String {
+        switch value {
+        case 0.35...:
+            return "leans positive"
+        case ...(-0.35):
+            return "leans heavier"
+        default:
+            return "feels balanced"
+        }
+    }
+
+    private func intensityLabel(for value: Double) -> String {
+        switch value {
+        case 0..<2:
+            return "low intensity"
+        case 2..<3.5:
+            return "moderate intensity"
+        default:
+            return "high intensity"
+        }
+    }
+
+    private func wellnessInsightDetail(prefix: String, summary: MoodDimensionSummary) -> String {
+        "Your mood averages \(String(format: "%.1f", summary.averageScore)) / 5 on \(prefix), with emotional tone that \(toneLabel(for: summary.averageTone)) and \(intensityLabel(for: summary.averageIntensity))."
+    }
+
     private var journalDayStarts: Set<Date> {
         Set(
             journalEntries
@@ -700,10 +785,25 @@ struct DashboardView: View {
         stepGoalMoodAverageValue
     }
 
+    private var journalMoodSummary: MoodDimensionSummary? {
+        moodSummary(on: journalDayStarts)
+    }
+
+    private var habitMoodSummary: MoodDimensionSummary? {
+        moodSummary(on: habitDayStarts)
+    }
+
     private var wellnessInsights: [WellnessInsightItem] {
         var items: [WellnessInsightItem] = []
 
-        if let avg = journalMoodAverage {
+        if let summary = journalMoodSummary {
+            items.append(
+                WellnessInsightItem(
+                    title: "Journal Days",
+                    detail: wellnessInsightDetail(prefix: "days you journal", summary: summary)
+                )
+            )
+        } else if let avg = journalMoodAverage {
             items.append(
                 WellnessInsightItem(
                     title: "Journal Days",
@@ -712,7 +812,14 @@ struct DashboardView: View {
             )
         }
 
-        if let avg = waterGoalMoodAverage {
+        if let summary = waterGoalMoodSummary {
+            items.append(
+                WellnessInsightItem(
+                    title: "Hydrated Days",
+                    detail: wellnessInsightDetail(prefix: "days you hit your water goal", summary: summary)
+                )
+            )
+        } else if let avg = waterGoalMoodAverage {
             items.append(
                 WellnessInsightItem(
                     title: "Hydrated Days",
@@ -721,7 +828,14 @@ struct DashboardView: View {
             )
         }
 
-        if let avg = stepGoalMoodAverage {
+        if let summary = stepGoalMoodSummary {
+            items.append(
+                WellnessInsightItem(
+                    title: "Active Days",
+                    detail: wellnessInsightDetail(prefix: "days you hit your step goal", summary: summary)
+                )
+            )
+        } else if let avg = stepGoalMoodAverage {
             items.append(
                 WellnessInsightItem(
                     title: "Active Days",
@@ -730,7 +844,14 @@ struct DashboardView: View {
             )
         }
 
-        if let avg = habitMoodAverage {
+        if let summary = habitMoodSummary {
+            items.append(
+                WellnessInsightItem(
+                    title: "Habit Days",
+                    detail: wellnessInsightDetail(prefix: "days you complete habits", summary: summary)
+                )
+            )
+        } else if let avg = habitMoodAverage {
             items.append(
                 WellnessInsightItem(
                     title: "Habit Days",
@@ -754,8 +875,11 @@ struct DashboardView: View {
     }
 
     private func activeDayCount(in activeDays: Set<Date>) -> Int {
-        last7DayStarts.reduce(0) { partial, day in
-            partial + (activeDays.contains(day) ? 1 : 0)
+        let normalizedActiveDays = Set(activeDays.map { dashboardCalendar.startOfDay(for: $0) })
+
+        return last7DayStarts.reduce(0) { partial, day in
+            let normalizedDay = dashboardCalendar.startOfDay(for: day)
+            return partial + (normalizedActiveDays.contains(normalizedDay) ? 1 : 0)
         }
     }
 
@@ -833,6 +957,8 @@ struct DashboardView: View {
         await MainActor.run {
             waterGoalMoodAverageValue = averageMood(on: hydratedMoodDays)
             stepGoalMoodAverageValue = averageMood(on: activeStepMoodDays)
+            waterGoalMoodSummary = moodSummary(on: hydratedMoodDays)
+            stepGoalMoodSummary = moodSummary(on: activeStepMoodDays)
             waterActiveDayStartsCache = hydratedLast7Days
             stepActiveDayStartsCache = activeStepLast7Days
             refreshConsistencyCard()
@@ -841,18 +967,31 @@ struct DashboardView: View {
 
     private func currentStreak(from activeDays: Set<Date>) -> Int {
         let today = dashboardCalendar.startOfDay(for: Date())
+        let yesterday = dashboardCalendar.date(byAdding: .day, value: -1, to: today).map {
+            dashboardCalendar.startOfDay(for: $0)
+        }
 
-        guard activeDays.contains(today) else {
+        let normalizedActiveDays = Set(activeDays.map { dashboardCalendar.startOfDay(for: $0) })
+
+        let startingDay: Date
+        if normalizedActiveDays.contains(today) {
+            startingDay = today
+        } else if let yesterday, normalizedActiveDays.contains(yesterday) {
+            // Preserve an active streak through the current day until the user has had a chance
+            // to log today's activity. This prevents dashboard streak cards from resetting to 0
+            // every morning before the user checks in.
+            startingDay = yesterday
+        } else {
             return 0
         }
 
         var streak = 0
-        var cursor = today
+        var cursor = startingDay
 
-        while activeDays.contains(cursor) {
+        while normalizedActiveDays.contains(cursor) {
             streak += 1
             guard let previous = dashboardCalendar.date(byAdding: .day, value: -1, to: cursor) else { break }
-            cursor = previous
+            cursor = dashboardCalendar.startOfDay(for: previous)
         }
 
         return streak
@@ -863,22 +1002,7 @@ struct DashboardView: View {
     }
 
     private var journalCurrentStreak: Int {
-        let todayStart = dashboardCalendar.startOfDay(for: Date())
-
-        guard journalDayStarts.contains(todayStart) else {
-            return 0
-        }
-
-        var streak = 0
-        var cursor = todayStart
-
-        while journalDayStarts.contains(cursor) {
-            streak += 1
-            guard let previous = dashboardCalendar.date(byAdding: .day, value: -1, to: cursor) else { break }
-            cursor = previous
-        }
-
-        return streak
+        currentStreak(from: journalDayStarts)
     }
 
     private var moodCurrentStreak: Int {
@@ -901,7 +1025,7 @@ struct DashboardView: View {
 
 
     private var readingCurrentStreak: Int {
-        currentReadingStats?.streakDays ?? 0
+        currentStreak(from: readingDayStarts)
     }
 
     private var healthDayStarts: Set<Date> {
@@ -996,9 +1120,15 @@ struct DashboardView: View {
     }
 
     private var leastActiveArea: ConsistencyAreaScore? {
-        consistencyAreaScores.min { lhs, rhs in
+        let incompleteAreas = consistencyAreaScores.filter { $0.activeDays < last7DayStarts.count }
+
+        guard !incompleteAreas.isEmpty else {
+            return nil
+        }
+
+        return incompleteAreas.min { lhs, rhs in
             if lhs.activeDays == rhs.activeDays {
-                return lhs.title > rhs.title
+                return lhs.title < rhs.title
             }
             return lhs.activeDays < rhs.activeDays
         }
@@ -1302,14 +1432,17 @@ struct DashboardView: View {
             .onChange(of: journalEntries.count) { _, _ in
                 refreshMomentumCard()
                 refreshConsistencyCard()
+                Task { await refreshHealthDerivedStats() }
             }
             .onChange(of: moodLogs.count) { _, _ in
                 refreshMomentumCard()
                 refreshConsistencyCard()
+                Task { await refreshHealthDerivedStats() }
             }
             .onChange(of: habitLogs.count) { _, _ in
                 refreshMomentumCard()
                 refreshConsistencyCard()
+                Task { await refreshHealthDerivedStats() }
             }
             .onChange(of: readingCurrentStreak) { _, _ in
                 refreshMomentumCard()
@@ -2114,7 +2247,7 @@ private struct DashboardConsistencyCard: View {
 
                     detailRow(
                         label: "LEAST ACTIVE THIS WEEK",
-                        value: leastActiveThisWeek.map { "\($0.title) — \($0.activeDays) / 7 days" } ?? "Not enough data"
+                        value: leastActiveThisWeek.map { "\($0.title) — \($0.activeDays) / 7 days" } ?? "All areas active — 7 / 7 days"
                     )
                 }
             }

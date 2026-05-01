@@ -36,7 +36,7 @@ struct CalendarTabView: View {
     @State private var showDeleteRecurringDialog = false
     // Onboarding for hidden header icons
     @StateObject private var onboarding = OnboardingManager()
-    @StateObject private var limits = LimitManager.shared
+    @ObservedObject private var limits = LimitManager.shared
 
     @State private var showingDayView = false
     @State private var dayViewDate: Date = Date()
@@ -94,7 +94,7 @@ struct CalendarTabView: View {
             let key = isoDayString(tzCalendar.startOfDay(for: date))
             return (eventsByDay[key] ?? []).sorted { $0.occurrenceStart < $1.occurrenceStart }
         }
-        return Set(instances.prefix(20).map { $0.id })
+        return Set(instances.prefix(limits.limit(for: .calendarEventsTotal) ?? Int.max).map { $0.id })
     }
 
     enum CalendarFilterOption: Equatable {

@@ -36,6 +36,7 @@ struct ProfileTabView: View {
     @State private var timezoneSearch: String = ""
     @AppStorage("isAdminMode") private var isAdminMode: Bool = false
     @AppStorage("isPremiumDevBypass") private var isPremiumDevBypass: Bool = false
+    @AppStorage("forceFreeMode") private var forceFreeMode: Bool = false
     @AppStorage("settings.showOnboardingNextLaunch") private var showOnboardingNextLaunch: Bool = false
     @AppStorage("hasSeenWelcome") private var hasSeenWelcome: Bool = true
 
@@ -366,6 +367,20 @@ struct ProfileTabView: View {
                             Image("shieldstar").renderingMode(.template).resizable()
                                 .scaledToFit().frame(width: 18, height: 18).foregroundStyle(.white)
                             Text("Admin Mode").font(.system(size: 16, weight: .semibold))
+                        }
+                        .foregroundStyle(LColors.textPrimary)
+                    }
+                    .tint(LColors.accent).padding(.horizontal, 14).frame(minHeight: 56)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
+
+                    Toggle(isOn: $forceFreeMode) {
+                        HStack(spacing: 10) {
+                            Image(systemName: "lock.heart.fill")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(.white)
+                            Text("Force Free Mode").font(.system(size: 16, weight: .semibold))
                         }
                         .foregroundStyle(LColors.textPrimary)
                     }

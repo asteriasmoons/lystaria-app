@@ -7,6 +7,7 @@ import SwiftUI
 struct ReminderTimeBlockView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var limits = LimitManager.shared
 
     @Query var allReminders: [LystariaReminder]
     let onMarkDone: (LystariaReminder) -> Void
@@ -70,6 +71,17 @@ struct ReminderTimeBlockView: View {
     }
 
     // MARK: - Slot resolution
+
+    private var allowedReminderIds: Set<PersistentIdentifier> {
+        guard !limits.hasPremiumAccess else { return Set() }
+        return Set(
+            allReminders
+                .filter { $0.status != .deleted }
+                .sorted { $0.createdAt < $1.createdAt }
+                .prefix(limits.limit(for: .remindersTotal) ?? Int.max)
+                .map { $0.persistentModelID }
+        )
+    }
 
     private func remindersForHour(_ hour: Int) -> [(LystariaReminder, Date)] {
         let cal = tzCalendar
@@ -391,6 +403,7 @@ struct ReminderTimeBlockView: View {
                     } else {
                         ForEach(slots, id: \.0.persistentModelID) { reminder, fireDate in
                             reminderSlotCard(reminder: reminder, fireDate: fireDate)
+                                .premiumLocked(!limits.hasPremiumAccess && !allowedReminderIds.contains(reminder.persistentModelID))
                         }
                     }
                 }

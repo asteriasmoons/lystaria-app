@@ -11,7 +11,7 @@ import Combine
 
 struct SelfCarePointsView: View {
     @Environment(\.modelContext) private var modelContext
-    @StateObject private var limits = LimitManager.shared
+    @ObservedObject private var limits = LimitManager.shared
     
     @AppStorage("isAdminMode") private var isAdminMode: Bool = false
     @State private var selectedEntryForAdminAction: SelfCarePointEntry? = nil
@@ -102,12 +102,19 @@ struct SelfCarePointsView: View {
                     VStack(spacing: 14) {
                         headerSection
                         statsGridSection
+                            .premiumLocked(!limits.canAccess(.selfCareSystem))
                         levelProgressSection
+                            .premiumLocked(!limits.canAccess(.selfCareSystem))
                         breakdownSection
+                            .premiumLocked(!limits.canAccess(.selfCareSystem))
                         recentActivitySection
+                            .premiumLocked(!limits.canAccess(.selfCareSystem))
                         earningGuideSection
+                            .premiumLocked(!limits.canAccess(.selfCareSystem))
                         manualLogHistoryButtonSection
+                            .premiumLocked(!limits.canAccess(.selfCareSystem))
                         logHistoryButtonSection
+                            .premiumLocked(!limits.canAccess(.selfCareSystem))
 
                         Spacer(minLength: 80)
                     }
@@ -129,7 +136,6 @@ struct SelfCarePointsView: View {
                     .padding(.horizontal, LSpacing.pageHorizontal)
                     .padding(.vertical, 20)
                 }
-                .premiumLocked(!limits.canAccess(.selfCareSystem))
             }
 
             if showLogHistoryPopup {

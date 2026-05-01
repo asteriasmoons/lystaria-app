@@ -9,11 +9,10 @@ import SwiftUI
 
 struct PremiumLockModifier: ViewModifier {
     let isLocked: Bool
-    @StateObject private var premium = PremiumManager.shared
     @State private var showPaywall: Bool = false
 
     private var locked: Bool {
-        isLocked && !premium.isPremium
+        isLocked
     }
 
     func body(content: Content) -> some View {

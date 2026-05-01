@@ -695,89 +695,118 @@ private struct MultiSelectDropdown: View {
     let accent: Color
 
     private var selectedPreview: String {
-        if selections.isEmpty { return "None" }
+        if selections.isEmpty { return "None selected" }
         if selections.count == 1 { return pillLabel(selections.first!) }
         return "\(selections.count) selected"
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title.uppercased())
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(LColors.textSecondary)
-                        .tracking(0.5)
-
-                    Text(subtitle)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(LColors.textSecondary.opacity(0.8))
+            // Trigger bar
+            Button {
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
+                    isExpanded.toggle()
                 }
-
-                Spacer()
-
-                Button {
-                    withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
-                        isExpanded.toggle()
-                    }
-                } label: {
-                    HStack(spacing: 8) {
-                        Text(selectedPreview)
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(LColors.textPrimary)
-                            .lineLimit(1)
-
-                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                            .font(.system(size: 12, weight: .bold))
+            } label: {
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title.uppercased())
+                            .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(LColors.textSecondary)
+                            .tracking(0.5)
+
+                        Text(selectedPreview)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(selections.isEmpty ? LColors.textSecondary : accent)
+                            .lineLimit(1)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                    .background(Color.white.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                    Spacer()
+
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(LColors.textSecondary)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(Color.white.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(isExpanded ? accent.opacity(0.5) : LColors.glassBorder, lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+
+            // Expanded panel with scrollable grid
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 10) {
+                    ScrollView(.vertical, showsIndicators: true) {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 8)], spacing: 8) {
+                            ForEach(options, id: \.self) { key in
+                                let isOn = selections.contains(key)
+                                Button {
+                                    if isOn { selections.remove(key) } else { selections.insert(key) }
+                                } label: {
+                                    Text(pillLabel(key))
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .lineLimit(1)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .frame(maxWidth: .infinity)
+                                        .background(isOn ? accent.opacity(0.18) : Color.white.opacity(0.06))
+                                        .foregroundStyle(isOn ? accent : LColors.textPrimary)
+                                        .clipShape(Capsule())
+                                        .overlay(
+                                            Capsule().stroke(isOn ? accent : LColors.glassBorder, lineWidth: 1)
+                                        )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(12)
+                    }
+                    .frame(height: 220)
+                    .background(Color.white.opacity(0.04))
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12)
+                        RoundedRectangle(cornerRadius: 14)
                             .stroke(LColors.glassBorder, lineWidth: 1)
                     )
-                }
-                .buttonStyle(.plain)
-            }
 
-            if isExpanded {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 8)], spacing: 8) {
-                    ForEach(options, id: \.self) { key in
-                        let isOn = selections.contains(key)
-                        Button {
-                            if isOn { selections.remove(key) } else { selections.insert(key) }
-                        } label: {
-                            Text(pillLabel(key))
-                                .font(.system(size: 12, weight: .semibold))
-                                .lineLimit(1)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .frame(maxWidth: .infinity)
-                                .background(isOn ? accent.opacity(0.18) : Color.white.opacity(0.06))
-                                .foregroundStyle(isOn ? accent : LColors.textPrimary)
-                                .clipShape(Capsule())
-                                .overlay(
-                                    Capsule().stroke(isOn ? accent : LColors.glassBorder, lineWidth: 1)
-                                )
+                    // Done button
+                    Button {
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
+                            isExpanded = false
                         }
-                        .buttonStyle(.plain)
+                    } label: {
+                        Text(selections.isEmpty ? "Close" : "Done (\(selections.count) selected)")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(selections.isEmpty ? AnyShapeStyle(Color.white.opacity(0.08)) : AnyShapeStyle(accent))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                            )
                     }
+                    .buttonStyle(.plain)
                 }
-                .padding(.top, 2)
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
-            if !selections.isEmpty {
-                // Selected chips row
+            // Selected chips preview (always visible when something is chosen)
+            if !selections.isEmpty && !isExpanded {
                 FlowChips(
                     items: selections.sorted(),
-                    label: { "#\($0)" },
+                    label: { pillLabel($0) },
                     onRemove: { selections.remove($0) },
                     tint: accent
                 )
                 .padding(.top, 2)
+                .transition(.opacity)
             }
         }
     }
@@ -933,13 +962,21 @@ private struct MoodLogCard: View {
         }
     }
 
+    private var dateText: String {
+        log.createdAt.formatted(.dateTime.month(.abbreviated).day().year())
+    }
+
+    private var timeText: String {
+        log.createdAt.formatted(.dateTime.hour().minute())
+    }
+
     var body: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    GradientTitle(text: "Latest Mood", font: .system(size: 18, weight: .bold))
+                    GradientTitle(text: dateText, font: .system(size: 18, weight: .bold))
                     Spacer()
-                    Text(log.createdAt.formatted(.dateTime.month(.abbreviated).day().hour().minute()))
+                    Text(timeText)
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(LColors.textSecondary)
                 }

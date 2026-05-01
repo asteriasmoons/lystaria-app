@@ -21,7 +21,7 @@ struct MainTabView: View {
             switch self {
             case .reminders: return "bellfill"
             case .calendar:  return "calfill"
-            case .journal:   return "notesfill"
+            case .journal:   return "bookie"
             case .reading:   return "bookstack"
             case .profile:   return "userwavy"
             case .info:       return "infofill"

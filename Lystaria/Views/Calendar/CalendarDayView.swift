@@ -23,6 +23,7 @@ private extension String {
 
 struct CalendarDayView: View {
     @Environment(\.modelContext) private var modelContext
+    @ObservedObject private var limits = LimitManager.shared
     @Query(sort: [SortDescriptor(\EventCalendar.sortOrder), SortDescriptor(\EventCalendar.name)]) private var calendars: [EventCalendar]
     @Query(sort: \CalendarEvent.startDate) private var allEvents: [CalendarEvent]
 
@@ -117,6 +118,11 @@ struct CalendarDayView: View {
     }
 
     private var allDayEvents: [DayEventInstance] { dayEvents.filter { $0.event.allDay } }
+
+    private var allowedEventIds: Set<String> {
+        guard !limits.hasPremiumAccess else { return Set() }
+        return Set(dayEvents.prefix(4).map { $0.id })
+    }
 
     var body: some View {
         NavigationStack {
@@ -1327,6 +1333,7 @@ extension CalendarDayView {
         .onTapGesture {
             detailOverlayPayload = DayEventDetailOverlayPayload(event: event, occurrenceStart: instance.occurrenceStart, occurrenceEnd: instance.occurrenceEnd)
         }
+        .premiumLocked(!limits.hasPremiumAccess && !allowedEventIds.contains(instance.id))
     }
 
     private func timedEvents(for hour: Int) -> [DayEventInstance] {

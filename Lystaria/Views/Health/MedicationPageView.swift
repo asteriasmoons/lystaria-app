@@ -14,7 +14,7 @@ struct MedicationPageView: View {
     // Onboarding for hidden header icons
     @StateObject private var onboarding = OnboardingManager()
 
-    @Query(sort: \Medication.updatedAt, order: .reverse)
+    @Query(sort: \Medication.createdAt, order: .forward)
     private var medications: [Medication]
 
     @Query private var reminders: [LystariaReminder]
@@ -57,7 +57,7 @@ struct MedicationPageView: View {
                     } else {
                         ForEach(Array(medications.enumerated()), id: \.element.id) { index, med in
                             medicationCard(med)
-                                .premiumLocked(index >= 4 && !limits.hasPremiumAccess)
+                                .premiumLocked(index >= (limits.limit(for: .medicationCardsTotal) ?? Int.max) && !limits.hasPremiumAccess)
                         }
                     }
 

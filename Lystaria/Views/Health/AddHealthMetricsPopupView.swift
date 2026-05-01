@@ -105,7 +105,7 @@ struct AddHealthMetricsPopupView: View {
         }
         isSaving = true
 
-        // Enforce daily health metrics limit (3 per day)
+        // Enforce daily health metrics limit
         let descriptor = FetchDescriptor<HealthMetricEntry>()
         let entries = (try? modelContext.fetch(descriptor)) ?? []
         let todayCount = entries.filter { limits.isSameDay($0.createdAt, Date()) }.count

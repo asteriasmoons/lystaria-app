@@ -284,7 +284,7 @@ private extension BookmarksView {
                         }
                     }
                 }
-                .premiumLocked(index >= 2 && !limits.hasPremiumAccess)
+                .premiumLocked(index >= (limits.limit(for: .bookmarkFoldersTotal) ?? Int.max) && !limits.hasPremiumAccess)
                 .contextMenu {
                     Button {
                         withAnimation {

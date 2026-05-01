@@ -10,6 +10,7 @@ import SwiftData
 
 struct SymptomLoggerView: View {
     @Environment(\.modelContext) private var modelContext
+    @ObservedObject private var limits = LimitManager.shared
 
     @Query(sort: \SymptomLog.date, order: .reverse)
     private var logs: [SymptomLog]
@@ -38,8 +39,9 @@ struct SymptomLoggerView: View {
                     if logs.isEmpty {
                         emptyState
                     } else {
-                        ForEach(logs) { log in
+                        ForEach(Array(logs.enumerated()), id: \.element.id) { index, log in
                             logCard(log)
+                                .premiumLocked(!limits.canCreate(.symptomLogsTotal, currentCount: index).allowed)
                         }
                     }
 
@@ -91,6 +93,7 @@ struct SymptomLoggerView: View {
                 Spacer()
 
                 Button {
+                    guard limits.canCreate(.symptomLogsTotal, currentCount: logs.count).allowed else { return }
                     resetForm()
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                         showAddPopup = true
@@ -107,7 +110,7 @@ struct SymptomLoggerView: View {
                             .resizable()
                             .scaledToFit()
                             .frame(width: 16, height: 16)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(.white.opacity(limits.canCreate(.symptomLogsTotal, currentCount: logs.count).allowed ? 1 : 0.4))
                     }
                 }
                 .buttonStyle(.plain)

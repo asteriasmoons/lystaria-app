@@ -956,14 +956,9 @@ struct JournalBookDetailView: View {
     private var header: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color(hex: book.coverHex))
-                    .frame(width: 42, height: 42)
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(LColors.glassBorder, lineWidth: 1))
-                
                 VStack(alignment: .leading, spacing: 2) {
                     GradientTitle(text: book.title, font: .system(size: 20, weight: .bold))
-                    Text("Entries")
+                    Text(entries.count == 1 ? "1 entry" : "\(entries.count) entries")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(LColors.textSecondary)
                 }

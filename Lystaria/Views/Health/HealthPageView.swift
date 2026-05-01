@@ -11,6 +11,7 @@ import SwiftUI
 struct HealthPageView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
+    @ObservedObject private var limits = LimitManager.shared
     @StateObject private var bodyStateManager = BodyStateHealthKitManager.shared
     @StateObject private var stepManager = HealthKitManager.shared
     @StateObject private var waterManager = WaterHealthKitManager.shared
@@ -52,7 +53,9 @@ struct HealthPageView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     healthStreaksCard
                     sleepScoreCard
+                        .premiumLocked(!limits.canAccess(.sleepScore))
                     dailyCompletionCard
+                        .premiumLocked(!limits.canAccess(.dailyCompletion))
                         .id(completionRefreshTick)
                     bodyStateCard
                     HealthMetricsCard(latestEntry: latestHealthEntry) {

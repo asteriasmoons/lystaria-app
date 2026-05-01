@@ -22,7 +22,7 @@ extension View {
 
 struct ReadingTabView: View {
     @Environment(\.modelContext) private var modelContext
-    @StateObject private var limits = LimitManager.shared
+    @ObservedObject private var limits = LimitManager.shared
     @Query private var userSettingsAll: [UserSettings]
     @Query(sort: \Book.createdAt, order: .reverse) private var books: [Book]
     @Query(sort: \ReadingStats.updatedAt, order: .reverse) private var readingStats: [ReadingStats]
@@ -340,7 +340,7 @@ struct ReadingTabView: View {
                             )
                             .frame(width: 34, height: 34)
 
-                        Image("markfill")
+                        Image("starmark")
                             .renderingMode(.template)
                             .resizable()
                             .scaledToFit()
@@ -372,35 +372,54 @@ struct ReadingTabView: View {
                 .buttonStyle(.plain)
                 .onboardingTarget("notesIcon")
 
-                Menu {
-                    Button {
-                        showBuddyReadingView = true
-                    } label: {
-                        Label("Buddy Reading", image: "groupfill")
-                    }
+                Group {
+                    if limits.hasPremiumAccess {
+                        Menu {
+                            Button {
+                                showBuddyReadingView = true
+                            } label: {
+                                Label("Buddy Reading", image: "groupfill")
+                            }
 
-                    Button {
-                        showSprintRoomView = true
-                    } label: {
-                        Label("Sprint Room", image: "sparkfill")
-                    }
-                } label: {
-                    ZStack {
-                        Circle()
-                            .fill(Color.white.opacity(0.08))
-                            .overlay(
-                                Circle().stroke(LColors.glassBorder, lineWidth: 1),
-                            )
-                            .frame(width: 34, height: 34)
-                        Image("dotsfill")
-                            .renderingMode(.template)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 15, height: 15)
-                            .foregroundColor(.white)
+                            Button {
+                                showSprintRoomView = true
+                            } label: {
+                                Label("Sprint Room", image: "sparkfill")
+                            }
+                        } label: {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.white.opacity(0.08))
+                                    .overlay(
+                                        Circle().stroke(LColors.glassBorder, lineWidth: 1),
+                                    )
+                                    .frame(width: 34, height: 34)
+                                Image("dotsfill")
+                                    .renderingMode(.template)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 15, height: 15)
+                                    .foregroundColor(.white)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.08))
+                                .overlay(
+                                    Circle().stroke(LColors.glassBorder, lineWidth: 1),
+                                )
+                                .frame(width: 34, height: 34)
+                            Image("dotsfill")
+                                .renderingMode(.template)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 15, height: 15)
+                                .foregroundColor(.white.opacity(0.4))
+                        }
                     }
                 }
-                .buttonStyle(.plain)
                 .onboardingTarget("readingMenuIcon")
             }
             .padding(.top, 24)
@@ -512,7 +531,7 @@ struct ReadingTabView: View {
             mainScrollContent
             readingPopupsOverlay
 
-            if !showBookSummaryPopup && !showBookRecommendationsPopup {
+            if !showBookSummaryPopup, !showBookRecommendationsPopup {
                 FloatingActionButton {
                     handleAddBookTap()
                 }
@@ -552,10 +571,10 @@ struct ReadingTabView: View {
         .onChange(of: readingSessions.count) { _, _ in
             savePastReadingGoalSnapshotsIfNeeded()
         }
-        .onChange(of: books.map { $0.updatedAt }) { _, _ in
+        .onChange(of: books.map(\.updatedAt)) { _, _ in
             savePastReadingGoalSnapshotsIfNeeded()
         }
-        .onChange(of: readingGoals.map { $0.updatedAt }) { _, _ in
+        .onChange(of: readingGoals.map(\.updatedAt)) { _, _ in
             savePastReadingGoalSnapshotsIfNeeded()
         }
         .overlayPreferenceValue(OnboardingTargetKey.self) { anchors in
@@ -748,35 +767,37 @@ struct ReadingTabView: View {
                             }
 
                             HStack(spacing: 8) {
-                                VStack(alignment: .leading, spacing: 4) {
+                                VStack(spacing: 3) {
                                     Text("NOW")
-                                        .font(.system(size: 9, weight: .bold))
+                                        .font(.system(size: 8, weight: .bold))
                                         .foregroundStyle(LColors.textSecondary)
                                         .tracking(0.6)
                                     Text("\(streakDays)")
-                                        .font(.system(size: 24, weight: .black))
+                                        .font(.system(size: 22, weight: .black))
                                         .foregroundStyle(LColors.textPrimary)
                                 }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(10)
-                                .background(LColors.glassSurface)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                                .overlay(RoundedRectangle(cornerRadius: 12).stroke(LColors.glassBorder, lineWidth: 1))
+                                .frame(maxWidth: .infinity, minHeight: 58)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 8)
+                                .background(Color.white.opacity(0.07))
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                                .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
 
-                                VStack(alignment: .leading, spacing: 4) {
+                                VStack(spacing: 3) {
                                     Text("BEST")
-                                        .font(.system(size: 9, weight: .bold))
+                                        .font(.system(size: 8, weight: .bold))
                                         .foregroundStyle(LColors.textSecondary)
                                         .tracking(0.6)
                                     Text("\(bestStreakDays)")
-                                        .font(.system(size: 24, weight: .black))
+                                        .font(.system(size: 22, weight: .black))
                                         .foregroundStyle(LColors.textPrimary)
                                 }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(10)
-                                .background(LColors.glassSurface)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                                .overlay(RoundedRectangle(cornerRadius: 12).stroke(LColors.glassBorder, lineWidth: 1))
+                                .frame(maxWidth: .infinity, minHeight: 58)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 8)
+                                .background(Color.white.opacity(0.07))
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                                .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
                             }
 
                             Text(readingStreakStatusText)
@@ -812,12 +833,12 @@ struct ReadingTabView: View {
                                             .font(.system(size: 11, weight: .semibold))
                                     }
                                     .foregroundStyle(.white)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 7)
-                                    .frame(maxWidth: .infinity)
-                                    .background(alreadyCheckedInToday ? Color.gray.opacity(0.35) : LColors.accent)
-                                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(LColors.glassBorder, lineWidth: 1))
+                                    .padding(.horizontal, 9)
+                                    .padding(.vertical, 8)
+                                    .frame(maxWidth: .infinity, minHeight: 34)
+                                    .background(alreadyCheckedInToday ? Color.white.opacity(0.10) : LColors.accent)
+                                    .clipShape(Capsule())
+                                    .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
                                 }
                                 .buttonStyle(.plain)
                                 .disabled(alreadyCheckedInToday)
@@ -834,10 +855,10 @@ struct ReadingTabView: View {
                                     Image(systemName: "arrow.counterclockwise")
                                         .font(.system(size: 12, weight: .semibold))
                                         .foregroundStyle(LColors.textSecondary)
-                                        .frame(width: 30, height: 30)
+                                        .frame(width: 34, height: 34)
                                         .background(Color.white.opacity(0.08))
-                                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(LColors.glassBorder, lineWidth: 1))
+                                        .clipShape(Circle())
+                                        .overlay(Circle().stroke(LColors.glassBorder, lineWidth: 1))
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -862,35 +883,37 @@ struct ReadingTabView: View {
                             }
 
                             HStack(spacing: 8) {
-                                VStack(alignment: .leading, spacing: 4) {
+                                VStack(spacing: 3) {
                                     Text("PTS")
-                                        .font(.system(size: 9, weight: .bold))
+                                        .font(.system(size: 8, weight: .bold))
                                         .foregroundStyle(LColors.textSecondary)
                                         .tracking(0.6)
                                     Text("\(totalReadingPoints)")
-                                        .font(.system(size: 24, weight: .black))
+                                        .font(.system(size: 22, weight: .black))
                                         .foregroundStyle(LColors.textPrimary)
                                 }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(10)
-                                .background(LColors.glassSurface)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                                .overlay(RoundedRectangle(cornerRadius: 12).stroke(LColors.glassBorder, lineWidth: 1))
+                                .frame(maxWidth: .infinity, minHeight: 58)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 8)
+                                .background(Color.white.opacity(0.07))
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                                .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
 
-                                VStack(alignment: .leading, spacing: 4) {
+                                VStack(spacing: 3) {
                                     Text("MINS")
-                                        .font(.system(size: 9, weight: .bold))
+                                        .font(.system(size: 8, weight: .bold))
                                         .foregroundStyle(LColors.textSecondary)
                                         .tracking(0.6)
                                     Text("\(totalReadingPointsMinutes)")
-                                        .font(.system(size: 24, weight: .black))
+                                        .font(.system(size: 22, weight: .black))
                                         .foregroundStyle(LColors.textPrimary)
                                 }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(10)
-                                .background(LColors.glassSurface)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                                .overlay(RoundedRectangle(cornerRadius: 12).stroke(LColors.glassBorder, lineWidth: 1))
+                                .frame(maxWidth: .infinity, minHeight: 58)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 8)
+                                .background(Color.white.opacity(0.07))
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                                .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
                             }
 
                             Text("\(totalReadingPointsSessions) sessions logged")
@@ -1009,6 +1032,7 @@ struct ReadingTabView: View {
                         }
                     }
                 }
+                .premiumLocked(!limits.canAccess(.readingGoal))
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
@@ -1140,7 +1164,7 @@ struct ReadingTabView: View {
                 books
                     .filter { $0.deletedAt == nil }
                     .sorted { $0.createdAt < $1.createdAt }
-                    .prefix(4)
+                    .prefix(limits.limit(for: .bookCardsTotal) ?? Int.max)
                     .map(\.persistentModelID),
             )
 
@@ -2243,7 +2267,7 @@ struct ReadingTimerSheet: View {
             in: modelContext,
             sessionId: sessionId,
             title: selectedBook.title.isEmpty ? "Reading Timer Session" : "Timer: \(selectedBook.title)",
-            sessionDate: sessionDate
+            sessionDate: sessionDate,
         )
     }
 
@@ -4510,7 +4534,7 @@ struct LogReadingSessionSheet: View {
             in: modelContext,
             sessionId: sessionId,
             title: book.title.isEmpty ? "Reading Session" : "Session: \(book.title)",
-            sessionDate: sessionDate
+            sessionDate: sessionDate,
         )
         closeAction()
     }

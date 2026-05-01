@@ -395,12 +395,43 @@ struct KanbanView: View {
                 return ((try? modelContext.fetch(descriptor)) ?? []).first(where: { $0.id == habitId })?.reminderIntervalWindowEnd
             }()
 
-            reminder.nextRunAt = ReminderCompute.nextRun(
-                after: reminder.nextRunAt.addingTimeInterval(91),
-                reminder: reminder,
-                intervalWindowStart: intervalWindowStart,
-                intervalWindowEnd: intervalWindowEnd
-            )
+            if reminder.schedule?.kind == .interval,
+               let intervalMinutes = reminder.schedule?.intervalMinutes
+            {
+                let windowStart = (intervalWindowStart?.isEmpty == false) ? intervalWindowStart! : "00:00"
+                let windowEnd = (intervalWindowEnd?.isEmpty == false) ? intervalWindowEnd! : "23:59"
+
+                // Interval reminders advance from the scheduled occurrence that was just completed,
+                // preserving exact every-X-hours/minutes timing and respecting the configured window.
+                // If the completed occurrence was overdue, keep advancing until the nextRunAt is upcoming.
+                var next = ReminderCompute.nextRunInterval(
+                    after: completedOccurrenceDate,
+                    intervalMinutes: max(1, intervalMinutes),
+                    windowStart: windowStart,
+                    windowEnd: windowEnd
+                )
+
+                while next <= now {
+                    next = ReminderCompute.nextRunInterval(
+                        after: next,
+                        intervalMinutes: max(1, intervalMinutes),
+                        windowStart: windowStart,
+                        windowEnd: windowEnd
+                    )
+                }
+
+                reminder.nextRunAt = next
+            } else {
+                // Non-interval recurring reminders advance like the main Reminders path:
+                // early completion advances past the scheduled occurrence, while overdue completion
+                // advances from now so the reminder does not remain stuck in the past.
+                reminder.nextRunAt = ReminderCompute.nextRun(
+                    after: base.addingTimeInterval(91),
+                    reminder: reminder,
+                    intervalWindowStart: intervalWindowStart,
+                    intervalWindowEnd: intervalWindowEnd
+                )
+            }
             reminder.acknowledgedAt = nil
             if reminder.reminderType == .routine {
                 reminder.resetRoutineChecklist(for: "\(reminder.nextRunAt.timeIntervalSince1970)")
