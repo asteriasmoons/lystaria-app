@@ -585,7 +585,7 @@ struct JournalBlockRow: View {
 
         case .dots:
             HStack(spacing: 12) {
-                ForEach(0..<3, id: \.self) { _ in
+                ForEach(0..<5, id: \.self) { _ in
                     Circle()
                         .fill(LGradients.blue)
                         .frame(width: 7, height: 7)

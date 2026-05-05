@@ -157,6 +157,62 @@ struct LystariaOverlayPopup<Header: View, Content: View, Footer: View>: View {
     }
 }
 
+// MARK: - Notes Color Pop Up Container
+
+struct LystariaNotesColorPopup<Header: View, Content: View, Footer: View>: View {
+    let onClose: () -> Void
+    let width: CGFloat
+    let heightRatio: CGFloat
+    let noteColor: Color
+    @ViewBuilder let header: () -> Header
+    @ViewBuilder let content: () -> Content
+    @ViewBuilder let footer: () -> Footer
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                Color.black.opacity(0.62)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                            onClose()
+                        }
+                    }
+
+                VStack(alignment: .leading, spacing: 18) {
+                        header()
+
+                        ScrollView(.vertical, showsIndicators: true) {
+                            VStack(alignment: .leading, spacing: 14) {
+                                content()
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .top)
+                        .scrollBounceBehavior(.basedOnSize)
+
+                        footer()
+                    }
+                    .padding(22)
+                    .frame(
+                        width: max(0, min(proxy.size.width.isFinite ? proxy.size.width - 40 : width, width)),
+                        alignment: .topLeading
+                    )
+                    .frame(maxHeight: proxy.size.height * heightRatio, alignment: .topLeading)
+                .background(noteColor)
+                .clipShape(RoundedRectangle(cornerRadius: 24))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24)
+                        .stroke(LColors.glassBorder, lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.25), radius: 24, x: 0, y: 10)
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        }
+    }
+}
+
 // MARK: - Full Screen Form Container (Reusable)
 
 /// A full-screen form presentation built on NavigationStack with the Lystaria
@@ -259,7 +315,8 @@ struct GradientCapsuleButton: View {
                 }
 
                 Text(title)
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
                     .foregroundStyle(.white)
             }
             .padding(.horizontal, 14)
@@ -269,7 +326,6 @@ struct GradientCapsuleButton: View {
                 RoundedRectangle(cornerRadius: LSpacing.buttonRadius)
                     .stroke(.clear, lineWidth: 1)
             )
-            .shadow(color: LColors.accent.opacity(0.3), radius: 8, y: 4)
         }
         .buttonStyle(.plain)
     }

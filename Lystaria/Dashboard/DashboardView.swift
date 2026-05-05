@@ -664,7 +664,13 @@ struct DashboardView: View {
         journalDayStarts.contains(dashboardCalendar.startOfDay(for: Date()))
     }
 
-    // MARK: - Habit Streak Helpers
+    // MARK: - Wellness Wall AI
+
+    @Query(sort: \WellnessWallAIInsight.dayStart, order: .reverse) private var wellnessWallAIInsights: [WellnessWallAIInsight]
+
+    @State private var aiWellnessInsights: [WellnessInsightItem]?
+    @State private var isRefreshingWellnessAI = false
+
     private func habitResetMoment(for habit: Habit) -> Date? {
         habit.statsResetAt
     }
@@ -793,74 +799,339 @@ struct DashboardView: View {
         moodSummary(on: habitDayStarts)
     }
 
+    private var todaysJournalEntries: [JournalEntry] {
+        journalEntries.filter {
+            $0.deletedAt == nil && dashboardCalendar.isDate($0.createdAt, inSameDayAs: Date())
+        }
+    }
+
+    private var todaysJournalTagCounts: [(tag: String, count: Int)] {
+        let normalizedTags = todaysJournalEntries
+            .flatMap { $0.tags }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .map { $0.lowercased() }
+
+        let counts = Dictionary(grouping: normalizedTags, by: { $0 })
+            .map { (tag: $0.key, count: $0.value.count) }
+
+        return counts.sorted { lhs, rhs in
+            if lhs.count == rhs.count {
+                return lhs.tag < rhs.tag
+            }
+            return lhs.count > rhs.count
+        }
+    }
+
+    private var topJournalThemeText: String? {
+        let topTags = todaysJournalTagCounts.prefix(3).map(\.tag)
+        guard !topTags.isEmpty else { return nil }
+
+        switch topTags.count {
+        case 1:
+            return topTags[0]
+        case 2:
+            return "\(topTags[0]) and \(topTags[1])"
+        default:
+            return "\(topTags[0]), \(topTags[1]), and \(topTags[2])"
+        }
+    }
+
+    private var journalWellnessInsight: WellnessInsightItem? {
+        let entryCount = todaysJournalEntries.count
+        guard entryCount > 0 else { return nil }
+
+        if let topJournalThemeText {
+            return WellnessInsightItem(
+                title: "Journal",
+                detail: "You wrote \(entryCount) journal \(entryCount == 1 ? "entry" : "entries") today, with \(topJournalThemeText) showing up most. That points to the main theme your reflection circled around."
+            )
+        }
+
+        return WellnessInsightItem(
+            title: "Journal",
+            detail: "You wrote \(entryCount) journal \(entryCount == 1 ? "entry" : "entries") today, but no tags were attached, so the reflection theme is still open."
+        )
+    }
+
+    private var waterWellnessInsight: WellnessInsightItem? {
+        let current = waterHealth.todayWaterFlOz
+        let goal = max(waterGoal, 1)
+        let progress = min(max(current / goal, 0), 1)
+        let currentText = String(format: "%.0f", current)
+        let goalText = String(format: "%.0f", goal)
+
+        let interpretation: String
+        switch progress {
+        case 1...:
+            interpretation = "hydration reached your goal today."
+        case 0.80..<1:
+            interpretation = "hydration is close to your full goal."
+        case 0.50..<0.80:
+            interpretation = "hydration is steady but still behind your full goal."
+        case 0.01..<0.50:
+            interpretation = "hydration is running behind today."
+        default:
+            interpretation = "hydration has not been logged yet today."
+        }
+
+        return WellnessInsightItem(
+            title: "Water",
+            detail: "You’re at \(currentText) / \(goalText) oz today, so \(interpretation)"
+        )
+    }
+
+    private var stepsWellnessInsight: WellnessInsightItem? {
+        let current = Int(stepHealth.todaySteps.rounded())
+        let goal = max(stepGoal, 1)
+        let progress = min(max(Double(current) / Double(goal), 0), 1)
+        let currentText = current.formatted()
+        let goalText = goal.formatted()
+
+        let interpretation: String
+        switch progress {
+        case 1...:
+            interpretation = "movement reached your goal today."
+        case 0.75..<1:
+            interpretation = "movement is close to your full goal."
+        case 0.40..<0.75:
+            interpretation = "movement is steady and present."
+        case 0.01..<0.40:
+            interpretation = "movement is lighter today."
+        default:
+            interpretation = "movement has not been logged yet today."
+        }
+
+        return WellnessInsightItem(
+            title: "Steps",
+            detail: "You’ve logged \(currentText) / \(goalText) steps today, so \(interpretation)"
+        )
+    }
+
+    private var habitCompletionCountsToday: (completed: Int, target: Int) {
+        let activeHabits = habits.filter { !$0.isArchived }
+        guard !activeHabits.isEmpty else { return (0, 0) }
+
+        let target = activeHabits.reduce(0) { partial, habit in
+            partial + max(1, habit.timesPerDay)
+        }
+
+        let completed = activeHabits.reduce(0) { partial, habit in
+            let habitTarget = max(1, habit.timesPerDay)
+            let todayCount = (habit.logs ?? [])
+                .filter { dashboardCalendar.isDate($0.dayStart, inSameDayAs: Date()) }
+                .reduce(0) { $0 + $1.count }
+
+            return partial + min(todayCount, habitTarget)
+        }
+
+        return (completed, target)
+    }
+
+    private var habitsWellnessInsight: WellnessInsightItem? {
+        let counts = habitCompletionCountsToday
+        guard counts.target > 0 else { return nil }
+
+        let progress = min(max(Double(counts.completed) / Double(counts.target), 0), 1)
+
+        let interpretation: String
+        switch progress {
+        case 1...:
+            interpretation = "your routines fully held together."
+        case 0.80..<1:
+            interpretation = "your routines mostly held together with a little room left."
+        case 0.50..<0.80:
+            interpretation = "your routines partially held but still have some unfinished pieces."
+        case 0.01..<0.50:
+            interpretation = "your routines started, but they are slipping today."
+        default:
+            interpretation = "your routines have not started yet today."
+        }
+
+        return WellnessInsightItem(
+            title: "Habits",
+            detail: "You completed \(counts.completed) / \(counts.target) habit actions today, so \(interpretation)"
+        )
+    }
+
     private var wellnessInsights: [WellnessInsightItem] {
-        var items: [WellnessInsightItem] = []
+        [
+            journalWellnessInsight,
+            waterWellnessInsight,
+            stepsWellnessInsight,
+            habitsWellnessInsight
+        ]
+        .compactMap { $0 }
+    }
 
-        if let summary = journalMoodSummary {
-            items.append(
-                WellnessInsightItem(
-                    title: "Journal Days",
-                    detail: wellnessInsightDetail(prefix: "days you journal", summary: summary)
-                )
-            )
-        } else if let avg = journalMoodAverage {
-            items.append(
-                WellnessInsightItem(
-                    title: "Journal Days",
-                    detail: "Your mood averages \(String(format: "%.1f", avg)) / 5 on days you journal."
-                )
-            )
+    private var displayedWellnessInsights: [WellnessInsightItem] {
+        aiWellnessInsights ?? wellnessInsights
+    }
+
+    private var wellnessWallAISnapshot: WellnessWallAISnapshot {
+        let journalTags = todaysJournalTagCounts.prefix(3).map(\.tag)
+
+        let currentWater = waterHealth.todayWaterFlOz
+        let resolvedWaterGoal = max(waterGoal, 1)
+        let waterProgress = min(max(currentWater / resolvedWaterGoal, 0), 1)
+
+        let currentSteps = Int(stepHealth.todaySteps.rounded())
+        let resolvedStepGoal = max(stepGoal, 1)
+        let stepProgress = min(max(Double(currentSteps) / Double(resolvedStepGoal), 0), 1)
+
+        let habitCounts = habitCompletionCountsToday
+        let habitProgress: Double
+        if habitCounts.target > 0 {
+            habitProgress = min(max(Double(habitCounts.completed) / Double(habitCounts.target), 0), 1)
+        } else {
+            habitProgress = 0
         }
 
-        if let summary = waterGoalMoodSummary {
-            items.append(
-                WellnessInsightItem(
-                    title: "Hydrated Days",
-                    detail: wellnessInsightDetail(prefix: "days you hit your water goal", summary: summary)
-                )
+        return WellnessWallAISnapshot(
+            journal: WellnessWallAISnapshot.JournalSnapshot(
+                entryCount: todaysJournalEntries.count,
+                topTags: Array(journalTags)
+            ),
+            water: WellnessWallAISnapshot.WaterSnapshot(
+                currentOz: currentWater,
+                goalOz: resolvedWaterGoal,
+                progress: waterProgress
+            ),
+            steps: WellnessWallAISnapshot.StepsSnapshot(
+                currentSteps: currentSteps,
+                goalSteps: Int(resolvedStepGoal),
+                progress: stepProgress
+            ),
+            habits: WellnessWallAISnapshot.HabitsSnapshot(
+                completedActions: habitCounts.completed,
+                targetActions: habitCounts.target,
+                progress: habitProgress
             )
-        } else if let avg = waterGoalMoodAverage {
-            items.append(
-                WellnessInsightItem(
-                    title: "Hydrated Days",
-                    detail: "Your mood averages \(String(format: "%.1f", avg)) / 5 on days you hit your water goal."
-                )
-            )
+        )
+    }
+
+    private var todaySavedWellnessWallAIInsight: WellnessWallAIInsight? {
+        let today = dashboardCalendar.startOfDay(for: Date())
+
+        return wellnessWallAIInsights.first { insight in
+            dashboardCalendar.isDate(insight.dayStart, inSameDayAs: today)
+        }
+    }
+
+    private var currentWellnessWallRefreshSlotStart: Date {
+        let now = Date()
+        let startOfDay = dashboardCalendar.startOfDay(for: now)
+        let hour = dashboardCalendar.component(.hour, from: now)
+
+        let slotHour: Int
+        switch hour {
+        case 0..<8:
+            slotHour = 0
+        case 8..<12:
+            slotHour = 8
+        case 12..<16:
+            slotHour = 12
+        case 16..<20:
+            slotHour = 16
+        default:
+            slotHour = 20
         }
 
-        if let summary = stepGoalMoodSummary {
-            items.append(
-                WellnessInsightItem(
-                    title: "Active Days",
-                    detail: wellnessInsightDetail(prefix: "days you hit your step goal", summary: summary)
-                )
-            )
-        } else if let avg = stepGoalMoodAverage {
-            items.append(
-                WellnessInsightItem(
-                    title: "Active Days",
-                    detail: "Your mood averages \(String(format: "%.1f", avg)) / 5 on days you hit your step goal."
-                )
-            )
+        return dashboardCalendar.date(byAdding: .hour, value: slotHour, to: startOfDay) ?? startOfDay
+    }
+
+    private func wellnessItems(from insight: WellnessWallAIInsight) -> [WellnessInsightItem] {
+        [
+            insight.journal.map { WellnessInsightItem(title: "Journal", detail: $0) },
+            insight.water.map { WellnessInsightItem(title: "Water", detail: $0) },
+            insight.steps.map { WellnessInsightItem(title: "Steps", detail: $0) },
+            insight.habits.map { WellnessInsightItem(title: "Habits", detail: $0) }
+        ]
+        .compactMap { $0 }
+    }
+
+    private func wellnessItems(from response: WellnessWallAIResponse) -> [WellnessInsightItem] {
+        [
+            response.journal.map { WellnessInsightItem(title: "Journal", detail: $0) },
+            response.water.map { WellnessInsightItem(title: "Water", detail: $0) },
+            response.steps.map { WellnessInsightItem(title: "Steps", detail: $0) },
+            response.habits.map { WellnessInsightItem(title: "Habits", detail: $0) }
+        ]
+        .compactMap { $0 }
+    }
+
+    @MainActor
+    private func refreshWellnessWallAI() async {
+        guard !isWellnessWallLocked else {
+            aiWellnessInsights = nil
+            return
         }
 
-        if let summary = habitMoodSummary {
-            items.append(
-                WellnessInsightItem(
-                    title: "Habit Days",
-                    detail: wellnessInsightDetail(prefix: "days you complete habits", summary: summary)
-                )
-            )
-        } else if let avg = habitMoodAverage {
-            items.append(
-                WellnessInsightItem(
-                    title: "Habit Days",
-                    detail: "Your mood averages \(String(format: "%.1f", avg)) / 5 on days you complete habits."
-                )
-            )
+        guard !isRefreshingWellnessAI else { return }
+
+        let snapshot = wellnessWallAISnapshot
+        let snapshotHash = WellnessWallSnapshotHasher.hash(snapshot)
+        let currentSlotStart = currentWellnessWallRefreshSlotStart
+        let forceRefreshKey = "forceWellnessWallAIRefreshOnce"
+
+        if UserDefaults.standard.bool(forKey: forceRefreshKey) == false {
+            UserDefaults.standard.set(true, forKey: forceRefreshKey)
+
+            if let savedInsight = todaySavedWellnessWallAIInsight {
+                modelContext.delete(savedInsight)
+                try? modelContext.save()
+                aiWellnessInsights = nil
+            }
+        } else if let savedInsight = todaySavedWellnessWallAIInsight {
+            aiWellnessInsights = wellnessItems(from: savedInsight)
+
+            if savedInsight.updatedAt >= currentSlotStart {
+                return
+            }
         }
 
-        return Array(items.prefix(4))
+        isRefreshingWellnessAI = true
+        defer { isRefreshingWellnessAI = false }
+
+        do {
+            let response = try await WellnessWallAIService.shared.generateInsights(snapshot: snapshot)
+            let items = wellnessItems(from: response)
+
+            guard !items.isEmpty else {
+                aiWellnessInsights = nil
+                return
+            }
+
+            let today = dashboardCalendar.startOfDay(for: Date())
+
+            if let existingInsight = todaySavedWellnessWallAIInsight {
+                existingInsight.journal = response.journal
+                existingInsight.water = response.water
+                existingInsight.steps = response.steps
+                existingInsight.habits = response.habits
+                existingInsight.snapshotHash = snapshotHash
+                existingInsight.updatedAt = Date()
+            } else {
+                let insight = WellnessWallAIInsight(
+                    dayStart: today,
+                    journal: response.journal,
+                    water: response.water,
+                    steps: response.steps,
+                    habits: response.habits,
+                    snapshotHash: snapshotHash
+                )
+                modelContext.insert(insight)
+            }
+
+            try? modelContext.save()
+            aiWellnessInsights = items
+        } catch {
+            if let savedInsight = todaySavedWellnessWallAIInsight {
+                aiWellnessInsights = wellnessItems(from: savedInsight)
+            } else {
+                aiWellnessInsights = nil
+            }
+        }
     }
 
     private var last7DayStarts: [Date] {
@@ -1281,7 +1552,7 @@ struct DashboardView: View {
 
     private var wellnessSection: some View {
         premiumBlockedCard(isWellnessWallLocked) {
-            WellnessWallCard(items: wellnessInsights)
+            WellnessWallCard(items: displayedWellnessInsights)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -1404,25 +1675,31 @@ struct DashboardView: View {
             .onAppear {
                 refreshForNewDay()
                 Task { await refreshHealthDerivedStats() }
+                Task { await refreshWellnessWallAI() }
             }
             .onChange(of: scenePhase) { _, newPhase in
                 if newPhase == .active {
                     refreshForNewDay()
                     Task { await refreshHealthDerivedStats() }
+                    Task { await refreshWellnessWallAI() }
                 }
             }
             .onReceive(stepHealth.$todaySteps) { _ in
                 refreshMomentumCard()
                 refreshConsistencyCard()
                 Task { await refreshHealthDerivedStats() }
+                Task { await refreshWellnessWallAI() }
             }
             .onReceive(waterHealth.$todayWaterFlOz) { _ in
                 refreshMomentumCard()
                 refreshConsistencyCard()
                 Task { await refreshHealthDerivedStats() }
+                Task { await refreshWellnessWallAI() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
                 refreshForNewDay()
+                aiWellnessInsights = nil
+                Task { await refreshWellnessWallAI() }
             }
     }
 
@@ -1433,6 +1710,7 @@ struct DashboardView: View {
                 refreshMomentumCard()
                 refreshConsistencyCard()
                 Task { await refreshHealthDerivedStats() }
+                Task { await refreshWellnessWallAI() }
             }
             .onChange(of: moodLogs.count) { _, _ in
                 refreshMomentumCard()
@@ -1443,6 +1721,7 @@ struct DashboardView: View {
                 refreshMomentumCard()
                 refreshConsistencyCard()
                 Task { await refreshHealthDerivedStats() }
+                Task { await refreshWellnessWallAI() }
             }
             .onChange(of: readingCurrentStreak) { _, _ in
                 refreshMomentumCard()
@@ -1454,9 +1733,11 @@ struct DashboardView: View {
             }
             .onChange(of: waterGoal) { _, _ in
                 Task { await refreshHealthDerivedStats() }
+                Task { await refreshWellnessWallAI() }
             }
             .onChange(of: stepGoal) { _, _ in
                 Task { await refreshHealthDerivedStats() }
+                Task { await refreshWellnessWallAI() }
             }
             .onChange(of: selectedZodiacSign) { _, _ in
                 if selectedHoroscopeTab == .picker {

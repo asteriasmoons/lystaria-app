@@ -9,14 +9,13 @@
 //    This creates one or more UNNotificationRequest objects and adds them
 //    to UNUserNotificationCenter.
 //
-// 2. Each notification uses the reminder's persistentModelID as the base
-//    identifier, so we can cancel/replace them later.
+// 2. Each reminder and calendar event has a stored notificationID. That stable
+//    ID is used as the base identifier so notifications can be cancelled,
+//    replaced, and rebuilt safely across launches.
 //
-// 3. For recurring reminders (daily/weekly/monthly/yearly), we use
-//    UNCalendarNotificationTrigger with `repeats: true`.
-//    For interval reminders, we use UNTimeIntervalNotificationTrigger.
-//    For one-time reminders, we use UNCalendarNotificationTrigger with
-//    `repeats: false`.
+// 3. Reminder and calendar notifications are scheduled as one-shot next fires.
+//    When a recurring item is completed or the app rebuilds notifications, the
+//    next valid occurrence is calculated and scheduled again.
 //
 // 4. When a reminder is deleted/paused/completed, call `cancelReminder(_:)`.
 //
@@ -26,11 +25,10 @@
 //
 // NOTIFICATION IDENTIFIERS:
 // ─────────────────────────
-// Base ID = "lystaria.reminder.<persistentModelID-string>"
-// For reminders with multiple times (timesOfDay), we append the index:
-//   "lystaria.reminder.<id>.0", "lystaria.reminder.<id>.1", etc.
-// For weekly reminders with multiple days, we append the day:
-//   "lystaria.reminder.<id>.day0", "lystaria.reminder.<id>.day3", etc.
+// Reminder Base ID = "lystaria.reminder.<reminder.notificationID>"
+// Calendar Base ID = "lystaria.calendar.<event.notificationID>"
+// Legacy identifiers are purged during rebuilds so old local/server ID based
+// notifications do not keep firing after the stored notificationID migration.
 //
 // NOTIFICATION CATEGORIES & ACTIONS:
 // ──────────────────────────────────
@@ -182,6 +180,7 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
                 guard let self, let container = self.modelContainer else { return }
                 self.refreshEffectiveTimezone(from: container)
                 self.rescheduleAllCalendarEvents(from: container)
+                self.rescheduleAll(from: container)
             }
         }
         #elseif os(macOS)
@@ -195,15 +194,17 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
                 self.refreshAuthorizationStatus()
                 self.refreshEffectiveTimezone(from: container)
                 self.rescheduleAllCalendarEvents(from: container)
+                self.rescheduleAll(from: container)
             }
         }
         #endif
 
-        // Initial calendar reschedule if the container is already available.
-        // Reminders are NOT rescheduled here on launch — their recurring recomputation
-        // can be expensive and should be triggered explicitly.
+        // Initial reschedule if the container is already available.
+        // Reminder notifications are scheduled as one-shot next occurrences, so they
+        // must be rebuilt on launch just like calendar notifications.
         if let container = modelContainer {
             rescheduleAllCalendarEvents(from: container)
+            rescheduleAll(from: container)
         }
     }
 
@@ -264,14 +265,18 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
         content.categoryIdentifier = Self.reminderCategoryID
         content.badge = nil
 
-        let idString = String(describing: reminder.persistentModelID)
+        let idString = reminder.notificationID
         content.userInfo = ["reminderID": idString]
 
         let baseID   = notificationBaseID(for: reminder)
         let schedule = reminder.schedule ?? .once
 
-        print("[NotificationManager] Rescheduling id=\(baseID) status=\(reminder.statusRaw) kind=\(schedule.kind.rawValue)")
-        print("[NotificationManager] timezone=\(effectiveTimezoneID) nextRunAt=\(reminder.nextRunAt)")
+        print("🧠 Scheduling Reminder → ID: \(baseID)")
+        print("   • Title: \(reminder.title)")
+        print("   • Status: \(reminder.statusRaw)")
+        print("   • Type: \(schedule.kind.rawValue)")
+        print("   • Timezone: \(effectiveTimezoneID)")
+        print("   • Next Run: \(reminder.nextRunAt)")
 
         switch schedule.kind {
         case .once:
@@ -317,7 +322,19 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
         }
 
         center.removePendingNotificationRequests(withIdentifiers: ids)
-        print("🔕 Cancelled notifications for: \(baseID)")
+        print("🧹 Removing pending notifications for reminder")
+        print("   • ID: \(baseID)")
+        print("   • Delivered notifications are left alone so they stay in Notification Center.")
+
+        // Verify cancellation actually took effect
+        center.getPendingNotificationRequests { requests in
+            let stillPending = requests.map(\.identifier).filter { $0.hasPrefix(baseID) }
+            if stillPending.isEmpty {
+                print("✅ VERIFY: \(baseID) successfully removed from pending")
+            } else {
+                print("❌ VERIFY: \(baseID) STILL PENDING after cancel: \(stillPending)")
+            }
+        }
 
         // Snooze IDs use a timestamp suffix so we can't predict them —
         // do a single async fetch just for those, which is safe because
@@ -341,7 +358,7 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
                 .map(\.identifier)
                 .filter { $0.hasPrefix("lystaria.reminder.") }
             center.removePendingNotificationRequests(withIdentifiers: lystariaIDs)
-            print("🔕 Cancelled all \(lystariaIDs.count) Lystaria reminder notifications")
+            print("🔕 Cancelled all \(lystariaIDs.count) pending Lystaria reminder notifications")
         }
     }
 
@@ -376,6 +393,56 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
             do {
                 let reminders = try context.fetch(descriptor)
 
+                var migratedReminderIDs = 0
+                var duplicateReminderIDs = 0
+                var seenReminderNotificationIDs = Set<String>()
+
+                for reminder in reminders {
+                    let trimmedID = reminder.notificationID.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                    if trimmedID.isEmpty {
+                        reminder.notificationID = UUID().uuidString
+                        migratedReminderIDs += 1
+                        seenReminderNotificationIDs.insert(reminder.notificationID)
+
+                        print("🧬 Reminder was missing a notification ID")
+                        print("   • Title: \(reminder.title)")
+                        print("   • New ID: \(reminder.notificationID)")
+                        continue
+                    }
+
+                    if seenReminderNotificationIDs.contains(trimmedID) {
+                        let oldID = reminder.notificationID
+                        reminder.notificationID = UUID().uuidString
+                        migratedReminderIDs += 1
+                        duplicateReminderIDs += 1
+                        seenReminderNotificationIDs.insert(reminder.notificationID)
+
+                        print("🧬 Reminder had a duplicate notification ID")
+                        print("   • Title: \(reminder.title)")
+                        print("   • Old duplicate ID: \(oldID)")
+                        print("   • New ID: \(reminder.notificationID)")
+                    } else {
+                        if reminder.notificationID != trimmedID {
+                            reminder.notificationID = trimmedID
+                            migratedReminderIDs += 1
+                        }
+                        seenReminderNotificationIDs.insert(trimmedID)
+                    }
+                }
+
+                if migratedReminderIDs > 0 {
+                    do {
+                        try context.save()
+                        print("✅ Reminder notification ID migration saved")
+                        print("   • Reminders fixed: \(migratedReminderIDs)")
+                        print("   • Duplicate IDs replaced: \(duplicateReminderIDs)")
+                    } catch {
+                        print("❌ Reminder notification ID migration failed to save")
+                        print("   • Error: \(error)")
+                    }
+                }
+
                 let center  = UNUserNotificationCenter.current()
                 let pending = await center.pendingNotificationRequests()
                 let orphanIDs = pending
@@ -387,7 +454,8 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
                     print("🧹 Purged \(orphanIDs.count) old reminder notification(s)")
                 }
 
-                print("📅 Rescheduling \(reminders.count) active reminders")
+                print("🔁 Rebuilding all reminder notifications…")
+                print("   • Active reminders found: \(reminders.count)")
                 for reminder in reminders {
                     scheduleReminder(reminder)
                 }
@@ -423,41 +491,90 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
             do {
                 let allEvents = try context.fetch(descriptor)
 
+                var migratedEventIDs = 0
+                var duplicateEventIDs = 0
+                var seenEventNotificationIDs = Set<String>()
+
+                for event in allEvents {
+                    let trimmedID = event.notificationID.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                    if trimmedID.isEmpty {
+                        event.notificationID = UUID().uuidString
+                        migratedEventIDs += 1
+                        seenEventNotificationIDs.insert(event.notificationID)
+
+                        print("🧬 Calendar event was missing a notification ID")
+                        print("   • Title: \(event.title)")
+                        print("   • New ID: \(event.notificationID)")
+                        continue
+                    }
+
+                    if seenEventNotificationIDs.contains(trimmedID) {
+                        let oldID = event.notificationID
+                        event.notificationID = UUID().uuidString
+                        migratedEventIDs += 1
+                        duplicateEventIDs += 1
+                        seenEventNotificationIDs.insert(event.notificationID)
+
+                        print("🧬 Calendar event had a duplicate notification ID")
+                        print("   • Title: \(event.title)")
+                        print("   • Old duplicate ID: \(oldID)")
+                        print("   • New ID: \(event.notificationID)")
+                    } else {
+                        if event.notificationID != trimmedID {
+                            event.notificationID = trimmedID
+                            migratedEventIDs += 1
+                        }
+                        seenEventNotificationIDs.insert(trimmedID)
+                    }
+                }
+
+                if migratedEventIDs > 0 {
+                    do {
+                        try context.save()
+                        print("✅ Calendar event notification ID migration saved")
+                        print("   • Events fixed: \(migratedEventIDs)")
+                        print("   • Duplicate IDs replaced: \(duplicateEventIDs)")
+                    } catch {
+                        print("❌ Calendar event notification ID migration failed to save")
+                        print("   • Error: \(error)")
+                    }
+                }
+
                 // Purge all existing calendar notifications before rebuilding.
                 let center  = UNUserNotificationCenter.current()
                 let pending = await center.pendingNotificationRequests()
                 let oldCalendarIDs = pending
                     .map(\.identifier)
-                    .filter { $0.hasPrefix("lystaria.calendar.") }
+                    .filter { $0.hasPrefix("lystaria.calendar.") || $0.hasPrefix("lystaria.event.") }
 
                 if !oldCalendarIDs.isEmpty {
                     center.removePendingNotificationRequests(withIdentifiers: oldCalendarIDs)
                     print("🧹 Purged \(oldCalendarIDs.count) legacy calendar pending notification(s)")
                 }
 
-                let delivered = await center.deliveredNotifications()
-                let deliveredIDs = delivered
-                    .map { $0.request.identifier }
-                    .filter { $0.hasPrefix("lystaria.calendar.") }
-                if !deliveredIDs.isEmpty {
-                    center.removeDeliveredNotifications(withIdentifiers: deliveredIDs)
-                    print("🧹 Purged \(deliveredIDs.count) legacy calendar delivered notification(s)")
-                }
 
                 let recurringEvents: [(CalendarEvent, RecurrenceRule)] = allEvents.compactMap { event in
                     guard let rule = event.recurrence else { return nil }
                     return (event, rule)
                 }
 
-                print("📅 Rescheduling calendar events: \(recurringEvents.count) recurring")
+                let oneTimeEvents = allEvents.filter { event in
+                    event.recurrence == nil &&
+                    event.isCancelledOccurrence == false &&
+                    event.startDate > Date()
+                }
+
+                print("📆 Rebuilding calendar notifications…")
+                print("   • Recurring events found: \(recurringEvents.count)")
+                print("   • One-time upcoming events found: \(oneTimeEvents.count)")
+
+                for event in oneTimeEvents {
+                    scheduleCalendarEvent(event)
+                }
 
                 for (event, rule) in recurringEvents {
-                    let id = event.reminderServerId ?? UUID().uuidString
-                    if event.reminderServerId == nil {
-                        event.reminderServerId = id
-                        event.updatedAt  = Date()
-                        event.needsSync  = true
-                    }
+                    let id = event.notificationID
                     var bodyParts: [String] = []
                     if let loc = event.location?.trimmingCharacters(in: .whitespacesAndNewlines), !loc.isEmpty {
                         bodyParts.append(loc)
@@ -505,7 +622,7 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
         content.sound = .default
         content.categoryIdentifier = Self.reminderCategoryID
 
-        let idString = String(describing: reminder.persistentModelID)
+        let idString = reminder.notificationID
         content.userInfo = ["reminderID": idString]
 
         let trigger = UNTimeIntervalNotificationTrigger(
@@ -534,16 +651,15 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
     func cancelAllCalendarNotifications(id: String) {
         let center = UNUserNotificationCenter.current()
         let baseID = "lystaria.calendar." + id
+        let legacyEventBaseID = "lystaria.event." + id
 
         // Remove the known fixed identifiers immediately.
         // iOS ignores identifiers that do not exist, so this is safe.
         center.removePendingNotificationRequests(withIdentifiers: [
-            baseID,          // one-shot
-            baseID + ".0"   // recurring next occurrence
-        ])
-        center.removeDeliveredNotifications(withIdentifiers: [
             baseID,
-            baseID + ".0"
+            baseID + ".0",
+            legacyEventBaseID,
+            legacyEventBaseID + ".0"
         ])
 
         // Also remove anything that starts with this event's base ID.
@@ -552,22 +668,15 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
         center.getPendingNotificationRequests { requests in
             let matchingIDs = requests
                 .map(\.identifier)
-                .filter { $0 == baseID || $0.hasPrefix(baseID + ".") }
+                .filter {
+                    $0 == baseID || $0.hasPrefix(baseID + ".") ||
+                    $0 == legacyEventBaseID || $0.hasPrefix(legacyEventBaseID + ".")
+                }
 
             if !matchingIDs.isEmpty {
                 center.removePendingNotificationRequests(withIdentifiers: matchingIDs)
                 print("🔕 Cancelled \(matchingIDs.count) pending calendar notification(s) for: \(baseID)")
-            }
-        }
-
-        center.getDeliveredNotifications { notifications in
-            let matchingIDs = notifications
-                .map { $0.request.identifier }
-                .filter { $0 == baseID || $0.hasPrefix(baseID + ".") }
-
-            if !matchingIDs.isEmpty {
-                center.removeDeliveredNotifications(withIdentifiers: matchingIDs)
-                print("🔕 Removed \(matchingIDs.count) delivered calendar notification(s) for: \(baseID)")
+                print("   • Delivered calendar notifications are left alone so they stay in Notification Center.")
             }
         }
     }
@@ -664,8 +773,39 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
                 print("❌ Calendar recurring scheduling error: \(error)")
             } else {
                 print("🔔 Scheduled next calendar occurrence for id=\(id) at \(fireDate)")
+                print("📅 CALENDAR NOTIF fireDate check: \(trigger.nextTriggerDate() ?? Date.distantFuture)")
             }
         }
+    }
+
+    /// Schedules a single one-shot calendar event notification from the event model.
+    func scheduleCalendarEvent(_ event: CalendarEvent) {
+        var bodyParts: [String] = []
+        if let loc = event.location?.trimmingCharacters(in: .whitespacesAndNewlines), !loc.isEmpty {
+            bodyParts.append(loc)
+        }
+        if let desc = event.eventDescription?.trimmingCharacters(in: .whitespacesAndNewlines), !desc.isEmpty {
+            bodyParts.append(desc)
+        }
+        let combined = bodyParts.joined(separator: "\n")
+        let body: String
+        if event.allDay {
+            body = combined.isEmpty ? "All-day event" : "All-day event — \(combined)"
+        } else {
+            body = combined.isEmpty ? event.title : combined
+        }
+
+        print("📆 Scheduling calendar event notification")
+        print("   • Title: \(event.title)")
+        print("   • Notification ID: \(event.notificationID)")
+        print("   • Starts: \(event.startDate)")
+
+        scheduleCalendarEvent(
+            id: event.notificationID,
+            title: event.title,
+            body: body,
+            fireDate: event.startDate
+        )
     }
 
     /// Schedules a single one-shot calendar event notification at an exact date.
@@ -697,6 +837,12 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
         let request    = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
         UNUserNotificationCenter.current().add(request) { error in
             if let error { print("❌ Calendar single scheduling error: \(error)") }
+            else {
+                print("📅 One-time calendar event scheduled")
+                print("   • ID: \(id)")
+                print("   • Fires at: \(fireDate)")
+                print("   • iOS trigger confirms: \(trigger.nextTriggerDate() ?? Date.distantFuture)")
+            }
         }
     }
 
@@ -716,13 +862,18 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
         let cal = tzCalendar
         let (baseHour, baseMinute) = baseTimeOfDay(cal: cal, startDate: startDate, allDay: allDay)
 
+        // For all-day events, startDate is midnight UTC which lands on the previous
+        // calendar day in UTC- timezones. Snap to local start-of-day so cursor
+        // arithmetic operates on the correct date.
+        let localStartDate = allDay ? (cal.startOfDay(for: startDate.addingTimeInterval(43200)) ) : startDate
+
         func appendIfValid(_ fire: Date) {
             guard fire >= from, fire <= untilHorizon else { return }
             guard !isExceptionDate(fire, cal: cal, exceptions: exceptions) else { return }
             results.append(fire)
         }
 
-        var cursor = max(startDate, from)
+        var cursor = max(localStartDate, from)
 
         switch rule.freq {
         case .daily:
@@ -801,7 +952,9 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
         let (baseHour, baseMinute) = baseTimeOfDay(cal: cal, startDate: startDate, allDay: allDay)
         let maxIterations = max(5000, count * 10)
         var iterations    = 0
-        var cursor        = startDate
+        // For all-day events, snap to local start-of-day (same as computeOccurrencesRolling).
+        let localStartDate = allDay ? cal.startOfDay(for: startDate.addingTimeInterval(43200)) : startDate
+        var cursor        = localStartDate
 
         func appendIfValid(_ fire: Date) {
             guard fire <= untilHorizon else { return }
@@ -904,12 +1057,9 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
         // set by acknowledgeOneDueHabitReminder. Use it directly instead of recomputing
         // via nextRun, which has no window awareness.
         // For non-interval kinds, nextRun recomputes correctly from schedule.
-        let fireDate: Date
-        if schedule.kind == .interval {
-            fireDate = reminder.nextRunAt > now ? reminder.nextRunAt : ReminderCompute.nextRun(after: now, reminder: reminder)
-        } else {
-            fireDate = ReminderCompute.nextRun(after: now, reminder: reminder)
-        }
+        let fireDate: Date = reminder.nextRunAt > now
+            ? reminder.nextRunAt
+            : ReminderCompute.nextRun(after: now, reminder: reminder)
 
         var cal = Calendar.current
         cal.timeZone = TimeZone(identifier: reminder.timezone) ?? .current
@@ -926,7 +1076,11 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
             if let error {
                 print("❌ scheduleNextRecurringReminder error: \(error)")
             } else {
-                print("🔔 Scheduled next recurring reminder: \(baseID) at \(fireDate) (\(cal.timeZone.identifier))")
+                print("⏰ Next reminder scheduled!")
+                print("   • ID: \(baseID)")
+                print("   • Fires at: \(fireDate)")
+                print("   • Timezone: \(cal.timeZone.identifier)")
+                print("   • iOS trigger confirms: \(trigger.nextTriggerDate() ?? Date.distantFuture)")
             }
         }
     }
@@ -944,14 +1098,16 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
         if delta <= 3 {
             let fireIn  = max(delta, 1)
             let trigger = UNTimeIntervalNotificationTrigger(timeInterval: fireIn, repeats: false)
-            print("🔔 scheduleOnce: using interval trigger (\(fireIn)s from now)")
+            print("⚡ Immediate reminder trigger (very soon)")
+            print("   • Fires in: \(fireIn) seconds")
             addRequest(id: baseID, content: content, trigger: trigger)
         } else {
             var comps = tzCalendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: reminder.nextRunAt)
             comps.calendar = tzCalendar
             comps.timeZone = tzCalendar.timeZone
             let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
-            print("🔔 scheduleOnce: calendar trigger for \(comps.hour ?? 0):\(comps.minute ?? 0):\(comps.second ?? 0)")
+            print("📅 One-time reminder scheduled")
+            print("   • Time: \(comps.hour ?? 0):\(comps.minute ?? 0):\(comps.second ?? 0)")
             addRequest(id: baseID, content: content, trigger: trigger)
         }
     }
@@ -961,16 +1117,13 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
     // ═══════════════════════════════════════════════
 
     private func notificationBaseID(for reminder: LystariaReminder) -> String {
-        let stable = String(describing: reminder.persistentModelID)
-        let safe = stable
-            .replacingOccurrences(of: " ", with: "")
-            .replacingOccurrences(of: ":", with: "")
-            .replacingOccurrences(of: "(", with: "")
-            .replacingOccurrences(of: ")", with: "")
-            .replacingOccurrences(of: "<", with: "")
-            .replacingOccurrences(of: ">", with: "")
-            .replacingOccurrences(of: "/", with: "-")
-        return "lystaria.reminder.\(safe)"
+        let trimmedID = reminder.notificationID.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedID.isEmpty {
+            print("⚠️ Reminder is missing notificationID during scheduling")
+            print("   • Title: \(reminder.title)")
+            print("   • This should be fixed by the rebuild migration before scheduling.")
+        }
+        return "lystaria.reminder.\(trimmedID.isEmpty ? reminder.notificationID : trimmedID)"
     }
 
     private func addRequest(id: String, content: UNMutableNotificationContent, trigger: UNNotificationTrigger) {
@@ -1150,7 +1303,9 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
     ) {
         let id   = notification.request.identifier
         let body = notification.request.content.body.prefix(40)
-        print("📬 willPresent fired for: \(id) — \(body)")
+        print("📬 Notification is about to show (foreground)")
+        print("   • ID: \(id)")
+        print("   • Preview: \(body)")
         completionHandler([.banner, .sound, .badge, .list])
     }
 
@@ -1168,7 +1323,9 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         let userInfo = response.notification.request.content.userInfo
         let notifID  = response.notification.request.identifier
 
-        print("📬 didReceive: id=\(notifID) action=\(actionID)")
+        print("👆 Notification interaction detected")
+        print("   • ID: \(notifID)")
+        print("   • Action: \(actionID)")
 
         let isCalendarNotification = (userInfo["kind"] as? String) == "calendar"
 

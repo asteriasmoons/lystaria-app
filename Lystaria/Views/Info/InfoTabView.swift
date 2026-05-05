@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct InfoTabView: View {
+    @State private var showReleaseNotes = false
     var body: some View {
         ZStack {
             LystariaBackground()
@@ -39,6 +40,12 @@ struct InfoTabView: View {
                     .padding(.bottom, 40)
                 }
             }
+        }
+        .sheet(isPresented: $showReleaseNotes) {
+            ReleaseNotesView()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.hidden)
+                .presentationBackground(.clear)
         }
     }
 
@@ -109,6 +116,18 @@ struct InfoTabView: View {
                         subtitle: "Report bugs or suggest features",
                         url: "mailto:contact@lystaria.im"
                     )
+
+                    Divider()
+                        .background(LColors.glassBorder)
+
+                    InfoActionRow(
+                        icon: "stickynotefill",
+                        iconColor: LColors.gradientPurple,
+                        title: "Release Notes",
+                        subtitle: "See what’s new in Lystaria"
+                    ) {
+                        showReleaseNotes = true
+                    }
                 }
             }
         }
@@ -239,6 +258,7 @@ private struct InfoLinkRow: View {
                             .scaledToFit()
                             .frame(width: 18, height: 18)
                             .foregroundStyle(.white)
+                            .foregroundColor(.white)
                     } else {
                         Image(systemName: icon)
                             .font(.system(size: 15, weight: .semibold))
@@ -265,6 +285,70 @@ private struct InfoLinkRow: View {
                     .scaledToFit()
                     .frame(width: 22, height: 22)
                     .foregroundStyle(.white)
+                    .foregroundColor(.white)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Info Action Row
+
+private struct InfoActionRow: View {
+    let icon: String
+    let iconColor: Color
+    let title: String
+    let subtitle: String
+    var isAsset: Bool = true
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(iconColor.opacity(0.14))
+                        .frame(width: 38, height: 38)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(iconColor.opacity(0.22), lineWidth: 1)
+                        )
+
+                    if isAsset {
+                        Image(icon)
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 18, height: 18)
+                            .foregroundStyle(.white)
+                            .foregroundColor(.white)
+                    } else {
+                        Image(systemName: icon)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundStyle(LColors.textPrimary)
+
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(LColors.textSecondary)
+                }
+
+                Spacer()
+
+                Image("chevronupfill")
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 22, height: 22)
+                    .foregroundStyle(.white)
+                    .foregroundColor(.white)
             }
         }
         .buttonStyle(.plain)

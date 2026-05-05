@@ -1014,6 +1014,24 @@ struct KanbanCard: View {
         return reminder.status != .deleted && reminder.nextRunAt <= now.addingTimeInterval(24 * 60 * 60)
     }
 
+    private var isSkipped: Bool {
+        // The current occurrence is skipped if lastSkippedAt matches nextRunAt closely.
+        // This allows a second firing on the same day to still be skippable.
+        guard let skippedAt = reminder.lastSkippedAt,
+              Calendar.current.isDateInToday(skippedAt) else { return false }
+
+        if let completedAt = reminder.lastCompletedAt,
+           Calendar.current.isDateInToday(completedAt) { return false }
+
+        // For recurring reminders with multiple fire times, only treat as skipped
+        // if the skip timestamp is within 90s of the current nextRunAt.
+        if reminder.isRecurring {
+            return abs(skippedAt.timeIntervalSince(reminder.nextRunAt)) <= 90
+        }
+
+        return true
+    }
+
     private var scheduleLabel: String {
         guard let schedule = reminder.schedule else { return "Once" }
 
@@ -1023,47 +1041,49 @@ struct KanbanCard: View {
 
         return schedule.kind.label
     }
-            @ViewBuilder
-            private var actionRow: some View {
-                HStack(spacing: 6) {
-                    Text(scheduleLabel.uppercased())
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(badgeColor.opacity(0.35))
-                        .clipShape(Capsule())
+    @ViewBuilder
+    private var actionRow: some View {
+        HStack(spacing: 6) {
+            Text(scheduleLabel.uppercased())
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(badgeColor.opacity(0.35))
+                .clipShape(Capsule())
 
-                    Text(reminderKindLabel.uppercased())
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(reminderKindBadgeColor)
-                        .clipShape(Capsule())
+            Text(reminderKindLabel.uppercased())
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(reminderKindBadgeColor)
+                .clipShape(Capsule())
 
-                    if isDueNow {
-                        dueNowBadge
-                    } else if isUpcoming {
-                        upcomingBadge
-                    }
-
-                    Spacer()
-
-                    if let menu = columnMenu {
-                        menu()
-                    }
-
-                    if let unassign = onUnassign {
-                        Button { unassign() } label: {
-                            Image(systemName: "xmark.circle")
-                                .font(.caption)
-                                .foregroundStyle(LColors.textSecondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
+            if isSkipped {
+                skippedBadge
+            } else if isDueNow {
+                dueNowBadge
+            } else if isUpcoming {
+                upcomingBadge
             }
+
+            Spacer()
+
+            if let menu = columnMenu {
+                menu()
+            }
+
+            if let unassign = onUnassign {
+                Button { unassign() } label: {
+                    Image(systemName: "xmark.circle")
+                        .font(.caption)
+                        .foregroundStyle(LColors.textSecondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
 
     private var scheduleKind: ReminderScheduleKind {
         reminder.schedule?.kind ?? .once
@@ -1135,6 +1155,16 @@ struct KanbanCard: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
             .background(Color.teal.opacity(0.42))
+            .clipShape(Capsule())
+    }
+
+    private var skippedBadge: some View {
+        Text("SKIPPED")
+            .font(.system(size: 8, weight: .bold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(Color(red: 0.36, green: 0.28, blue: 0.90).opacity(0.72))
             .clipShape(Capsule())
     }
 

@@ -361,7 +361,7 @@ struct ReadingTabView: View {
                                 Circle().stroke(LColors.glassBorder, lineWidth: 1),
                             )
                             .frame(width: 34, height: 34)
-                        Image("notepad")
+                        Image("linenotebook")
                             .renderingMode(.template)
                             .resizable()
                             .scaledToFit()
@@ -752,7 +752,7 @@ struct ReadingTabView: View {
                 headerSection
                 topToggleSection
 
-                HStack(alignment: .top, spacing: 12) {
+                VStack(spacing: 12) {
                     GlassCard {
                         VStack(alignment: .leading, spacing: 10) {
                             HStack(spacing: 8) {
@@ -760,44 +760,44 @@ struct ReadingTabView: View {
                                     .renderingMode(.template)
                                     .resizable()
                                     .scaledToFit()
-                                    .frame(width: 16, height: 16)
+                                    .frame(width: 20, height: 20)
                                     .foregroundStyle(.white)
-                                GradientTitle(text: "Streak", font: .system(size: 13, weight: .bold))
+                                GradientTitle(text: "Streak", font: .system(size: 14, weight: .bold))
                                 Spacer()
                             }
 
                             HStack(spacing: 8) {
-                                VStack(spacing: 3) {
+                                VStack(spacing: 2) {
                                     Text("NOW")
-                                        .font(.system(size: 8, weight: .bold))
+                                        .font(.system(size: 7, weight: .bold))
                                         .foregroundStyle(LColors.textSecondary)
                                         .tracking(0.6)
                                     Text("\(streakDays)")
-                                        .font(.system(size: 22, weight: .black))
+                                        .font(.system(size: 16, weight: .black))
                                         .foregroundStyle(LColors.textPrimary)
                                 }
-                                .frame(maxWidth: .infinity, minHeight: 58)
+                                .frame(maxWidth: .infinity, minHeight: 38)
                                 .padding(.horizontal, 8)
-                                .padding(.vertical, 8)
+                                .padding(.vertical, 6)
                                 .background(Color.white.opacity(0.07))
-                                .clipShape(RoundedRectangle(cornerRadius: 14))
-                                .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                                .overlay(RoundedRectangle(cornerRadius: 10).stroke(LColors.glassBorder, lineWidth: 1))
 
-                                VStack(spacing: 3) {
+                                VStack(spacing: 2) {
                                     Text("BEST")
-                                        .font(.system(size: 8, weight: .bold))
+                                        .font(.system(size: 7, weight: .bold))
                                         .foregroundStyle(LColors.textSecondary)
                                         .tracking(0.6)
                                     Text("\(bestStreakDays)")
-                                        .font(.system(size: 22, weight: .black))
+                                        .font(.system(size: 16, weight: .black))
                                         .foregroundStyle(LColors.textPrimary)
                                 }
-                                .frame(maxWidth: .infinity, minHeight: 58)
+                                .frame(maxWidth: .infinity, minHeight: 38)
                                 .padding(.horizontal, 8)
-                                .padding(.vertical, 8)
+                                .padding(.vertical, 6)
                                 .background(Color.white.opacity(0.07))
-                                .clipShape(RoundedRectangle(cornerRadius: 14))
-                                .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                                .overlay(RoundedRectangle(cornerRadius: 10).stroke(LColors.glassBorder, lineWidth: 1))
                             }
 
                             Text(readingStreakStatusText)
@@ -835,7 +835,7 @@ struct ReadingTabView: View {
                                     .foregroundStyle(.white)
                                     .padding(.horizontal, 9)
                                     .padding(.vertical, 8)
-                                    .frame(maxWidth: .infinity, minHeight: 34)
+                                    .fixedSize(horizontal: true, vertical: false)
                                     .background(alreadyCheckedInToday ? Color.white.opacity(0.10) : LColors.accent)
                                     .clipShape(Capsule())
                                     .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
@@ -866,73 +866,63 @@ struct ReadingTabView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     }
                     .frame(maxWidth: .infinity)
-                    .frame(height: 220)
 
                     // ── Mini Points Card ──────────────────────────────────
                     GlassCard {
                         VStack(alignment: .leading, spacing: 10) {
                             HStack(spacing: 8) {
-                                Image("trophyfill")
+                                Image("startrophy")
                                     .renderingMode(.template)
                                     .resizable()
                                     .scaledToFit()
-                                    .frame(width: 16, height: 16)
+                                    .frame(width: 20, height: 20)
                                     .foregroundStyle(.white)
-                                GradientTitle(text: "Points", font: .system(size: 13, weight: .bold))
+                                GradientTitle(text: "Points", font: .system(size: 14, weight: .bold))
                                 Spacer()
                             }
 
                             HStack(spacing: 8) {
-                                VStack(spacing: 3) {
+                                VStack(spacing: 2) {
                                     Text("PTS")
-                                        .font(.system(size: 8, weight: .bold))
+                                        .font(.system(size: 7, weight: .bold))
                                         .foregroundStyle(LColors.textSecondary)
                                         .tracking(0.6)
                                     Text("\(totalReadingPoints)")
-                                        .font(.system(size: 22, weight: .black))
+                                        .font(.system(size: 16, weight: .black))
                                         .foregroundStyle(LColors.textPrimary)
                                 }
-                                .frame(maxWidth: .infinity, minHeight: 58)
+                                .frame(maxWidth: .infinity, minHeight: 38)
                                 .padding(.horizontal, 8)
-                                .padding(.vertical, 8)
+                                .padding(.vertical, 6)
                                 .background(Color.white.opacity(0.07))
-                                .clipShape(RoundedRectangle(cornerRadius: 14))
-                                .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                                .overlay(RoundedRectangle(cornerRadius: 10).stroke(LColors.glassBorder, lineWidth: 1))
 
-                                VStack(spacing: 3) {
+                                VStack(spacing: 2) {
                                     Text("MINS")
-                                        .font(.system(size: 8, weight: .bold))
+                                        .font(.system(size: 7, weight: .bold))
                                         .foregroundStyle(LColors.textSecondary)
                                         .tracking(0.6)
                                     Text("\(totalReadingPointsMinutes)")
-                                        .font(.system(size: 22, weight: .black))
+                                        .font(.system(size: 16, weight: .black))
                                         .foregroundStyle(LColors.textPrimary)
                                 }
-                                .frame(maxWidth: .infinity, minHeight: 58)
+                                .frame(maxWidth: .infinity, minHeight: 38)
                                 .padding(.horizontal, 8)
-                                .padding(.vertical, 8)
+                                .padding(.vertical, 6)
                                 .background(Color.white.opacity(0.07))
-                                .clipShape(RoundedRectangle(cornerRadius: 14))
-                                .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                                .overlay(RoundedRectangle(cornerRadius: 10).stroke(LColors.glassBorder, lineWidth: 1))
                             }
 
-                            Text("\(totalReadingPointsSessions) sessions logged")
+                            Text("\(totalReadingPointsSessions) sessions")
                                 .font(.system(size: 10, weight: .semibold))
                                 .foregroundStyle(LColors.textSecondary)
                                 .lineLimit(1)
-
-                            Text("Earned through reading timer sessions")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(LColors.textSecondary)
-                                .lineLimit(2)
-                                .fixedSize(horizontal: false, vertical: true)
-
-                            Spacer(minLength: 0)
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     }
                     .frame(maxWidth: .infinity)
-                    .frame(height: 220)
                 }
 
                 GlassCard {
@@ -1446,7 +1436,7 @@ struct ReadingTabView: View {
                                         .buttonStyle(.plain)
                                     }
 
-                                    GradientCapsuleButton(title: "Delete", icon: "trashfill") {
+                                    GradientCapsuleButton(title: "Delete", icon: "fulltrashfill") {
                                         bookPendingDeletion = book
                                         showDeleteConfirm = true
                                     }
@@ -5244,7 +5234,7 @@ struct BookPointsPopup: View {
                                 showDeletePointsConfirm = true
                             } label: {
                                 HStack(spacing: 8) {
-                                    Image("trashfill")
+                                    Image("fulltrashfill")
                                         .renderingMode(.template)
                                         .resizable()
                                         .scaledToFit()
@@ -5845,7 +5835,7 @@ struct BookSessionHistorySheet: View {
                                 showDeleteSessionConfirm = true
                             } label: {
                                 HStack(spacing: 8) {
-                                    Image("trashfill")
+                                    Image("fulltrashfill")
                                         .renderingMode(.template)
                                         .resizable()
                                         .scaledToFit()

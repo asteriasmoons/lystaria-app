@@ -2,11 +2,16 @@
 // Lystaria
 
 import SwiftUI
+import SwiftData
 
 struct MainTabView: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.modelContext) private var modelContext
+    @Query private var releaseNotes: [ReleaseNote]
     @Binding var selectedTab: Tab
     @State private var showSignIn = false
+    @State private var showReleaseNotes = false
+    @State private var didCheckReleaseNotes = false
 
     enum Tab: String, CaseIterable {
         case reminders = "Reminders"
@@ -20,9 +25,9 @@ struct MainTabView: View {
         var icon: String {
             switch self {
             case .reminders: return "bellfill"
-            case .calendar:  return "calfill"
+            case .calendar:  return "xoxocal"
             case .journal:   return "bookie"
-            case .reading:   return "bookstack"
+            case .reading:   return "flatbook"
             case .profile:   return "userwavy"
             case .info:       return "infofill"
             case .dashboard: return "homeline"
@@ -54,10 +59,49 @@ struct MainTabView: View {
                 .opacity(appState.isPopupPresented ? 0 : 1)
                 .animation(.easeInOut(duration: 0.2), value: appState.isPopupPresented)
         }
+        .onAppear {
+            checkForNewReleaseNotes()
+        }
+        .sheet(isPresented: $showReleaseNotes, onDismiss: markLatestReleaseNoteSeen) {
+            ReleaseNotesView()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.hidden)
+        }
         .sheet(isPresented: $showSignIn) {
             SignInView()
                 .environmentObject(appState)
                 .preferredColorScheme(.dark)
+        }
+    }
+    // MARK: - Release Notes Auto Popup
+
+    private func checkForNewReleaseNotes() {
+        guard !didCheckReleaseNotes else { return }
+        didCheckReleaseNotes = true
+
+        guard let latestReleaseNote = releaseNotes
+            .filter({ $0.isPublished })
+            .sorted(by: { $0.sortOrder > $1.sortOrder })
+            .first else { return }
+
+        if latestReleaseNote.hasBeenSeen == false {
+            showReleaseNotes = true
+        }
+    }
+
+    private func markLatestReleaseNoteSeen() {
+        guard let latestReleaseNote = releaseNotes
+            .filter({ $0.isPublished })
+            .sorted(by: { $0.sortOrder > $1.sortOrder })
+            .first else { return }
+
+        latestReleaseNote.hasBeenSeen = true
+        latestReleaseNote.seenAt = Date()
+
+        do {
+            try modelContext.save()
+        } catch {
+            print("[MainTabView] Failed to save release note seen state:", error)
         }
     }
 

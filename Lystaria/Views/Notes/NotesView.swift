@@ -58,191 +58,219 @@ struct NotesView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
-            LystariaBackground()
-                .ignoresSafeArea()
-            
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 18) {
-                    headerSection
-                    filterSection
-                    tabsSection
-                    notesSection
+        NavigationStack {
+            ZStack(alignment: .bottomTrailing) {
+                LystariaBackground()
+                    .ignoresSafeArea()
+                
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 18) {
+                        headerSection
+                        filterSection
+                        tabsSection
+                        notesSection
+                    }
+                    .padding(.top, 16)
+                    .padding(.bottom, 110)
                 }
-                .padding(.top, 16)
-                .padding(.bottom, 110)
-            }
-            
-            FloatingActionButton {
-                createNote()
-            }
-            .padding(.trailing, LSpacing.pageHorizontal)
-            .padding(.bottom, 24)
-        }
-        .overlay {
-            if showingTabPopup {
-                LystariaOverlayPopup(
-                    onClose: {
-                        showingTabPopup = false
-                        newTabName = ""
-                        renamedTabName = ""
-                        renamingTabName = ""
-                    },
-                    width: 520,
-                    heightRatio: 0.70
-                ) {
-                    HStack {
-                        GradientTitle(
-                            text: tabPopupMode == .create ? "New Tab" : "Rename Tab",
-                            size: 26
-                        )
-                        Spacer()
-                    }
-                } content: {
-                    VStack(alignment: .leading, spacing: 12) {
-                        GlassCard {
-                            VStack(alignment: .leading, spacing: 10) {
-                                Text("Tab Name")
-                                    .font(.system(size: 13, weight: .bold))
-                                    .foregroundStyle(LColors.textSecondary)
-                                GlassTextField(
-                                    placeholder: "Enter name",
-                                    text: tabPopupMode == .create ? $newTabName : $renamedTabName
-                                )
-                                .focused($isTabFieldFocused)
-                            }
-                        }
-                    }
-                } footer: {
-                    HStack(spacing: 10) {
-                        Spacer()
-                        LButton(title: "Cancel", style: .secondary) {
-                            showingTabPopup = false
-                            newTabName = ""
-                            renamedTabName = ""
-                            renamingTabName = ""
-                        }
-                        LButton(title: "Save", style: .gradient) {
-                            if tabPopupMode == .create {
-                                createTab()
-                            } else {
-                                renameTab()
-                            }
-                            showingTabPopup = false
-                        }
-                    }
+                
+                FloatingActionButton {
+                    createNote()
                 }
-                .ignoresSafeArea(.keyboard)
+                .padding(.trailing, LSpacing.pageHorizontal)
+                .padding(.bottom, 24)
             }
-            if showDeleteTabConfirmation {
-                LystariaOverlayPopup(
-                    onClose: {
-                        showDeleteTabConfirmation = false
-                        tabPendingDeletion = ""
-                    },
-                    width: 520,
-                    heightRatio: 0.70
-                ) {
-                    HStack {
-                        GradientTitle(text: "Delete Tab", size: 26)
-                        Spacer()
-                    }
-                } content: {
-                    Text(tabPendingDeletion == rootTabName && notesTabs.count > 1
-                         ? "Notes in this tab will be moved to the next available tab, which will become the new default tab."
-                         : "Notes in this tab will be moved to \(rootTabName).")
-                    .font(.system(size: 14))
-                    .foregroundStyle(LColors.textSecondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                } footer: {
-                    HStack(spacing: 10) {
-                        Spacer()
-                        LButton(title: "Cancel", style: .secondary) {
-                            showDeleteTabConfirmation = false
-                        }
-                        LButton(title: "Delete", style: .gradient) {
-                            deleteTab()
-                            showDeleteTabConfirmation = false
-                        }
-                    }
+            .overlay {
+                overlayContent
+            }
+            .onAppear {
+                ensureRootTabExists()
+                if selectedTab.isEmpty {
+                    selectedTab = rootTabName
+                }
+                loadCollapsedPinnedIDs()
+            }
+            .onChange(of: tabs) { _, _ in
+                if !notesTabs.contains(selectedTab) {
+                    selectedTab = rootTabName
                 }
             }
-            if let note = selectedNote {
-                LystariaOverlayPopup(
-                    onClose: closeEditor,
-                    width: 720,
-                    heightRatio: 0.70
-                ) {
-                    popupHeader(for: note)
-                } content: {
-                    popupContent
-                } footer: {
-                    popupFooter(for: note)
-                }
-                .modifier(
-                    LystariaConfirmDialog(
-                        isPresented: $showDeleteConfirmation,
-                        title: "Delete Note?",
-                        message: "This note will be permanently removed.",
-                        confirmTitle: "Delete",
-                        confirmRole: .destructive
-                    ) {
-                        delete(note)
+            .onChange(of: collapsedPinnedIDs) { _, newValue in
+                collapsedPinnedIDsStorage = newValue.sorted().joined(separator: "\n")
+            }
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        isEditorFocused = false
+                        isTabFieldFocused = false
                     }
-                )
-            } else if let note = viewingNote {
-                LystariaOverlayPopup(
-                    onClose: closeViewer,
-                    width: 720,
-                    heightRatio: 0.70
-                ) {
-                    viewerHeader(for: note)
-                } content: {
-                    viewerContent(for: note)
-                } footer: {
-                    viewerFooter(for: note)
+                    .font(.system(size: 16, weight: .semibold))
                 }
-                .modifier(
-                    LystariaConfirmDialog(
-                        isPresented: $showDeleteConfirmation,
-                        title: "Delete Note?",
-                        message: "This note will be permanently removed.",
-                        confirmTitle: "Delete",
-                        confirmRole: .destructive
-                    ) {
-                        delete(note)
-                    }
-                )
             }
-        }
-        .onAppear {
-            ensureRootTabExists()
-            if selectedTab.isEmpty {
-                selectedTab = rootTabName
-            }
-            loadCollapsedPinnedIDs()
-        }
-        .onChange(of: tabs) { _, _ in
-            // If the selected tab was deleted or renamed, fall back to root
-            if !notesTabs.contains(selectedTab) {
-                selectedTab = rootTabName
-            }
-        }
-        .onChange(of: collapsedPinnedIDs) { _, newValue in
-            collapsedPinnedIDsStorage = newValue.sorted().joined(separator: "\n")
-        }
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("Done") {
-                    isEditorFocused = false
-                    isTabFieldFocused = false
-                }
-                .font(.system(size: 16, weight: .semibold))
-            }
+            .toolbarBackground(.hidden, for: .navigationBar)
         }
     }
     
+    // MARK: - Overlay Content
+
+    @ViewBuilder
+    private var overlayContent: some View {
+        if showingTabPopup {
+            tabNameOverlay
+        }
+
+        if showDeleteTabConfirmation {
+            deleteTabOverlay
+        }
+
+        if let note = selectedNote {
+            editorOverlay(for: note)
+        } else if let note = viewingNote {
+            viewerOverlay(for: note)
+        }
+    }
+
+    private var tabNameOverlay: some View {
+        LystariaOverlayPopup(
+            onClose: closeTabPopup,
+            width: 520,
+            heightRatio: 0.70
+        ) {
+            HStack {
+                GradientTitle(
+                    text: tabPopupMode == .create ? "New Tab" : "Rename Tab",
+                    size: 26
+                )
+                Spacer()
+            }
+        } content: {
+            VStack(alignment: .leading, spacing: 12) {
+                GlassCard {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Tab Name")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(LColors.textSecondary)
+                        GlassTextField(
+                            placeholder: "Enter name",
+                            text: tabPopupMode == .create ? $newTabName : $renamedTabName
+                        )
+                        .focused($isTabFieldFocused)
+                    }
+                }
+            }
+        } footer: {
+            HStack(spacing: 10) {
+                Spacer()
+                LButton(title: "Cancel", style: .secondary) {
+                    closeTabPopup()
+                }
+                LButton(title: "Save", style: .gradient) {
+                    if tabPopupMode == .create {
+                        createTab()
+                    } else {
+                        renameTab()
+                    }
+                    showingTabPopup = false
+                }
+            }
+        }
+        .ignoresSafeArea(.keyboard)
+    }
+
+    private var deleteTabOverlay: some View {
+        LystariaOverlayPopup(
+            onClose: {
+                showDeleteTabConfirmation = false
+                tabPendingDeletion = ""
+            },
+            width: 620,
+            heightRatio: 0.75
+        ) {
+            HStack {
+                GradientTitle(text: "Delete Tab", size: 26)
+                Spacer()
+            }
+        } content: {
+            Text(deleteTabConfirmationMessage)
+                .font(.system(size: 14))
+                .foregroundStyle(LColors.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } footer: {
+            HStack(spacing: 10) {
+                Spacer()
+                LButton(title: "Cancel", style: .secondary) {
+                    showDeleteTabConfirmation = false
+                }
+                LButton(title: "Delete", style: .gradient) {
+                    deleteTab()
+                    showDeleteTabConfirmation = false
+                }
+            }
+        }
+    }
+
+    private func editorOverlay(for note: Note) -> some View {
+        LystariaOverlayPopup(
+            onClose: closeEditor,
+            width: 620,
+            heightRatio: 0.75
+        ) {
+            popupHeader(for: note)
+        } content: {
+            popupContent
+        } footer: {
+            popupFooter(for: note)
+        }
+        .modifier(
+            LystariaConfirmDialog(
+                isPresented: $showDeleteConfirmation,
+                title: "Delete Note?",
+                message: "This note will be permanently removed.",
+                confirmTitle: "Delete",
+                confirmRole: .destructive
+            ) {
+                delete(note)
+            }
+        )
+    }
+
+    private func viewerOverlay(for note: Note) -> some View {
+        LystariaNotesColorPopup(
+            onClose: closeViewer,
+            width: 520,
+            heightRatio: 0.62,
+            noteColor: color(from: note.colorHex),
+            header: {
+                viewerHeader(for: note)
+            },
+            content: {
+                viewerContent(for: note)
+            },
+            footer: {
+                viewerFooter(for: note)
+            }
+        )
+        .modifier(
+            LystariaConfirmDialog(
+                isPresented: $showDeleteConfirmation,
+                title: "Delete Note?",
+                message: "This note will be permanently removed.",
+                confirmTitle: "Delete",
+                confirmRole: .destructive
+            ) {
+                delete(note)
+            }
+        )
+    }
+
+    private func closeTabPopup() {
+        showingTabPopup = false
+        newTabName = ""
+        renamedTabName = ""
+        renamingTabName = ""
+    }
+
     // MARK: - Header
     
     private var headerSection: some View {
@@ -251,7 +279,31 @@ struct NotesView: View {
                 GradientTitle(text: "Notes", size: 30)
                 
                 Spacer()
+
+                // Documents button
+                NavigationLink {
+                    DocumentsView()
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.10))
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.white.opacity(0.16), lineWidth: 1)
+                            )
+                            .frame(width: 34, height: 34)
+
+                        Image("lovedocs")
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 18, height: 18)
+                            .foregroundStyle(.white)
+                    }
+                }
+                .buttonStyle(.plain)
                 
+                // New tab button
                 Button {
                     guard canAddTab else { return }
                     newTabName = ""
@@ -271,7 +323,7 @@ struct NotesView: View {
                             .renderingMode(.template)
                             .resizable()
                             .scaledToFit()
-                            .frame(width: 16, height: 16)
+                            .frame(width: 18, height: 18)
                             .foregroundStyle(.white)
                     }
                 }
@@ -497,10 +549,10 @@ struct NotesView: View {
                 } label: {
                     ZStack {
                         Circle()
-                            .fill(Color.white.opacity(0.08))
+                            .fill(Color.white.opacity(0.18))
                             .overlay(
                                 Circle()
-                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                    .stroke(Color.white.opacity(0.30), lineWidth: 1)
                             )
                             .frame(width: 34, height: 34)
 
@@ -509,7 +561,7 @@ struct NotesView: View {
                             .resizable()
                             .scaledToFit()
                             .frame(width: 14, height: 14)
-                            .foregroundStyle(note.isPinned ? .white : LColors.textSecondary)
+                            .foregroundStyle(note.isPinned ? .white : Color.black.opacity(0.38))
                     }
                 }
                 .buttonStyle(.plain)
@@ -519,7 +571,10 @@ struct NotesView: View {
 
     private func viewerHeader(for note: Note) -> some View {
         HStack(alignment: .center, spacing: 12) {
-            GradientTitle(text: "Note", size: 28)
+            Text("Note")
+                .font(.custom("Berkshire Swash", size: 42))
+                .foregroundStyle(.white)
+                .shadow(color: .black.opacity(0.18), radius: 4, x: 0, y: 2)
 
             Spacer()
 
@@ -529,19 +584,19 @@ struct NotesView: View {
                 } label: {
                     ZStack {
                         Circle()
-                            .fill(Color.white.opacity(0.08))
+                            .fill(Color.white.opacity(0.18))
                             .overlay(
                                 Circle()
-                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                                    .stroke(Color.white.opacity(0.30), lineWidth: 1)
                             )
-                            .frame(width: 34, height: 34)
+                            .frame(width: 44, height: 44)
 
                         Image("pinfill")
                             .renderingMode(.template)
                             .resizable()
                             .scaledToFit()
-                            .frame(width: 14, height: 14)
-                            .foregroundStyle(note.isPinned ? .white : LColors.textSecondary)
+                            .frame(width: 18, height: 18)
+                            .foregroundStyle(note.isPinned ? .white : Color.black.opacity(0.38))
                     }
                 }
                 .buttonStyle(.plain)
@@ -551,37 +606,114 @@ struct NotesView: View {
 
     private func viewerContent(for note: Note) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            GlassCard {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Content")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(LColors.textSecondary)
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Content")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.92))
+                    .shadow(color: .black.opacity(0.12), radius: 2, x: 0, y: 1)
 
-                    Text(note.trimmedContent.isEmpty ? "Empty note" : note.content)
-                        .font(.system(size: 15))
-                        .foregroundStyle(LColors.textPrimary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .frame(minHeight: 240, alignment: .topLeading)
+                Text(note.trimmedContent.isEmpty ? "Empty note" : note.content)
+                    .font(.system(size: 15, weight: .regular))
+                    .foregroundStyle(.white)
+                    .lineSpacing(3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(minHeight: 170, alignment: .topLeading)
+            }
+            .padding(18)
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(Color.white.opacity(0.20))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(Color.white.opacity(0.34), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.10), radius: 14, x: 0, y: 6)
+
+            if !note.activeLabels.isEmpty {
+                HStack(spacing: 8) {
+                    ForEach(note.activeLabels, id: \.self) { label in
+                        Text(label.uppercased())
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(Color.black.opacity(0.18))
+                                    .overlay(
+                                        Capsule(style: .continuous)
+                                            .stroke(Color.white.opacity(0.22), lineWidth: 1)
+                                    )
+                            )
+                    }
+                    Spacer(minLength: 0)
                 }
+                .padding(.top, 6)
             }
         }
     }
 
     private func viewerFooter(for note: Note) -> some View {
         HStack(spacing: 10) {
-            LButton(title: "Delete", style: .gradient) {
+            Button {
                 showDeleteConfirmation = true
+            } label: {
+                Text("Delete")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 11)
+                    .background(
+                        RoundedRectangle(cornerRadius: LSpacing.buttonRadius, style: .continuous)
+                            .fill(Color.black.opacity(0.30))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: LSpacing.buttonRadius, style: .continuous)
+                            .stroke(Color.white.opacity(0.26), lineWidth: 1)
+                    )
             }
+            .buttonStyle(.plain)
 
             Spacer()
 
-            LButton(title: "Close", style: .secondary) {
+            Button {
                 closeViewer()
+            } label: {
+                Text("Close")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 11)
+                    .background(
+                        RoundedRectangle(cornerRadius: LSpacing.buttonRadius, style: .continuous)
+                            .fill(Color.black.opacity(0.30))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: LSpacing.buttonRadius, style: .continuous)
+                            .stroke(Color.white.opacity(0.26), lineWidth: 1)
+                    )
             }
+            .buttonStyle(.plain)
 
-            LButton(title: "Edit", style: .gradient) {
+            Button {
                 startEditing(note)
+            } label: {
+                Text("Edit")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 11)
+                    .background(
+                        RoundedRectangle(cornerRadius: LSpacing.buttonRadius, style: .continuous)
+                            .fill(Color.black.opacity(0.30))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: LSpacing.buttonRadius, style: .continuous)
+                            .stroke(Color.white.opacity(0.26), lineWidth: 1)
+                    )
             }
+            .buttonStyle(.plain)
         }
     }
 
@@ -589,7 +721,6 @@ struct NotesView: View {
         VStack(alignment: .leading, spacing: 14) {
             GlassCard {
                 VStack(alignment: .leading, spacing: 12) {
-                    // Content header row with voice capture button
                     HStack(alignment: .center) {
                         Text("Content")
                             .font(.system(size: 13, weight: .bold))
@@ -639,7 +770,6 @@ struct NotesView: View {
                         .disabled(!voiceManager.isRecording && didInsertTranscript)
                     }
 
-                    // Live transcript preview shown while recording
                     if voiceManager.isRecording {
                         HStack(spacing: 8) {
                             Circle()
@@ -665,7 +795,6 @@ struct NotesView: View {
                         )
                     }
 
-                    // Permission error
                     if let error = voiceManager.permissionError {
                         Text(error.errorDescription ?? "An error occurred.")
                             .font(.system(size: 12, weight: .medium))
@@ -767,9 +896,18 @@ struct NotesView: View {
 
     private func popupFooter(for note: Note) -> some View {
         HStack(spacing: 10) {
-            LButton(title: "Delete", style: .gradient) {
+            Button {
                 showDeleteConfirmation = true
+            } label: {
+                Text("Delete")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(draftColor)
+                    .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
             }
+            .buttonStyle(.plain)
 
             Spacer()
 
@@ -777,19 +915,34 @@ struct NotesView: View {
                 closeEditor()
             }
 
-            LButton(title: "Save", style: .gradient) {
+            Button {
                 saveChanges(for: note)
+            } label: {
+                Text("Save")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(draftColor)
+                    .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
             }
+            .buttonStyle(.plain)
         }
     }
 
 
     // MARK: - Data
 
+    private var deleteTabConfirmationMessage: String {
+        if tabPendingDeletion == rootTabName && notesTabs.count > 1 {
+            return "Notes in this tab will be moved to the next available tab, which will become the new default tab."
+        }
+        return "Notes in this tab will be moved to \(rootTabName)."
+    }
+
     private var currentTabNoteCount: Int {
         let root = rootTabName
         let activeTab = selectedTab.isEmpty ? root : selectedTab
-
         return notes.filter { note in
             let noteTab = note.tabName.trimmingCharacters(in: .whitespacesAndNewlines)
             let resolved = noteTab.isEmpty ? root : noteTab
@@ -810,7 +963,6 @@ struct NotesView: View {
 
     private var filteredNotes: [Note] {
         let root = rootTabName
-
         let tabbedNotes = notes.filter { note in
             let noteTab = note.tabName.trimmingCharacters(in: .whitespacesAndNewlines)
             let resolved = noteTab.isEmpty ? root : noteTab
@@ -832,16 +984,12 @@ struct NotesView: View {
 
     private var emptyMessage: String {
         switch selectedFilter {
-        case .all:
-            return "Your notes will appear here."
-        case .pinned:
-            return "Pinned notes will appear here."
-        case .recent:
-            return "Recent notes will appear here."
+        case .all: return "Your notes will appear here."
+        case .pinned: return "Pinned notes will appear here."
+        case .recent: return "Recent notes will appear here."
         }
     }
     
-    /// The canonical name of the root/default tab.
     private var rootTabName: String {
         tabs.first(where: { $0.isRootTab })?.trimmedName
             ?? tabs.first?.trimmedName
@@ -849,28 +997,20 @@ struct NotesView: View {
     }
 
     private var notesTabs: [String] {
-        // Root tab always first; remaining stored tabs in creation order.
         var merged: [String] = []
-
-        // 1. Root tab
         let root = rootTabName
         merged.append(root)
 
-        // 2. Other stored tabs (non-root, non-empty, not already added)
         for tab in tabs {
             let name = tab.trimmedName
             guard !name.isEmpty, !merged.contains(name) else { continue }
             merged.append(name)
         }
 
-        // 3. Any tab names referenced by notes that aren't in stored tabs yet
-        //    (handles legacy data or migration edge cases)
         for note in notes {
             let name = note.tabName.trimmingCharacters(in: .whitespacesAndNewlines)
             let resolved = name.isEmpty ? root : name
-            if !merged.contains(resolved) {
-                merged.append(resolved)
-            }
+            if !merged.contains(resolved) { merged.append(resolved) }
         }
 
         return merged
@@ -901,7 +1041,6 @@ struct NotesView: View {
             .split(separator: "\n")
             .map { String($0) }
             .filter { !$0.isEmpty }
-
         collapsedPinnedIDs = Set(values)
     }
     
@@ -916,12 +1055,7 @@ struct NotesView: View {
 
         let tab = NotesTab(name: trimmed, isRootTab: false)
         modelContext.insert(tab)
-
-        do {
-            try modelContext.save()
-        } catch {
-            print("Failed to create tab: \(error)")
-        }
+        do { try modelContext.save() } catch { print("Failed to create tab: \(error)") }
 
         selectedTab = trimmed
         visibleCount = 6
@@ -936,99 +1070,71 @@ struct NotesView: View {
             $0.caseInsensitiveCompare(trimmed) == .orderedSame &&
             $0.caseInsensitiveCompare(renamingTabName) != .orderedSame
         }) else {
-            renamedTabName = ""
-            renamingTabName = ""
+            renamedTabName = ""; renamingTabName = ""
             return
         }
 
         let isRenamingRoot = renamingTabName == rootTabName
 
         if let tab = tabModel(named: renamingTabName) {
-            // Update the existing stored tab
             tab.name = trimmed
             tab.touch()
         } else if isRenamingRoot {
-            // Root tab exists in memory but not yet persisted — create and mark as root
             let tab = NotesTab(name: trimmed, isRootTab: true)
             modelContext.insert(tab)
         }
 
-        // Reassign notes: match exact name OR empty string if renaming root
         for note in notes {
             let noteTab = note.tabName.trimmingCharacters(in: .whitespacesAndNewlines)
             let matchesOld = noteTab == renamingTabName
             let matchesEmpty = isRenamingRoot && noteTab.isEmpty
-            if matchesOld || matchesEmpty {
-                note.tabName = trimmed
-            }
+            if matchesOld || matchesEmpty { note.tabName = trimmed }
         }
 
-        do {
-            try modelContext.save()
-        } catch {
-            print("Failed to rename tab: \(error)")
-        }
+        do { try modelContext.save() } catch { print("Failed to rename tab: \(error)") }
 
-        if selectedTab == renamingTabName {
-            selectedTab = trimmed
-        }
-
-        renamedTabName = ""
-        renamingTabName = ""
+        if selectedTab == renamingTabName { selectedTab = trimmed }
+        renamedTabName = ""; renamingTabName = ""
     }
 
     private func deleteTab() {
         let currentRootTabName = self.rootTabName
         let tabToDelete = tabPendingDeletion.trimmingCharacters(in: .whitespacesAndNewlines)
-
         guard !tabToDelete.isEmpty else { return }
 
         let isDeletingRoot = tabToDelete == currentRootTabName
         let hasMultipleTabs = notesTabs.count > 1
-
-        if isDeletingRoot && !hasMultipleTabs {
-            return
-        }
+        if isDeletingRoot && !hasMultipleTabs { return }
 
         let replacementRootName: String = {
             if isDeletingRoot {
                 return notesTabs.first(where: { $0 != tabToDelete }) ?? currentRootTabName
-            } else {
-                return currentRootTabName
             }
+            return currentRootTabName
         }()
 
-        if isDeletingRoot,
-           let replacementTab = tabModel(named: replacementRootName) {
+        if isDeletingRoot, let replacementTab = tabModel(named: replacementRootName) {
             replacementTab.isRootTab = true
             replacementTab.touch()
         }
 
-        if let tab = tabModel(named: tabToDelete) {
-            modelContext.delete(tab)
-        }
+        if let tab = tabModel(named: tabToDelete) { modelContext.delete(tab) }
 
         for note in notes {
             let noteTab = note.tabName.trimmingCharacters(in: .whitespacesAndNewlines)
             let matchesDeletedTab = noteTab == tabToDelete
             let matchesEmptyRoot = isDeletingRoot && noteTab.isEmpty
-
             if matchesDeletedTab || matchesEmptyRoot {
                 note.tabName = replacementRootName
                 note.touch()
             }
         }
 
-        do {
-            try modelContext.save()
-        } catch {
-            print("Failed to delete tab: \(error)")
-        }
+        do { try modelContext.save() } catch { print("Failed to delete tab: \(error)") }
 
         if selectedTab == tabToDelete || (isDeletingRoot && selectedTab.isEmpty) {
             selectedTab = replacementRootName
         }
-
         tabPendingDeletion = ""
         visibleCount = 6
     }
@@ -1036,12 +1142,7 @@ struct NotesView: View {
     private func move(_ note: Note, to tab: String) {
         note.tabName = tab
         note.touch()
-
-        do {
-            try modelContext.save()
-        } catch {
-            print("Failed to move note: \(error)")
-        }
+        do { try modelContext.save() } catch { print("Failed to move note: \(error)") }
     }
 
     private func createNote() {
@@ -1056,7 +1157,6 @@ struct NotesView: View {
             createdAt: Date(),
             updatedAt: Date()
         )
-
         modelContext.insert(note)
         selectedNote = note
         draftContent = ""
@@ -1068,9 +1168,7 @@ struct NotesView: View {
         isCreatingNote = true
     }
 
-    private func open(_ note: Note) {
-        viewingNote = note
-    }
+    private func open(_ note: Note) { viewingNote = note }
 
     private func startEditing(_ note: Note) {
         viewingNote = nil
@@ -1119,73 +1217,41 @@ struct NotesView: View {
             note.updatedAt = draftDate
         }
 
-        do {
-            try modelContext.save()
-        } catch {
-            print("Failed to save note: \(error)")
-        }
-
+        do { try modelContext.save() } catch { print("Failed to save note: \(error)") }
         closeEditor()
     }
+
     private func color(from hex: String) -> Color {
         let cleaned = hex.trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "#", with: "")
-
-        guard cleaned.count == 6,
-              let value = UInt64(cleaned, radix: 16) else {
+        guard cleaned.count == 6, let value = UInt64(cleaned, radix: 16) else {
             return Color(red: 248 / 255, green: 229 / 255, blue: 140 / 255)
         }
-
         let red = Double((value >> 16) & 0xFF) / 255
         let green = Double((value >> 8) & 0xFF) / 255
         let blue = Double(value & 0xFF) / 255
-
         return Color(red: red, green: green, blue: blue)
     }
 
     private func hexString(from color: Color) -> String {
         let uiColor = UIColor(color)
-        var red: CGFloat = 0
-        var green: CGFloat = 0
-        var blue: CGFloat = 0
-        var alpha: CGFloat = 0
-
-        guard uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else {
-            return "#F8E58C"
-        }
-
-        return String(
-            format: "#%02X%02X%02X",
-            Int(round(red * 255)),
-            Int(round(green * 255)),
-            Int(round(blue * 255))
-        )
+        var red: CGFloat = 0; var green: CGFloat = 0; var blue: CGFloat = 0; var alpha: CGFloat = 0
+        guard uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else { return "#F8E58C" }
+        return String(format: "#%02X%02X%02X", Int(round(red * 255)), Int(round(green * 255)), Int(round(blue * 255)))
     }
 
     private func togglePinned(_ note: Note) {
         note.isPinned.toggle()
         note.touch()
-
-        do {
-            try modelContext.save()
-        } catch {
-            print("Failed to toggle pin: \(error)")
-        }
+        do { try modelContext.save() } catch { print("Failed to toggle pin: \(error)") }
     }
-
 
     private func delete(_ note: Note) {
         selectedNote = nil
         viewingNote = nil
         visibleCount = max(6, visibleCount - 1)
         modelContext.delete(note)
-
-        do {
-            try modelContext.save()
-        } catch {
-            print("Failed to delete note: \(error)")
-        }
-
+        do { try modelContext.save() } catch { print("Failed to delete note: \(error)") }
         closeEditor()
     }
 
@@ -1214,14 +1280,8 @@ private struct NoteStickyCard: View {
     let action: () -> Void
     let onMoveToTab: (String) -> Void
 
-    private var cardHeight: CGFloat {
-        note.isPinned && isCollapsed ? 96 : 190
-    }
-
-    private var previewLineLimit: Int {
-        note.isPinned && isCollapsed ? 3 : 8
-    }
-
+    private var cardHeight: CGFloat { note.isPinned && isCollapsed ? 96 : 190 }
+    private var previewLineLimit: Int { note.isPinned && isCollapsed ? 3 : 8 }
 
     var body: some View {
         Button(action: action) {
@@ -1245,41 +1305,25 @@ private struct NoteStickyCard: View {
                                     ZStack {
                                         Circle()
                                             .fill(Color.white.opacity(0.08))
-                                            .overlay(
-                                                Circle()
-                                                    .stroke(Color.white.opacity(0.16), lineWidth: 1)
-                                            )
+                                            .overlay(Circle().stroke(Color.white.opacity(0.16), lineWidth: 1))
                                             .frame(width: 28, height: 28)
-
                                         Image(isCollapsed ? "chevrondownfill" : "chevronupfill")
-                                            .renderingMode(.template)
-                                            .resizable()
-                                            .scaledToFit()
-                                            .frame(width: 12, height: 12)
-                                            .foregroundStyle(.white)
+                                            .renderingMode(.template).resizable().scaledToFit()
+                                            .frame(width: 12, height: 12).foregroundStyle(.white)
                                     }
                                 }
                                 .buttonStyle(.plain)
-
                                 Image("pinfill")
-                                    .renderingMode(.template)
-                                    .resizable()
-                                    .scaledToFit()
-                                    .foregroundStyle(.white)
-                                    .frame(width: 18, height: 18)
+                                    .renderingMode(.template).resizable().scaledToFit()
+                                    .foregroundStyle(.white).frame(width: 18, height: 18)
                             }
                         }
 
                         Spacer(minLength: 0)
 
                         VStack(alignment: .trailing, spacing: 5) {
-                            if note.isPinned && !isCollapsed {
-                                stickyBadge(text: "PINNED")
-                            }
-
-                            ForEach(displayedBadges, id: \.self) { badge in
-                                stickyBadge(text: badge)
-                            }
+                            if note.isPinned && !isCollapsed { stickyBadge(text: "PINNED") }
+                            ForEach(displayedBadges, id: \.self) { badge in stickyBadge(text: badge) }
                         }
                         .frame(maxWidth: 92, alignment: .trailing)
                         .layoutPriority(0)
@@ -1298,12 +1342,9 @@ private struct NoteStickyCard: View {
                     if !(note.isPinned && isCollapsed) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Created: \(shortDateTime(note.createdAt))")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(Color.black.opacity(0.55))
-
+                                .font(.system(size: 10, weight: .semibold)).foregroundStyle(Color.black.opacity(0.55))
                             Text("Updated: \(shortDateTime(note.updatedAt))")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(Color.black.opacity(0.55))
+                                .font(.system(size: 10, weight: .semibold)).foregroundStyle(Color.black.opacity(0.55))
                         }
                     }
                 }
@@ -1320,9 +1361,7 @@ private struct NoteStickyCard: View {
         .contextMenu {
             Menu("Move to Tab") {
                 ForEach(availableTabs, id: \.self) { tab in
-                    Button(tab) {
-                        onMoveToTab(tab)
-                    }
+                    Button(tab) { onMoveToTab(tab) }
                 }
             }
         }
@@ -1335,11 +1374,7 @@ private struct NoteStickyCard: View {
 
     private var displayedBadges: [String] {
         let labelBadges = note.activeLabels.map { $0.uppercased() }
-
-        if note.isPinned && isCollapsed {
-            return Array(labelBadges.prefix(2))
-        }
-
+        if note.isPinned && isCollapsed { return Array(labelBadges.prefix(2)) }
         return labelBadges
     }
 
@@ -1348,7 +1383,6 @@ private struct NoteStickyCard: View {
         let fontSize: CGFloat = isCollapsedPinned ? 8 : 9
         let horizontalPadding: CGFloat = isCollapsedPinned ? 6 : 7
         let verticalPadding: CGFloat = isCollapsedPinned ? 2 : 3
-
         return Text(text)
             .font(.system(size: fontSize, weight: .bold))
             .foregroundStyle(.white)
@@ -1361,10 +1395,7 @@ private struct NoteStickyCard: View {
             .background(
                 Capsule(style: .continuous)
                     .fill(Color.black.opacity(0.14))
-                    .overlay(
-                        Capsule(style: .continuous)
-                            .stroke(Color.white.opacity(0.18), lineWidth: 1)
-                    )
+                    .overlay(Capsule(style: .continuous).stroke(Color.white.opacity(0.18), lineWidth: 1))
             )
     }
 
@@ -1379,12 +1410,8 @@ private struct NoteStickyCard: View {
 // MARK: - Filter Enum
 
 private enum NotesFilter: String, CaseIterable, Identifiable {
-    case all
-    case pinned
-    case recent
-
+    case all, pinned, recent
     var id: String { rawValue }
-
     var label: String {
         switch self {
         case .all: return "All"
@@ -1393,7 +1420,6 @@ private enum NotesFilter: String, CaseIterable, Identifiable {
         }
     }
 }
-
 
 #Preview {
     NotesView()
@@ -1408,8 +1434,6 @@ private enum TabPopupMode {
 
 // MARK: - Cursor-Aware Editor
 
-/// Singleton that holds a weak reference to the active UITextView so that
-/// NotesCursorAwareEditor can insert text at the cursor position.
 final class NotesCursorInserter {
     static let shared = NotesCursorInserter()
     private init() {}
@@ -1421,19 +1445,13 @@ final class NotesCursorInserter {
         if tv.textStorage.length == 0 {
             tv.text = text
         } else {
-            tv.textStorage.replaceCharacters(
-                in: range,
-                with: text
-            )
+            tv.textStorage.replaceCharacters(in: range, with: text)
             tv.selectedRange = NSRange(location: range.location + (text as NSString).length, length: 0)
         }
-        // Propagate back to the SwiftUI binding via delegate
         tv.delegate?.textViewDidChange?(tv)
     }
 }
 
-/// A UITextView-backed editor that registers itself with NotesCursorInserter
-/// so voice transcript can be inserted at the current cursor position.
 struct NotesCursorAwareEditor: UIViewRepresentable {
     let placeholder: String
     @Binding var text: String
@@ -1455,23 +1473,14 @@ struct NotesCursorAwareEditor: UIViewRepresentable {
     }
 
     func updateUIView(_ tv: UITextView, context: Context) {
-        // Only push text into UITextView when it differs, to avoid
-        // clobbering cursor position on every SwiftUI redraw.
-        if tv.text != text {
-            tv.text = text
-        }
-        if text.isEmpty {
-            tv.textColor = UIColor(LColors.textPrimary)
-        }
+        if tv.text != text { tv.text = text }
+        if text.isEmpty { tv.textColor = UIColor(LColors.textPrimary) }
         NotesCursorInserter.shared.textView = tv
     }
 
     final class Coordinator: NSObject, UITextViewDelegate {
         var parent: NotesCursorAwareEditor
         init(_ parent: NotesCursorAwareEditor) { self.parent = parent }
-
-        func textViewDidChange(_ textView: UITextView) {
-            parent.text = textView.text
-        }
+        func textViewDidChange(_ textView: UITextView) { parent.text = textView.text }
     }
 }

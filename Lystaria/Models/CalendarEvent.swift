@@ -98,6 +98,7 @@ extension CalendarEventParticipationStatus: nonisolated Codable {}
 final class CalendarEvent {
     // MARK: - Sync metadata
     var localEventId: String = UUID().uuidString
+    var notificationID: String = UUID().uuidString
     var serverId: String?
     var lastSyncedAt: Date?
     var externalLastModifiedAt: Date?
@@ -272,6 +273,7 @@ final class CalendarEvent {
         calendarId: String? = nil,
         serverId: String? = nil,
         localEventId: String = UUID().uuidString,
+        notificationID: String = UUID().uuidString,
         syncState: CalendarEventSyncState = .newLocal,
         isRecurringSeriesMaster: Bool = false,
         isRecurrenceException: Bool = false,
@@ -298,6 +300,7 @@ final class CalendarEvent {
         joinDeadline: Date? = nil
     ) {
         self.localEventId = localEventId
+        self.notificationID = notificationID
         self.title = title
         self.startDate = startDate
         self.endDate = endDate

@@ -46,7 +46,7 @@ struct HealthMetricDetailPopupView: View {
                         showDeleteConfirm = true
                     } label: {
                         HStack(spacing: 8) {
-                            Image("trashfill")
+                            Image("fulltrashfill")
                                 .renderingMode(.template)
                                 .resizable()
                                 .scaledToFit()

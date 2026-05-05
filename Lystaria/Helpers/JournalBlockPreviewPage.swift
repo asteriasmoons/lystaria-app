@@ -42,14 +42,14 @@ struct JournalBlockPreviewPage: View {
                         TagFlowLayout(spacing: 8) {
                             ForEach(entry.tags, id: \.self) { tag in
                                 HStack(spacing: 6) {
-                                    Image("tagheart")
+                                    Image("tagsparkle")
                                         .resizable()
                                         .renderingMode(.template)
                                         .scaledToFit()
-                                        .frame(width: 14, height: 14)
+                                        .frame(width: 16, height: 16)
                                         .foregroundStyle(.white)
                                     Text(tag)
-                                        .font(.system(size: 12, weight: .semibold))
+                                        .font(.system(size: 14, weight: .semibold))
                                 }
                                 .foregroundStyle(LColors.textPrimary)
                                 .padding(.horizontal, 10)

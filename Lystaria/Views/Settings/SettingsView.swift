@@ -374,7 +374,7 @@ struct SettingsView: View {
                                 Button {
                                     deleteCalendar(calendar)
                                 } label: {
-                                    Image("trashfill")
+                                    Image("fulltrashfill")
                                         .renderingMode(.template)
                                         .resizable()
                                         .scaledToFit()

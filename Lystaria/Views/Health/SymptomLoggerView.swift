@@ -214,7 +214,7 @@ struct SymptomLoggerView: View {
                                 .overlay(Circle().stroke(LColors.glassBorder, lineWidth: 1))
                                 .frame(width: 34, height: 34)
 
-                            Image("trashfill")
+                            Image("fulltrashfill")
                                 .renderingMode(.template)
                                 .resizable()
                                 .scaledToFit()

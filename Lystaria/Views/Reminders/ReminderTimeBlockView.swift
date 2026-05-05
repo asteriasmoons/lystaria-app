@@ -274,6 +274,34 @@ struct ReminderTimeBlockView: View {
         return fireDate > now
     }
 
+    private func skippedSlotDates(for reminder: LystariaReminder) -> [Date] {
+        let raw = reminder.skippedTimestampsStorage.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty, raw != "[]", let data = raw.data(using: .utf8),
+              let values = try? JSONDecoder().decode([Double].self, from: data) else { return [] }
+        return values.map { Date(timeIntervalSince1970: $0) }
+    }
+
+    private func isSkipped(_ reminder: LystariaReminder, fireDate: Date) -> Bool {
+        if reminderIsDone(reminder) { return false }
+        guard tzCalendar.isDate(fireDate, inSameDayAs: selectedDate) else { return false }
+
+        if skippedSlotDates(for: reminder).contains(where: { abs($0.timeIntervalSince(fireDate)) <= 90 }) {
+            return true
+        }
+
+        guard let skippedAt = reminder.lastSkippedAt,
+              tzCalendar.isDate(skippedAt, inSameDayAs: selectedDate) else { return false }
+
+        if let completedAt = reminder.lastCompletedAt,
+           tzCalendar.isDate(completedAt, inSameDayAs: selectedDate) { return false }
+
+        if reminder.isRecurring {
+            return abs(skippedAt.timeIntervalSince(fireDate)) <= 90
+        }
+
+        return true
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -426,9 +454,10 @@ struct ReminderTimeBlockView: View {
             let now = context.date
             let badgeDone = isCompletedOccurrence(reminder, fireDate: fireDate) || reminderShowsDoneBadge(reminder)
             let circleFilled = reminderCircleIsFilled(reminder)
-            let overdue = isOverdue(reminder, fireDate: fireDate)
-            let dueNow = !overdue && isDueNow(reminder, fireDate: fireDate, now: now)
-            let upcoming = !overdue && !dueNow && isUpcoming(reminder, fireDate: fireDate, now: now)
+            let skipped = isSkipped(reminder, fireDate: fireDate)
+            let overdue = !skipped && isOverdue(reminder, fireDate: fireDate)
+            let dueNow = !skipped && !overdue && isDueNow(reminder, fireDate: fireDate, now: now)
+            let upcoming = !skipped && !overdue && !dueNow && isUpcoming(reminder, fireDate: fireDate, now: now)
             let reminderColor = Color(ly_hex: reminder.color)
             let accentColor: Color = overdue ? LColors.danger : (dueNow ? LColors.accent : (upcoming ? LColors.textSecondary : reminderColor))
 
@@ -452,6 +481,8 @@ struct ReminderTimeBlockView: View {
 
                         if badgeDone {
                             TimeBlockStatusBadge(label: "Done", style: .upcoming)
+                        } else if skipped {
+                            TimeBlockStatusBadge(label: "Skipped", style: .skipped)
                         } else if overdue {
                             TimeBlockStatusBadge(label: "Overdue", style: .overdue)
                         } else if dueNow {
@@ -630,9 +661,10 @@ struct ReminderTimeBlockView: View {
             let now = context.date
             let badgeDone = reminderShowsDoneBadge(reminder)
             let fireDate = reminder.nextRunAt
-            let overdue = isOverdue(reminder, fireDate: fireDate)
-            let dueNow = !overdue && isDueNow(reminder, fireDate: fireDate, now: now)
-            let upcoming = !overdue && !dueNow && isUpcoming(reminder, fireDate: fireDate, now: now)
+            let skipped = isSkipped(reminder, fireDate: fireDate)
+            let overdue = !skipped && isOverdue(reminder, fireDate: fireDate)
+            let dueNow = !skipped && !overdue && isDueNow(reminder, fireDate: fireDate, now: now)
+            let upcoming = !skipped && !overdue && !dueNow && isUpcoming(reminder, fireDate: fireDate, now: now)
 
             let displayTime: String = {
                 let df = DateFormatter()
@@ -683,6 +715,8 @@ struct ReminderTimeBlockView: View {
 
                         if badgeDone {
                             TimeBlockStatusBadge(label: "Done", style: .upcoming)
+                        } else if skipped {
+                            TimeBlockStatusBadge(label: "Skipped", style: .skipped)
                         } else if overdue {
                             TimeBlockStatusBadge(label: "Overdue", style: .overdue)
                         } else if dueNow {
@@ -851,6 +885,7 @@ struct ReminderTimeBlockView: View {
             case .overdue: LColors.danger.opacity(0.17)
             case .dueNow: LColors.accent.opacity(0.18)
             case .upcoming: Color.white.opacity(0.09)
+            case .skipped: Color(red: 0.36, green: 0.28, blue: 0.90).opacity(0.72)
             }
         }
 
@@ -859,6 +894,7 @@ struct ReminderTimeBlockView: View {
             case .overdue: LColors.danger
             case .dueNow: LColors.accent
             case .upcoming: LColors.textPrimary
+            case .skipped: .white
             }
         }
 
@@ -867,7 +903,16 @@ struct ReminderTimeBlockView: View {
             case .overdue: LColors.danger.opacity(0.45)
             case .dueNow: LColors.accent.opacity(0.44)
             case .upcoming: LColors.glassBorder
+            case .skipped: Color(red: 0.36, green: 0.28, blue: 0.90).opacity(0.9)
             }
         }
+    }
+
+    // MARK: - Reminder Status Badge Style
+    private enum ReminderStatusBadgeStyle {
+        case overdue
+        case dueNow
+        case upcoming
+        case skipped
     }
 }

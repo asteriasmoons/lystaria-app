@@ -369,12 +369,12 @@ struct JournalTabView: View {
     // MARK: - Helpers
 
     private func entryCount(for book: JournalBook) -> Int {
-        allEntries.filter { $0.book?.persistentModelID == book.persistentModelID }.count
+        (book.entries ?? []).filter { $0.deletedAt == nil }.count
     }
 
     private func lastEntryDate(for book: JournalBook) -> Date? {
-        allEntries
-            .filter { $0.book?.persistentModelID == book.persistentModelID }
+        (book.entries ?? [])
+            .filter { $0.deletedAt == nil }
             .sorted { $0.createdAt > $1.createdAt }
             .first?.createdAt
     }
@@ -824,6 +824,12 @@ struct JournalBookDetailView: View {
     @State private var promptText: String = ""
     @State private var promptLoading = false
     @State private var promptError: String?
+
+    // AI analysis overlay state
+    @State private var showAnalysisSheet = false
+    @State private var analysisState: JournalAnalysisOverlay.AnalysisState = .idle
+    @State private var analysisDateKeys: [String] = []
+    @State private var analysisDateIndex: Int = 0
     
     // Stored prompt feedback state
     @State private var promptShowCopied = false
@@ -932,6 +938,36 @@ struct JournalBookDetailView: View {
                 }
             }
             
+            // MARK: - Journal Analysis Overlay
+            if showAnalysisSheet {
+                JournalAnalysisOverlay(
+                    state: analysisState,
+                    onClose: {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                            showAnalysisSheet = false
+                        }
+                    },
+                    onRetry: {
+                        Task { await runAnalysis() }
+                    },
+                    dateLabel: formattedAnalysisDateLabel,
+                    hasPrevious: analysisDateIndex < analysisDateKeys.count - 1,
+                    hasNext: analysisDateIndex > 0,
+                    onPrevious: {
+                        guard analysisDateIndex < analysisDateKeys.count - 1 else { return }
+                        analysisDateIndex += 1
+                        Task { await loadAnalysisForCurrentIndex() }
+                    },
+                    onNext: {
+                        guard analysisDateIndex > 0 else { return }
+                        analysisDateIndex -= 1
+                        Task { await loadAnalysisForCurrentIndex() }
+                    }
+                )
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                .zIndex(20)
+            }
+
             // MARK: - Journal Prompt Overlay
             if showPromptSheet {
                 journalPromptOverlay
@@ -944,6 +980,12 @@ struct JournalBookDetailView: View {
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showPromptEditorPopup)
         .onAppear {
             JournalEntryBlockMigration.migrateEntriesIfNeeded(entries, modelContext: modelContext)
+            print("[JournalBook] entries.count: \(entries.count)")
+            print("[JournalBook] book.entries count: \((book.entries ?? []).filter { $0.deletedAt == nil }.count)")
+            print("[JournalBook] allEntries for this book: \(allEntries.filter { $0.book?.persistentModelID == book.persistentModelID }.count)")
+            for e in entries {
+                print("[JournalBook] entry: '\(e.title)' createdAt: \(e.createdAt) deletedAt: \(String(describing: e.deletedAt)) book: \(String(describing: e.book?.title))")
+            }
         }
         .onChange(of: tagFilter) { _, _ in
             visibleEntryCount = 4
@@ -958,7 +1000,7 @@ struct JournalBookDetailView: View {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     GradientTitle(text: book.title, font: .system(size: 20, weight: .bold))
-                    Text(entries.count == 1 ? "1 entry" : "\(entries.count) entries")
+                    Text(totalEntryCount == 1 ? "1 entry" : "\(totalEntryCount) entries")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(LColors.textSecondary)
                 }
@@ -986,6 +1028,24 @@ struct JournalBookDetailView: View {
                 }
                 .buttonStyle(.plain)
                 
+                Button {
+                    showAnalysisSheet = true
+                    Task { await loadAnalysisDates() }
+                } label: {
+                    Text("Analyze")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(LColors.glassBorder, lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+
                 Button {
                     showPromptSheet = true
                 } label: {
@@ -1044,6 +1104,10 @@ struct JournalBookDetailView: View {
     }
     
     // MARK: - Overview Stats
+
+    private var totalEntryCount: Int {
+        entries.count
+    }
 
     private var entriesThisWeek: Int {
         let cal = Calendar.autoupdatingCurrent
@@ -1565,6 +1629,120 @@ struct JournalBookDetailView: View {
                         .padding(.bottom, 18)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
+            }
+        }
+    }
+    
+    private var formattedAnalysisDateLabel: String {
+        guard analysisDateIndex < analysisDateKeys.count else { return "" }
+        let dateKey = analysisDateKeys[analysisDateIndex]
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        guard let date = formatter.date(from: dateKey) else { return dateKey }
+        let display = DateFormatter()
+        display.dateFormat = "MMM d"
+        return display.string(from: date)
+    }
+
+    private func loadAnalysisDates() async {
+        guard let userId = appState.currentAppleUserId,
+              !userId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let bookId = book.uuid.uuidString
+        do {
+            let dates = try await JournalAnalysisService.shared.fetchAnalysisDates(userId: userId, bookId: bookId)
+            await MainActor.run {
+                analysisDateKeys = dates
+                analysisDateIndex = 0
+            }
+            await loadAnalysisForCurrentIndex()
+        } catch {
+            await MainActor.run { analysisState = .error(error.localizedDescription) }
+        }
+    }
+
+    private func loadAnalysisForCurrentIndex() async {
+        guard let userId = appState.currentAppleUserId,
+              !userId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
+        let bookId = book.uuid.uuidString
+
+        // If no saved analyses exist at all, show empty state
+        guard !analysisDateKeys.isEmpty, analysisDateIndex < analysisDateKeys.count else {
+            await MainActor.run { analysisState = .empty }
+            return
+        }
+
+        let dateKey = analysisDateKeys[analysisDateIndex]
+
+        await MainActor.run { analysisState = .loading }
+
+        do {
+            if let result = try await JournalAnalysisService.shared.fetchAnalysis(userId: userId, bookId: bookId, dateKey: dateKey) {
+                await MainActor.run {
+                    analysisState = .result(
+                        themes: result.themes,
+                        mood: result.mood,
+                        reflection: result.reflection
+                    )
+                }
+            } else {
+                await MainActor.run { analysisState = .empty }
+            }
+        } catch {
+            await MainActor.run { analysisState = .error(error.localizedDescription) }
+        }
+    }
+
+    private func runAnalysis() async {
+        await MainActor.run {
+            analysisState = .loading
+        }
+
+        guard let userId = appState.currentAppleUserId,
+              !userId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            await MainActor.run {
+                analysisState = .error("You need to be signed in with Apple to use this feature.")
+            }
+            return
+        }
+
+        let bookId = book.uuid.uuidString
+
+        let cal = Calendar.autoupdatingCurrent
+        let todayStart = cal.startOfDay(for: Date())
+        guard let todayEnd = cal.date(byAdding: .day, value: 1, to: todayStart) else { return }
+        let todayEntries = entries.filter { $0.createdAt >= todayStart && $0.createdAt < todayEnd }
+
+        guard !todayEntries.isEmpty else {
+            await MainActor.run {
+                analysisState = .empty
+            }
+            return
+        }
+
+        do {
+            let result = try await JournalAnalysisService.shared.analyze(
+                userId: userId,
+                bookId: bookId,
+                entries: todayEntries
+            )
+            await MainActor.run {
+                analysisState = .result(
+                    themes: result.themes,
+                    mood: result.mood,
+                    reflection: result.reflection
+                )
+            }
+            // Refresh date list so arrows update after a new generate
+            if let dates = try? await JournalAnalysisService.shared.fetchAnalysisDates(userId: userId, bookId: bookId) {
+                await MainActor.run {
+                    analysisDateKeys = dates
+                    analysisDateIndex = 0
+                }
+            }
+        } catch {
+            await MainActor.run {
+                analysisState = .error(error.localizedDescription)
             }
         }
     }

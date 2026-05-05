@@ -113,7 +113,7 @@ struct DailyIntentionView: View {
                                 }
                             }
 
-                            GradientCapsuleButton(title: "Clear", icon: "trashfill") {
+                            GradientCapsuleButton(title: "Clear", icon: "fulltrashfill") {
                                 clear()
                             }
 

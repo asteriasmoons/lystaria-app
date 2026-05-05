@@ -263,7 +263,7 @@ private extension BookmarkDetailView {
                     showDeleteDialog = true
                 } label: {
                     HStack(spacing: 6) {
-                        Image("trashfill")
+                        Image("fulltrashfill")
                             .renderingMode(.template)
                             .resizable()
                             .scaledToFit()

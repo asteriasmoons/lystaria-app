@@ -62,6 +62,12 @@
 		CF13B67F2F69DCF7008D3CE9 /* ChecklistEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B67E2F69DCF1008D3CE9 /* ChecklistEntity.swift */; };
 		CF13B6832F6A2DFF008D3CE9 /* JournalPromptUsage.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B6822F6A2DF9008D3CE9 /* JournalPromptUsage.swift */; };
 		CF175FF02FA3A16500C58C6C /* TagFlowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF175FEF2FA3A16500C58C6C /* TagFlowLayout.swift */; };
+		CF175FF22FA552E400C58C6C /* ReminderHistoryDayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF175FF12FA552DC00C58C6C /* ReminderHistoryDayView.swift */; };
+		CF175FF52FA6804B00C58C6C /* WellnessWallAIInsight.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF175FF42FA6804200C58C6C /* WellnessWallAIInsight.swift */; };
+		CF175FF72FA6807400C58C6C /* WellnessWallAIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF175FF62FA6806D00C58C6C /* WellnessWallAIModels.swift */; };
+		CF175FF92FA680B900C58C6C /* WellnessWallAIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF175FF82FA680B100C58C6C /* WellnessWallAIService.swift */; };
+		CF175FFB2FA6812200C58C6C /* WellnessWallSnapshotHasher.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF175FFA2FA6811A00C58C6C /* WellnessWallSnapshotHasher.swift */; };
+		CF175FFD2FA7A87100C58C6C /* ReminderHistoryEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF175FFC2FA7A87100C58C6C /* ReminderHistoryEntry.swift */; };
 		CF20513E2F5787DD006B71AA /* JournalBook.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF20513D2F5787D9006B71AA /* JournalBook.swift */; };
 		CF2051402F5788CE006B71AA /* JournalBookEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF20513F2F5788C6006B71AA /* JournalBookEditorSheet.swift */; };
 		CF2051422F5788F9006B71AA /* Color+Hex.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF2051412F5788F3006B71AA /* Color+Hex.swift */; };
@@ -286,6 +292,20 @@
 		CFC6B2032F9A684500A60409 /* UserProfileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC6B2022F9A683F00A60409 /* UserProfileService.swift */; };
 		CFDD11AB2F7F22BF0067B262 /* Note.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFDD11AA2F7F22BC0067B262 /* Note.swift */; };
 		CFDD11AE2F7F24040067B262 /* NotesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFDD11AD2F7F24010067B262 /* NotesView.swift */; };
+		CFEEED242FA7DEA500F03103 /* ReleaseNote.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED232FA7DEA000F03103 /* ReleaseNote.swift */; };
+		CFEEED262FA7DF1D00F03103 /* ReleaseNotesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED252FA7DF1700F03103 /* ReleaseNotesView.swift */; };
+		CFEEED282FA7EF2100F03103 /* ReleaseNotesData.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED272FA7EF1900F03103 /* ReleaseNotesData.swift */; };
+		CFEEED2D2FA81AA900F03103 /* JournalAnalysisService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED2C2FA81AA900F03103 /* JournalAnalysisService.swift */; };
+		CFEEED2E2FA81AA900F03103 /* JournalAnalysisOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED2B2FA81AA900F03103 /* JournalAnalysisOverlay.swift */; };
+		CFEEED332FAA42B100F03103 /* DocumentBook.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED302FAA42B100F03103 /* DocumentBook.swift */; };
+		CFEEED342FAA42B100F03103 /* DocumentEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED312FAA42B100F03103 /* DocumentEntry.swift */; };
+		CFEEED352FAA42B100F03103 /* DocumentInlineStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED322FAA42B100F03103 /* DocumentInlineStyle.swift */; };
+		CFEEED362FAA42B100F03103 /* DocumentBlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED2F2FAA42B100F03103 /* DocumentBlock.swift */; };
+		CFEEED382FAA42CC00F03103 /* DocumentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED372FAA42CC00F03103 /* DocumentsView.swift */; };
+		CFEEED3D2FAA42E500F03103 /* DocumentBlockEditorPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED392FAA42E500F03103 /* DocumentBlockEditorPage.swift */; };
+		CFEEED3E2FAA42E500F03103 /* DocumentBlockPreviewPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED3B2FAA42E500F03103 /* DocumentBlockPreviewPage.swift */; };
+		CFEEED3F2FAA42E500F03103 /* DocumentBlockRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED3C2FAA42E500F03103 /* DocumentBlockRow.swift */; };
+		CFEEED402FAA42E500F03103 /* DocumentBlockEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED3A2FAA42E500F03103 /* DocumentBlockEditorView.swift */; };
 		CFF7C5AF2F72EA0D00A67EC3 /* Medication.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFF7C5AE2F72EA0800A67EC3 /* Medication.swift */; };
 		CFF7C5B12F72F19300A67EC3 /* MedicationPageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFF7C5B02F72F18900A67EC3 /* MedicationPageView.swift */; };
 		CFF7C5B32F734D8000A67EC3 /* DailyReadingProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFF7C5B22F734D7900A67EC3 /* DailyReadingProgress.swift */; };
@@ -413,6 +433,12 @@
 		CF13B67E2F69DCF1008D3CE9 /* ChecklistEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChecklistEntity.swift; sourceTree = "<group>"; };
 		CF13B6822F6A2DF9008D3CE9 /* JournalPromptUsage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalPromptUsage.swift; sourceTree = "<group>"; };
 		CF175FEF2FA3A16500C58C6C /* TagFlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagFlowLayout.swift; sourceTree = "<group>"; };
+		CF175FF12FA552DC00C58C6C /* ReminderHistoryDayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderHistoryDayView.swift; sourceTree = "<group>"; };
+		CF175FF42FA6804200C58C6C /* WellnessWallAIInsight.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WellnessWallAIInsight.swift; sourceTree = "<group>"; };
+		CF175FF62FA6806D00C58C6C /* WellnessWallAIModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WellnessWallAIModels.swift; sourceTree = "<group>"; };
+		CF175FF82FA680B100C58C6C /* WellnessWallAIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WellnessWallAIService.swift; sourceTree = "<group>"; };
+		CF175FFA2FA6811A00C58C6C /* WellnessWallSnapshotHasher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WellnessWallSnapshotHasher.swift; sourceTree = "<group>"; };
+		CF175FFC2FA7A87100C58C6C /* ReminderHistoryEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderHistoryEntry.swift; sourceTree = "<group>"; };
 		CF20513D2F5787D9006B71AA /* JournalBook.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalBook.swift; sourceTree = "<group>"; };
 		CF20513F2F5788C6006B71AA /* JournalBookEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalBookEditorSheet.swift; sourceTree = "<group>"; };
 		CF2051412F5788F3006B71AA /* Color+Hex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Hex.swift"; sourceTree = "<group>"; };
@@ -595,6 +621,20 @@
 		CFC6B2022F9A683F00A60409 /* UserProfileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileService.swift; sourceTree = "<group>"; };
 		CFDD11AA2F7F22BC0067B262 /* Note.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Note.swift; sourceTree = "<group>"; };
 		CFDD11AD2F7F24010067B262 /* NotesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesView.swift; sourceTree = "<group>"; };
+		CFEEED232FA7DEA000F03103 /* ReleaseNote.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReleaseNote.swift; sourceTree = "<group>"; };
+		CFEEED252FA7DF1700F03103 /* ReleaseNotesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReleaseNotesView.swift; sourceTree = "<group>"; };
+		CFEEED272FA7EF1900F03103 /* ReleaseNotesData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReleaseNotesData.swift; sourceTree = "<group>"; };
+		CFEEED2B2FA81AA900F03103 /* JournalAnalysisOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalAnalysisOverlay.swift; sourceTree = "<group>"; };
+		CFEEED2C2FA81AA900F03103 /* JournalAnalysisService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalAnalysisService.swift; sourceTree = "<group>"; };
+		CFEEED2F2FAA42B100F03103 /* DocumentBlock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentBlock.swift; sourceTree = "<group>"; };
+		CFEEED302FAA42B100F03103 /* DocumentBook.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentBook.swift; sourceTree = "<group>"; };
+		CFEEED312FAA42B100F03103 /* DocumentEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentEntry.swift; sourceTree = "<group>"; };
+		CFEEED322FAA42B100F03103 /* DocumentInlineStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentInlineStyle.swift; sourceTree = "<group>"; };
+		CFEEED372FAA42CC00F03103 /* DocumentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentsView.swift; sourceTree = "<group>"; };
+		CFEEED392FAA42E500F03103 /* DocumentBlockEditorPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentBlockEditorPage.swift; sourceTree = "<group>"; };
+		CFEEED3A2FAA42E500F03103 /* DocumentBlockEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentBlockEditorView.swift; sourceTree = "<group>"; };
+		CFEEED3B2FAA42E500F03103 /* DocumentBlockPreviewPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentBlockPreviewPage.swift; sourceTree = "<group>"; };
+		CFEEED3C2FAA42E500F03103 /* DocumentBlockRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentBlockRow.swift; sourceTree = "<group>"; };
 		CFF7C5AE2F72EA0800A67EC3 /* Medication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Medication.swift; sourceTree = "<group>"; };
 		CFF7C5B02F72F18900A67EC3 /* MedicationPageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MedicationPageView.swift; sourceTree = "<group>"; };
 		CFF7C5B22F734D7900A67EC3 /* DailyReadingProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyReadingProgress.swift; sourceTree = "<group>"; };
@@ -772,6 +812,14 @@
 			path = Health;
 			sourceTree = "<group>";
 		};
+		CF175FF32FA6801600C58C6C /* Network */ = {
+			isa = PBXGroup;
+			children = (
+				CF175FF62FA6806D00C58C6C /* WellnessWallAIModels.swift */,
+			);
+			path = Network;
+			sourceTree = "<group>";
+		};
 		CF41A58A2F4DF57000C96018 = {
 			isa = PBXGroup;
 			children = (
@@ -881,6 +929,10 @@
 		CF8B7F612F6B33E5006A7D3B /* Helpers */ = {
 			isa = PBXGroup;
 			children = (
+				CFEEED392FAA42E500F03103 /* DocumentBlockEditorPage.swift */,
+				CFEEED3A2FAA42E500F03103 /* DocumentBlockEditorView.swift */,
+				CFEEED3B2FAA42E500F03103 /* DocumentBlockPreviewPage.swift */,
+				CFEEED3C2FAA42E500F03103 /* DocumentBlockRow.swift */,
 				CF175FEF2FA3A16500C58C6C /* TagFlowLayout.swift */,
 				CF29FCA02F718C7B00EC47F8 /* DividerStyle.swift */,
 				CF8B7F782F6B3AD4006A7D3B /* JournalBlockPreviewPage.swift */,
@@ -973,6 +1025,8 @@
 		CF8D830D2F50A4640092FC98 /* Journal */ = {
 			isa = PBXGroup;
 			children = (
+				CFEEED2B2FA81AA900F03103 /* JournalAnalysisOverlay.swift */,
+				CFEEED2C2FA81AA900F03103 /* JournalAnalysisService.swift */,
 				CF0A09D62F5CA79C00401658 /* JournalPromptService.swift */,
 				CF2051412F5788F3006B71AA /* Color+Hex.swift */,
 				CF20513F2F5788C6006B71AA /* JournalBookEditorSheet.swift */,
@@ -1008,6 +1062,7 @@
 		CF8D83122F50A4640092FC98 /* Reminders */ = {
 			isa = PBXGroup;
 			children = (
+				CF175FF12FA552DC00C58C6C /* ReminderHistoryDayView.swift */,
 				CFB0B17D2F87163100B42AB3 /* ReminderTimeBlockView.swift */,
 				CF8421C82F638EA70069F12F /* KanbanView.swift */,
 				CF8D83892F560F700092FC98 /* RemindersView.swift */,
@@ -1052,6 +1107,8 @@
 		CF8D831F2F50A4770092FC98 /* Utilities */ = {
 			isa = PBXGroup;
 			children = (
+				CFEEED272FA7EF1900F03103 /* ReleaseNotesData.swift */,
+				CF175FFA2FA6811A00C58C6C /* WellnessWallSnapshotHasher.swift */,
 				CFC6B1C72F95B54500A60409 /* CalendarEventSyncHelper.swift */,
 				CF822F172F9579AF00CC5B80 /* CalendarEventResolver.swift */,
 				CF822F052F95506000CC5B80 /* ReminderCompute.swift */,
@@ -1079,6 +1136,13 @@
 		CF8D832C2F50A4940092FC98 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				CFEEED2F2FAA42B100F03103 /* DocumentBlock.swift */,
+				CFEEED302FAA42B100F03103 /* DocumentBook.swift */,
+				CFEEED312FAA42B100F03103 /* DocumentEntry.swift */,
+				CFEEED322FAA42B100F03103 /* DocumentInlineStyle.swift */,
+				CFEEED232FA7DEA000F03103 /* ReleaseNote.swift */,
+				CF175FFC2FA7A87100C58C6C /* ReminderHistoryEntry.swift */,
+				CF175FF42FA6804200C58C6C /* WellnessWallAIInsight.swift */,
 				CFC6B1EE2F99AD9900A60409 /* SprintModels.swift */,
 				CFC6B1CF2F99343B00A60409 /* BuddyModels.swift */,
 				CF822EEA2F9268DB00CC5B80 /* ReadingGoalSnapshot.swift */,
@@ -1151,6 +1215,7 @@
 		CF8D833A2F50A60F0092FC98 /* Lystaria */ = {
 			isa = PBXGroup;
 			children = (
+				CF175FF32FA6801600C58C6C /* Network */,
 				CF8B7F612F6B33E5006A7D3B /* Helpers */,
 				CF13B6252F6442AD008D3CE9 /* Entities */,
 				CF13B6222F644205008D3CE9 /* Writers */,
@@ -1179,6 +1244,7 @@
 		CF8D833B2F50B0380092FC98 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				CF175FF82FA680B100C58C6C /* WellnessWallAIService.swift */,
 				CFC6B2022F9A683F00A60409 /* UserProfileService.swift */,
 				CFC6B1F02F99ADCD00A60409 /* SprintService.swift */,
 				CFC6B1D12F99348700A60409 /* BuddyService.swift */,
@@ -1211,6 +1277,7 @@
 		CFB0B1832F8AC13B00B42AB3 /* Info */ = {
 			isa = PBXGroup;
 			children = (
+				CFEEED252FA7DF1700F03103 /* ReleaseNotesView.swift */,
 				CFB0B1842F8AC14100B42AB3 /* InfoTabView.swift */,
 			);
 			path = Info;
@@ -1243,6 +1310,7 @@
 		CFDD11AC2F7F231D0067B262 /* Notes */ = {
 			isa = PBXGroup;
 			children = (
+				CFEEED372FAA42CC00F03103 /* DocumentsView.swift */,
 				CFDD11AD2F7F24010067B262 /* NotesView.swift */,
 			);
 			path = Notes;
@@ -1553,6 +1621,7 @@
 				CF8421A02F607BD80069F12F /* OnboardingPages.swift in Sources */,
 				CF13B6642F69ACBA008D3CE9 /* ExerciseLogEntry.swift in Sources */,
 				CF8421B82F6266380069F12F /* DashboardView.swift in Sources */,
+				CFEEED262FA7DF1D00F03103 /* ReleaseNotesView.swift in Sources */,
 				CFC6B1C82F95B54500A60409 /* CalendarEventSyncHelper.swift in Sources */,
 				CF13B6312F65AE5C008D3CE9 /* CheckInReadingIntent.swift in Sources */,
 				CF8D835C2F5129B10092FC98 /* CalendarTabView.swift in Sources */,
@@ -1584,6 +1653,7 @@
 				CF13B6732F69B636008D3CE9 /* HealthMetricDetailPopupView.swift in Sources */,
 				CF92D5132F746EB400174F04 /* LimitManager.swift in Sources */,
 				CF13B65D2F6864A0008D3CE9 /* DailyHoroscopeRecord.swift in Sources */,
+				CF175FFD2FA7A87100C58C6C /* ReminderHistoryEntry.swift in Sources */,
 				CF2051422F5788F9006B71AA /* Color+Hex.swift in Sources */,
 				CFB0B1722F80B78600B42AB3 /* NotesTab.swift in Sources */,
 				CF8B7F602F6B058E006A7D3B /* BodyStateHealthKitManager.swift in Sources */,
@@ -1601,6 +1671,8 @@
 				CF8421AF2F61CD660069F12F /* WelcomeView.swift in Sources */,
 				CF8D832E2F50A4940092FC98 /* MoodLog.swift in Sources */,
 				CFF7C5B32F734D8000A67EC3 /* DailyReadingProgress.swift in Sources */,
+				CFEEED2D2FA81AA900F03103 /* JournalAnalysisService.swift in Sources */,
+				CFEEED2E2FA81AA900F03103 /* JournalAnalysisOverlay.swift in Sources */,
 				CFB0B1762F832BCE00B42AB3 /* ReadingTimerActivityAttributes.swift in Sources */,
 				CF8421B42F61E7830069F12F /* SettingsView.swift in Sources */,
 				CFF7C5B52F734DA000A67EC3 /* WeeklyReadingSnapshot.swift in Sources */,
@@ -1636,12 +1708,18 @@
 				CF8D83302F50A4940092FC98 /* JournalEntry.swift in Sources */,
 				CF13B6622F69AC9A008D3CE9 /* HealthMetricEntry.swift in Sources */,
 				CF8D83562F5125F80092FC98 /* ContentView.swift in Sources */,
+				CFEEED332FAA42B100F03103 /* DocumentBook.swift in Sources */,
+				CFEEED342FAA42B100F03103 /* DocumentEntry.swift in Sources */,
+				CFEEED352FAA42B100F03103 /* DocumentInlineStyle.swift in Sources */,
+				CFEEED362FAA42B100F03103 /* DocumentBlock.swift in Sources */,
 				CFB0B1802F8944E500B42AB3 /* JournalStats.swift in Sources */,
 				CF29FC9D2F70AC7300EC47F8 /* DailyLenormandRecord.swift in Sources */,
 				CF20513E2F5787DD006B71AA /* JournalBook.swift in Sources */,
 				CF13B6332F65B563008D3CE9 /* DailyIntentionWriter.swift in Sources */,
+				CF175FF52FA6804B00C58C6C /* WellnessWallAIInsight.swift in Sources */,
 				CF8D83522F51256D0092FC98 /* HabitsView.swift in Sources */,
 				CF8D83312F50A4940092FC98 /* AuthUser.swift in Sources */,
+				CF175FF72FA6807400C58C6C /* WellnessWallAIModels.swift in Sources */,
 				CF0B8E632F6CB1C400D5D2C8 /* LogHealthMetricsIntent.swift in Sources */,
 				CF8D83542F5125820092FC98 /* ChecklistsView.swift in Sources */,
 				CF0A09D32F5C987300401658 /* BookRecommendationsService.swift in Sources */,
@@ -1663,14 +1741,21 @@
 				CF13B62D2F644AD3008D3CE9 /* AddWaterIntent.swift in Sources */,
 				CFAF69222F7C6B7800E74833 /* LogReadingSessionIntent.swift in Sources */,
 				CF8D833F2F50D5EE0092FC98 /* AppState.swift in Sources */,
+				CFEEED3D2FAA42E500F03103 /* DocumentBlockEditorPage.swift in Sources */,
+				CFEEED3E2FAA42E500F03103 /* DocumentBlockPreviewPage.swift in Sources */,
+				CFEEED3F2FAA42E500F03103 /* DocumentBlockRow.swift in Sources */,
+				CFEEED402FAA42E500F03103 /* DocumentBlockEditorView.swift in Sources */,
 				CF8B7F772F6B3AC5006A7D3B /* JournalBlockEditorPage.swift in Sources */,
 				CF0A09D72F5CA7A200401658 /* JournalPromptService.swift in Sources */,
 				CF8D83332F50A4940092FC98 /* HabitLog.swift in Sources */,
+				CFEEED382FAA42CC00F03103 /* DocumentsView.swift in Sources */,
 				CF13B63E2F65C73F008D3CE9 /* LocationSearchSheet.swift in Sources */,
 				CF8B7F752F6B3AA6006A7D3B /* JournalCardBlockPreviewSupport.swift in Sources */,
 				CF13B6392F65C064008D3CE9 /* ChecklistItemIntent.swift in Sources */,
 				CFC6B1CE2F965FC700A60409 /* CalendarManageSheet.swift in Sources */,
+				CFEEED282FA7EF2100F03103 /* ReleaseNotesData.swift in Sources */,
 				CF29FC9F2F70AC9300EC47F8 /* Lenormand.swift in Sources */,
+				CFEEED242FA7DEA500F03103 /* ReleaseNote.swift in Sources */,
 				CF8421832F5FBD8B0069F12F /* WaterHealthKitManager.swift in Sources */,
 				CFAF69242F7DDAFB00E74833 /* WaterBottlePlanEntry.swift in Sources */,
 				CF13B66F2F69B54A008D3CE9 /* AddExercisePopupView.swift in Sources */,
@@ -1690,6 +1775,7 @@
 				CF8B7F982F6C507B006A7D3B /* BookmarkWebView.swift in Sources */,
 				CF92D5152F748C2B00174F04 /* PremiumLockModifier.swift in Sources */,
 				CFF7C5AF2F72EA0D00A67EC3 /* Medication.swift in Sources */,
+				CF175FFB2FA6812200C58C6C /* WellnessWallSnapshotHasher.swift in Sources */,
 				CF13B6422F671AA6008D3CE9 /* MoonPhaseCalculator.swift in Sources */,
 				CF8D83342F50A4940092FC98 /* Reminder.swift in Sources */,
 				CF8421BC2F631C090069F12F /* StoredTarot.swift in Sources */,
@@ -1715,11 +1801,13 @@
 				CF8B7F7F2F6B7309006A7D3B /* SelfCarePointsProfile.swift in Sources */,
 				CF6E9D652F8F1C6600140B17 /* BookmarkAssetAndSymbolPicker.swift in Sources */,
 				CF13B6292F6442F5008D3CE9 /* JournalEntryIntent.swift in Sources */,
+				CF175FF22FA552E400C58C6C /* ReminderHistoryDayView.swift in Sources */,
 				CF8B7F9A2F6C5F6D006A7D3B /* BookmarkFolderDetailView.swift in Sources */,
 				CF13B67B2F69B779008D3CE9 /* ExerciseLogCard.swift in Sources */,
 				CFAF691E2F7C6B3600E74833 /* BookEntity.swift in Sources */,
 				CF822F182F9579B700CC5B80 /* CalendarEventResolver.swift in Sources */,
 				CF0A09D12F5C8C7400401658 /* BookSummarySheet.swift in Sources */,
+				CF175FF92FA680B900C58C6C /* WellnessWallAIService.swift in Sources */,
 				CF8B7FB62F6C73AE006A7D3B /* SharedBookmarkInbox.swift in Sources */,
 				CF8B7F792F6B3ADD006A7D3B /* JournalBlockPreviewPage.swift in Sources */,
 				CF822EC42F90605000CC5B80 /* JoinSharedEventView.swift in Sources */,
@@ -2120,6 +2208,8 @@
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Lystaria saves water intake you log so it appears in Apple Health.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Lystaria reads your step count to display your daily movement progress.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Lystaria uses your location to quickly add places to your events.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This is so that we can let you record your note into the note field";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "This is so we are able to transcribe your voice note into text";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -2199,6 +2289,8 @@
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Lystaria saves water intake you log so it appears in Apple Health.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Lystaria reads your step count to display your daily movement progress.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Lystaria uses your location to quickly add places to your events.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This is so that we can let you record your note into the note field";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "This is so we are able to transcribe your voice note into text";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;

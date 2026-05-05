@@ -1011,7 +1011,7 @@ struct HabitCard: View {
                             onShowHistory()
                         }
 
-                        GradientCapsuleButton(title: "Delete", icon: "trashfill") {
+                        GradientCapsuleButton(title: "Delete", icon: "fulltrashfill") {
                             showDeleteConfirm = true
                         }
 
@@ -1071,11 +1071,19 @@ struct HabitCard: View {
 
     private func toggleSkipToday() {
         if let existingSkip = todaysSkip {
-            // Un-skip: remove the skip record; do NOT re-advance the reminder
-            // since it was already advanced when the skip was first applied.
+            // Un-skip: remove the skip record
             modelContext.delete(existingSkip)
             habit.skips = (habit.skips ?? []).filter { $0.persistentModelID != existingSkip.persistentModelID }
             habit.updatedAt = Date()
+
+            // Clear lastSkippedAt on any linked reminder that was skipped today
+            for r in linkedHabitReminders {
+                if let s = r.lastSkippedAt, Calendar.current.isDateInToday(s) {
+                    r.lastSkippedAt = nil
+                    r.skippedTimestampsStorage = "[]"
+                    r.updatedAt = Date()
+                }
+            }
             return
         }
 
@@ -1093,9 +1101,44 @@ struct HabitCard: View {
         }
         habit.updatedAt = Date()
 
-        // Advance any due linked reminder to its next occurrence,
-        // exactly the same way a completed log does.
+        // Advance any due linked reminder to its next occurrence.
         acknowledgeOneDueHabitReminder()
+
+        // Record the skip on the linked reminder so RemindersView counts it
+        // in Total Today and Skipped Today, and log a history entry.
+        let now = Date()
+        for r in linkedHabitReminders {
+            r.lastSkippedAt = now
+
+            // Append to skippedTimestampsStorage
+            let raw = r.skippedTimestampsStorage.trimmingCharacters(in: .whitespacesAndNewlines)
+            var timestamps: [Double] = []
+            if !raw.isEmpty, raw != "[]", let data = raw.data(using: .utf8) {
+                timestamps = (try? JSONDecoder().decode([Double].self, from: data)) ?? []
+            }
+            timestamps = timestamps.filter { Calendar.current.isDateInToday(Date(timeIntervalSince1970: $0)) }
+            timestamps.append(now.timeIntervalSince1970)
+            if let encoded = try? JSONEncoder().encode(timestamps),
+               let str = String(data: encoded, encoding: .utf8) {
+                r.skippedTimestampsStorage = str
+            }
+            r.updatedAt = now
+
+            // Write permanent history entry
+            let entry = ReminderHistoryEntry(
+                reminderPersistentId: String(describing: r.persistentModelID),
+                reminderTitle: r.title,
+                reminderDetails: r.details,
+                reminderScheduleKindRaw: r.schedule?.kind.rawValue ?? "once",
+                reminderTypeRaw: r.reminderTypeRaw,
+                linkedKindRaw: r.linkedKindRaw,
+                occurredAt: now,
+                kind: .skipped
+            )
+            modelContext.insert(entry)
+        }
+
+        try? modelContext.save()
     }
 
     private func acknowledgeOneDueHabitReminder() {
@@ -1242,7 +1285,6 @@ struct HabitCard: View {
                     loggedAt: Date()
                 )
 
-                // If this log corresponds to a linked reminder time, acknowledge/advance it.
                 acknowledgeDueHabitRemindersIfAny()
             }
             return
@@ -1259,8 +1301,18 @@ struct HabitCard: View {
             loggedAt: Date()
         )
 
-        // If this first log corresponds to a linked reminder time, acknowledge/advance it.
         acknowledgeDueHabitRemindersIfAny()
+    }
+
+    /// Cancels all pending notifications for linked reminders that are still
+    /// scheduled for today. Called when the day is fully skipped or the daily
+    /// goal is met early so no further reminders fire today.
+    private func cancelAllTodayLinkedReminders() {
+        let now = Date()
+        for r in linkedHabitReminders {
+            guard Calendar.current.isDate(r.nextRunAt, inSameDayAs: now) else { continue }
+            NotificationManager.shared.cancelReminder(r)
+        }
     }
 
     private func deleteHabit() {

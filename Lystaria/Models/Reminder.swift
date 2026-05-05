@@ -163,6 +163,9 @@ final class LystariaReminder {
     // JSON array of ISO8601 timestamps for each completion today.
     // Cleared automatically when the date rolls over.
     var completionTimestampsStorage: String = "[]"
+    // JSON array of TimeInterval timestamps for each skip today.
+    var skippedTimestampsStorage: String = "[]"
+    var lastSkippedAt: Date?
     var pendingNextRunAt: Date?
     
     var runDayKey: String?          // "2026-02-05"
@@ -281,6 +284,9 @@ final class LystariaReminder {
     
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
+    // Stable UUID string used as the base for notification identifiers.
+    // Never changes after creation — unlike persistentModelID which varies per session.
+    var notificationID: String = UUID().uuidString
 
     // MARK: - Kanban
     var kanbanColumn: KanbanColumn?

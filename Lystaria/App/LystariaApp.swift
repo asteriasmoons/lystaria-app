@@ -43,6 +43,11 @@ struct LystariaApp: App {
             AuthUser.self,
             Note.self,
             NotesTab.self,
+            DocumentBook.self,
+            DocumentEntry.self,
+            DocumentBlock.self,
+            DocumentInlineStyle.self,
+            ReleaseNote.self,
             DistractionBubble.self,
             CalendarEvent.self,
             Habit.self,
@@ -77,6 +82,7 @@ struct LystariaApp: App {
             JournalPromptUsage.self,
             JournalStats.self,
             LystariaReminder.self,
+            ReminderHistoryEntry.self,
             UserSettings.self,
             SelfCarePointEntry.self,
             SelfCarePointsResetLog.self,
@@ -89,6 +95,7 @@ struct LystariaApp: App {
             DailyTarotRecord.self,
             DailyLenormandRecord.self,
             DailyHoroscopeRecord.self,
+            WellnessWallAIInsight.self,
         ])
 
         let modelConfiguration = ModelConfiguration(
@@ -122,6 +129,7 @@ struct LystariaApp: App {
                 WatchSessionManager.shared.activate()
 
                     appState.bootstrap(modelContext: sharedModelContainer.mainContext)
+                    seedReleaseNotesIfNeeded(modelContext: sharedModelContainer.mainContext)
                     SharedBookmarkImportManager.importPendingBookmark(modelContext: sharedModelContainer.mainContext)
                     SharedFolderExportManager.exportFolders(modelContext: sharedModelContainer.mainContext)
 
@@ -172,6 +180,58 @@ struct LystariaApp: App {
                 #endif
         }
         .modelContainer(sharedModelContainer)
+    }
+
+    // ─────────────────────────────────────────────
+    // MARK: - Release Notes Seeding
+    // ─────────────────────────────────────────────
+
+    private func seedReleaseNotesIfNeeded(modelContext: ModelContext) {
+        let descriptor = FetchDescriptor<ReleaseNote>()
+        let existingNotes = (try? modelContext.fetch(descriptor)) ?? []
+        let existingIDs = Set(existingNotes.map(\.id))
+
+        for seed in ReleaseNotesData.notes where existingIDs.contains(seed.id) == false {
+            let note = ReleaseNote(
+                id: seed.id,
+                version: seed.version,
+                dateText: seed.dateText,
+                title: seed.title,
+                items: seed.items,
+                createdAt: Date(),
+                isPublished: true,
+                sortOrder: seed.sortOrder
+            )
+
+            modelContext.insert(note)
+        }
+
+        var notesByID = Dictionary(grouping: existingNotes, by: { $0.id })
+
+        for (_, duplicates) in notesByID where duplicates.count > 1 {
+            let keeper = duplicates.sorted { lhs, rhs in
+                if lhs.hasBeenSeen != rhs.hasBeenSeen {
+                    return lhs.hasBeenSeen && !rhs.hasBeenSeen
+                }
+
+                if lhs.sortOrder != rhs.sortOrder {
+                    return lhs.sortOrder > rhs.sortOrder
+                }
+
+                return lhs.createdAt > rhs.createdAt
+            }.first
+
+            for duplicate in duplicates where duplicate !== keeper {
+                modelContext.delete(duplicate)
+            }
+        }
+
+        do {
+            try modelContext.save()
+            print("🌱 Synced release notes")
+        } catch {
+            print("❌ Failed to sync release notes:", error)
+        }
     }
 
     // ─────────────────────────────────────────────
@@ -293,7 +353,7 @@ struct LystariaApp: App {
         let descriptor = FetchDescriptor<LystariaReminder>()
         guard let reminders = try? context.fetch(descriptor) else { return }
         guard let reminder = reminders.first(where: {
-            String(describing: $0.persistentModelID) == reminderID
+            $0.notificationID == reminderID
         }) else {
             print("⚠️ Could not find reminder for id: \(reminderID)")
             return

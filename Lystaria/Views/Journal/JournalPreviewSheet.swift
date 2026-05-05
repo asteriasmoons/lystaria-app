@@ -56,10 +56,13 @@ struct JournalPreviewSheet: View {
                         TagFlowLayout(spacing: 8) {
                             ForEach(entry.tags, id: \.self) { tag in
                                 HStack(spacing: 6) {
-                                    Image(systemName: "tag.fill")
-                                        .font(.system(size: 10, weight: .bold))
+                                    Image("tagsparkle")
+                                        .renderingMode(.template)
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: 14, height: 14)
                                     Text(tag)
-                                        .font(.system(size: 12, weight: .semibold))
+                                        .font(.system(size: 13, weight: .semibold))
                                 }
                                 .foregroundStyle(LColors.textPrimary)
                                 .padding(.horizontal, 10)
@@ -93,7 +96,7 @@ struct JournalPreviewSheet: View {
                             onEdit(entry)
                         }
 
-                        GradientCapsuleButton(title: "Delete", icon: "trashfill") {
+                        GradientCapsuleButton(title: "Delete", icon: "fulltrashfill") {
                             onDelete(entry)
                         }
 

@@ -1053,7 +1053,7 @@ private struct MoodLogCard: View {
                             onDelete()
                         } label: {
                             HStack(spacing: 8) {
-                                Image("trashfill")
+                                Image("fulltrashfill")
                                     .renderingMode(.template)
                                     .resizable()
                                     .scaledToFit()

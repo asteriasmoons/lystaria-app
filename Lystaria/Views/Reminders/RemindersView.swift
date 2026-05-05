@@ -19,6 +19,7 @@ struct RemindersView: View {
     @State private var visibleCount: Int = 5
     @State private var showKanban = false
     @State private var showTimeBlock = false
+    @State private var showHistory = false
 
     /// Onboarding
     @StateObject private var onboarding = OnboardingManager()
@@ -66,7 +67,7 @@ struct RemindersView: View {
             return cal.isDate(reminder.nextRunAt, inSameDayAs: date) ? 1 : 0
 
         case .interval:
-            guard cal.isDate(reminder.nextRunAt, inSameDayAs: date) || isCompletedToday(reminder) else { return 0 }
+            guard cal.isDate(reminder.nextRunAt, inSameDayAs: date) || isCompletedToday(reminder) || isSkippedToday(reminder) else { return 0 }
 
             guard reminder.linkedKind == .habit,
                   let habitId = reminder.linkedHabitId,
@@ -97,7 +98,7 @@ struct RemindersView: View {
         case .daily, .weekly, .monthly, .yearly:
             // Only count if nextRunAt is today OR the reminder was completed today
             // (meaning it fired today and nextRunAt has since advanced).
-            let firesOrFiredToday = cal.isDate(reminder.nextRunAt, inSameDayAs: date) || isCompletedToday(reminder)
+            let firesOrFiredToday = cal.isDate(reminder.nextRunAt, inSameDayAs: date) || isCompletedToday(reminder) || isSkippedToday(reminder)
             guard firesOrFiredToday else { return 0 }
 
             let times = (schedule.timesOfDay?.isEmpty == false)
@@ -111,6 +112,17 @@ struct RemindersView: View {
 
     private var totalRemindersCount: Int {
         allReminders.count
+    }
+
+    private var skippedTodayCount: Int {
+        let cal = Calendar.current
+        return allReminders
+            .filter { $0.status != .deleted }
+            .filter {
+                guard let skippedAt = $0.lastSkippedAt else { return false }
+                return cal.isDateInToday(skippedAt)
+            }
+            .count
     }
 
     private var upcomingTodayCount: Int {
@@ -191,23 +203,64 @@ struct RemindersView: View {
             .reduce(0) { sum, reminder in
                 // Primary: timestamp array populated by incrementCompletionsToday
                 let timestamps = decodeCompletionTimestamps(reminder)
-                let todayCount = timestamps.filter { cal.isDateInToday($0) }.count
-                if todayCount > 0 { return sum + todayCount }
+                let todayTimestamps = timestamps.filter { cal.isDateInToday($0) }
 
-                // Fallback: completed before new tracking existed.
-                // Only count if lastCompletedAt is today AND nextRunAt is also today
-                // (or reminder is one-time and was just completed).
-                // This prevents overdue-from-yesterday completions from counting.
+                // For interval/habit reminders the timestamp array may be
+                // under-counted if previous completions were written before
+                // the multi-format decoder was in place. Reconcile by using
+                // the maximum of: stored timestamp count vs inferred count
+                // from (totalFiresToday - remainingFiresToday).
+                if reminder.schedule?.kind == .interval {
+                    let total = fireTimesToday(reminder)
+                    // remaining = upcoming fire slots still in the future today
+                    let remaining: Int = {
+                        guard let schedule = reminder.schedule,
+                              reminder.linkedKind == .habit,
+                              let habitId = reminder.linkedHabitId,
+                              let habit = habits.first(where: { $0.id == habitId }),
+                              let (startH, startM) = ReminderCompute.parseHHMM(habit.reminderIntervalWindowStart),
+                              let (endH, endM) = ReminderCompute.parseHHMM(habit.reminderIntervalWindowEnd)
+                        else {
+                            // Non-habit interval: done if nextRunAt moved past today
+                            return cal.isDateInToday(reminder.nextRunAt) ? 1 : 0
+                        }
+                        _ = schedule
+                        let intervalMinutes: Int
+                        if habit.reminderKind == .everyXHours {
+                            intervalMinutes = max(1, habit.reminderIntervalHours) * 60
+                        } else if habit.reminderKind == .everyXMinutes {
+                            intervalMinutes = max(1, habit.reminderIntervalMinutes)
+                        } else {
+                            return 0
+                        }
+                        let now = Date()
+                        let nextHH = cal.component(.hour, from: reminder.nextRunAt)
+                        let nextMM = cal.component(.minute, from: reminder.nextRunAt)
+                        let nextTotal = nextHH * 60 + nextMM
+                        let endTotal = endH * 60 + endM
+                        let startTotal = startH * 60 + startM
+                        // If nextRunAt is past the window or past today, nothing remaining
+                        guard cal.isDateInToday(reminder.nextRunAt),
+                              nextTotal <= endTotal,
+                              nextTotal >= startTotal
+                        else { return 0 }
+                        // Count remaining slots from nextRunAt to end of window
+                        let remaining = ((endTotal - nextTotal) / intervalMinutes) + 1
+                        // If nextRunAt is in the future, all remaining slots are upcoming
+                        // If nextRunAt is in the past (due now), subtract 1 (the due-now slot)
+                        let isDueNowOrPast = reminder.nextRunAt <= now
+                        return isDueNowOrPast ? max(0, remaining - 1) : remaining
+                    }()
+                    let inferred = max(0, total - remaining)
+                    return sum + max(todayTimestamps.count, inferred)
+                }
+
+                if todayTimestamps.count > 0 { return sum + todayTimestamps.count }
+
+                // Fallback for one-time reminders with no timestamp storage
                 guard let completedAt = reminder.lastCompletedAt,
                       cal.isDateInToday(completedAt) else { return sum }
-
-                // For recurring reminders: nextRunAt has advanced past today's occurrence.
-                // We can't recover the original occurrence date, so skip the fallback
-                // for recurring reminders entirely — the new timestamp system handles
-                // these going forward.
                 if reminder.isRecurring { return sum }
-
-                // One-time reminders: safe to count via lastCompletedAt
                 return sum + 1
             }
     }
@@ -215,6 +268,11 @@ struct RemindersView: View {
     private func isCompletedToday(_ reminder: LystariaReminder) -> Bool {
         guard let completedAt = reminder.lastCompletedAt else { return false }
         return Calendar.current.isDateInToday(completedAt)
+    }
+
+    private func isSkippedToday(_ reminder: LystariaReminder) -> Bool {
+        guard let skippedAt = reminder.lastSkippedAt else { return false }
+        return Calendar.current.isDateInToday(skippedAt)
     }
 
     var body: some View {
@@ -229,33 +287,18 @@ struct RemindersView: View {
                         .zIndex(100)
                 }
 
-                // Floating action button
-                VStack {
-                    Spacer()
-                    HStack {
-                        Spacer()
-                        Button {
-                            let decision = limits.canCreate(.remindersTotal, currentCount: allReminders.count)
-                            guard decision.allowed else { return }
-                            showNewReminder = true
-                        } label: {
-                            ZStack {
-                                Circle()
-                                    .fill(LGradients.blue)
-                                    .frame(width: 56, height: 56)
-                                    .shadow(color: LColors.accent.opacity(0.4), radius: 12, y: 4)
-                                Image(systemName: "plus")
-                                    .font(.system(size: 22, weight: .bold))
-                                    .foregroundStyle(.white)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                        .padding(.trailing, 24)
-                        .padding(.bottom, 100)
-                    }
+                
+            }
+            // Floating Action Button
+            .overlay(alignment: .bottomTrailing) {
+                FloatingActionButton {
+                    let decision = limits.canCreate(.remindersTotal, currentCount: allReminders.count)
+                    guard decision.allowed else { return }
+                    showNewReminder = true
                 }
-                .zIndex(50)
-                .ignoresSafeArea(edges: .bottom)
+                .padding(.trailing, 26)
+                .padding(.bottom, 26)
+                .zIndex(10000)
             }
             .animation(.spring(response: 0.4, dampingFraction: 0.8), value: toastMessage)
             .overlayPreferenceValue(OnboardingTargetKey.self) { anchors in
@@ -285,6 +328,11 @@ struct RemindersView: View {
             .navigationDestination(isPresented: $showKanban) {
                 KanbanView()
                     .preferredColorScheme(.dark)
+            }
+            .navigationDestination(isPresented: $showHistory) {
+                ReminderHistoryDayView(day: Date())
+                    .preferredColorScheme(.dark)
+                    .navigationBarBackButtonHidden(true)
             }
             .navigationDestination(isPresented: $showTimeBlock) {
                 ReminderTimeBlockView(onMarkDone: { reminder in
@@ -353,6 +401,27 @@ struct RemindersView: View {
                 Spacer()
 
                 HStack(spacing: 8) {
+                    Button {
+                        showHistory = true
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.08))
+                                .overlay(
+                                    Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                                )
+                                .frame(width: 34, height: 34)
+
+                            Image("historybook")
+                                .renderingMode(.template)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 18, height: 18)
+                                .foregroundColor(.white)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    
                     Button {
                         showTimeBlock = true
                     } label: {
@@ -469,7 +538,7 @@ struct RemindersView: View {
                     OverviewStatCard(value: upcomingTodayCount, label: "Upcoming Today")
                     OverviewStatCard(value: doneTodayCount, label: "Done Today")
                     OverviewStatCard(value: totalTodayCount, label: "Total Today")
-                    OverviewStatCard(value: totalRemindersCount, label: "Total Reminders")
+                    OverviewStatCard(value: skippedTodayCount, label: "Skipped Today")
                 }
             }
         }
@@ -495,6 +564,11 @@ struct RemindersView: View {
                         onDone: {
                             if let live = modelContext.model(for: id) as? LystariaReminder {
                                 markDone(live)
+                            }
+                        },
+                        onSkip: {
+                            if let live = modelContext.model(for: id) as? LystariaReminder {
+                                markSkipped(live)
                             }
                         },
                         onSnooze: {
@@ -733,9 +807,21 @@ struct RemindersView: View {
     }
 
     private func decodeCompletionTimestamps(_ reminder: LystariaReminder) -> [Date] {
-        guard let data = reminder.completionTimestampsStorage.data(using: .utf8),
-              let intervals = try? JSONDecoder().decode([Double].self, from: data) else { return [] }
-        return intervals.map { Date(timeIntervalSince1970: $0) }
+        let raw = reminder.completionTimestampsStorage.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty, raw != "[]", let data = raw.data(using: .utf8) else { return [] }
+        if let values = try? JSONDecoder().decode([Double].self, from: data) {
+            return values.map { Date(timeIntervalSince1970: $0) }
+        }
+        if let values = try? JSONDecoder().decode([TimeInterval].self, from: data) {
+            return values.map { Date(timeIntervalSince1970: $0) }
+        }
+        if let values = try? JSONDecoder().decode([String].self, from: data) {
+            return values.compactMap { v in
+                if let t = TimeInterval(v) { return Date(timeIntervalSince1970: t) }
+                return ISO8601DateFormatter().date(from: v)
+            }
+        }
+        return []
     }
 
     private func encodeCompletionTimestamps(_ dates: [Date]) -> String {
@@ -885,6 +971,7 @@ struct RemindersView: View {
             awardPointsForReminderCompletion(reminder, occurrenceDate: completedOccurrenceDate)
 
             print("[RemindersView] markDone recurring -> nextRunAt=\(reminder.nextRunAt)")
+            print("[RemindersView] markDone -> about to schedule with nextRunAt=\(reminder.nextRunAt) notificationID=\(reminder.notificationID)")
             NotificationManager.shared.cancelReminder(reminder)
             NotificationManager.shared.scheduleReminder(reminder)
 
@@ -908,8 +995,108 @@ struct RemindersView: View {
 
             showToast("\(reminder.title) marked complete")
         }
+        appendHistoryEntry(reminder: reminder, occurredAt: Date(), kind: .completed)
     }
-    
+
+    private func markSkipped(_ reminder: LystariaReminder) {
+        let skippedOccurrenceDate = reminder.nextRunAt
+
+        if reminder.isRecurring {
+            let now = Date()
+            let base = max(now, reminder.nextRunAt)
+
+            let intervalWindowStart: String? = {
+                guard reminder.linkedKind == .habit,
+                      let habitId = reminder.linkedHabitId else { return nil }
+                return habits.first(where: { $0.id == habitId })?.reminderIntervalWindowStart
+            }()
+
+            let intervalWindowEnd: String? = {
+                guard reminder.linkedKind == .habit,
+                      let habitId = reminder.linkedHabitId else { return nil }
+                return habits.first(where: { $0.id == habitId })?.reminderIntervalWindowEnd
+            }()
+
+            if reminder.schedule?.kind == .interval,
+               let intervalMinutes = reminder.schedule?.intervalMinutes
+            {
+                let windowStart = (intervalWindowStart?.isEmpty == false) ? intervalWindowStart! : "00:00"
+                let windowEnd = (intervalWindowEnd?.isEmpty == false) ? intervalWindowEnd! : "23:59"
+                reminder.nextRunAt = nextAnchoredIntervalRun(
+                    afterCompletedOccurrence: skippedOccurrenceDate,
+                    now: now,
+                    intervalMinutes: max(1, intervalMinutes),
+                    windowStart: windowStart,
+                    windowEnd: windowEnd
+                )
+            } else {
+                reminder.nextRunAt = ReminderCompute.nextRun(
+                    after: base.addingTimeInterval(91),
+                    reminder: reminder,
+                    intervalWindowStart: intervalWindowStart,
+                    intervalWindowEnd: intervalWindowEnd
+                )
+            }
+
+            reminder.acknowledgedAt = nil
+            if reminder.reminderType == .routine {
+                reminder.resetRoutineChecklist(for: "\(reminder.nextRunAt.timeIntervalSince1970)")
+            }
+        } else {
+            // One-time: mark acknowledged so the card no longer shows as active,
+            // but do NOT set lastCompletedAt so doneTodayCount is unaffected.
+            reminder.acknowledgedAt = Date()
+            reminder.status = .sent
+        }
+
+        reminder.lastSkippedAt = Date()
+        incrementSkipsToday(reminder, occurrenceDate: skippedOccurrenceDate)
+        reminder.updatedAt = Date()
+        try? modelContext.save()
+
+        NotificationManager.shared.cancelReminder(reminder)
+        if reminder.isRecurring {
+            NotificationManager.shared.scheduleReminder(reminder)
+        }
+
+        showToast("\(reminder.title) skipped")
+        appendHistoryEntry(reminder: reminder, occurredAt: Date(), kind: .skipped)
+    }
+
+    private func appendHistoryEntry(reminder: LystariaReminder, occurredAt: Date, kind: ReminderHistoryEventKind) {
+        let pid = String(describing: reminder.persistentModelID)
+        let entry = ReminderHistoryEntry(
+            reminderPersistentId: pid,
+            reminderTitle: reminder.title,
+            reminderDetails: reminder.details,
+            reminderScheduleKindRaw: reminder.schedule?.kind.rawValue ?? "once",
+            reminderTypeRaw: reminder.reminderTypeRaw,
+            linkedKindRaw: reminder.linkedKindRaw,
+            occurredAt: occurredAt,
+            kind: kind
+        )
+        modelContext.insert(entry)
+        try? modelContext.save()
+    }
+
+    private func incrementSkipsToday(_ reminder: LystariaReminder, occurrenceDate: Date) {
+        let cal = Calendar.current
+        guard cal.isDateInToday(occurrenceDate) else { return }
+        var timestamps = decodeSkipTimestamps(reminder)
+        timestamps = timestamps.filter { cal.isDateInToday($0) }
+        timestamps.append(occurrenceDate)
+        reminder.skippedTimestampsStorage = encodeCompletionTimestamps(timestamps)
+    }
+
+    private func decodeSkipTimestamps(_ reminder: LystariaReminder) -> [Date] {
+        let raw = reminder.skippedTimestampsStorage.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty, raw != "[]", let data = raw.data(using: .utf8) else { return [] }
+        if let values = try? JSONDecoder().decode([Double].self, from: data) {
+            return values.map { Date(timeIntervalSince1970: $0) }
+        }
+        return []
+    }
+
     private func markDoneFromTimeBlock(_ reminder: LystariaReminder) {
         logHabitProgressFromReminder(reminder, in: modelContext)
         logMedicationIfLinked(reminder)
@@ -1034,9 +1221,10 @@ struct RemindersView: View {
                 if !reminder.isRecurring, let a = reminder.acknowledgedAt, cal.isDate(a, inSameDayAs: dueDate) { return true }
                 return false
             }()
-            let overdue = dueDate < todayStart && !completed
-            let dueNow = !overdue && !completed && dueDate >= todayStart && dueDate <= now
-            let upcoming = !overdue && !completed && dueDate > now
+            let skipped = isReminderSkipped(reminder)
+            let overdue = !skipped && dueDate < todayStart && !completed
+            let dueNow = !skipped && !overdue && !completed && dueDate >= todayStart && dueDate <= now
+            let upcoming = !skipped && !overdue && !completed && dueDate > now
 
             let schedLabel: String = {
                 guard let s = reminder.schedule else { return "Once" }
@@ -1131,9 +1319,11 @@ struct RemindersView: View {
                     }
 
                     // Badges row 2: status
-                    if overdue || dueNow || upcoming {
+                    if skipped || overdue || dueNow || upcoming {
                         HStack(spacing: 6) {
-                            if overdue {
+                            if skipped {
+                                LBadge(text: "SKIPPED", color: Color(red: 0.36, green: 0.28, blue: 0.90).opacity(0.72))
+                            } else if overdue {
                                 LBadge(text: "OVERDUE", color: Color.red.opacity(0.42))
                             } else if dueNow {
                                 LBadge(text: "DUE NOW", color: LColors.accent.opacity(0.48))
@@ -1145,20 +1335,20 @@ struct RemindersView: View {
 
                     // Time pills
                     if !scheduledTimes.isEmpty {
-                        LazyVGrid(
-                            columns: [GridItem(.adaptive(minimum: 64), spacing: 4)],
-                            alignment: .leading,
-                            spacing: 4,
-                        ) {
-                            ForEach(scheduledTimes, id: \.self) { t in
-                                Text(t)
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(Color.white.opacity(0.14))
-                                    .clipShape(Capsule())
-                                    .overlay(Capsule().stroke(Color.white.opacity(0.18), lineWidth: 1))
+                        VStack(alignment: .leading, spacing: 4) {
+                            ForEach(Array(stride(from: 0, to: scheduledTimes.count, by: 4)), id: \.self) { rowStart in
+                                HStack(spacing: 4) {
+                                    ForEach(rowStart..<min(rowStart + 4, scheduledTimes.count), id: \.self) { i in
+                                        Text(scheduledTimes[i])
+                                            .font(.system(size: 11, weight: .semibold))
+                                            .foregroundStyle(.white)
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 6)
+                                            .background(Color.white.opacity(0.14))
+                                            .clipShape(Capsule())
+                                            .overlay(Capsule().stroke(Color.white.opacity(0.18), lineWidth: 1))
+                                    }
+                                }
                             }
                         }
                     }
@@ -1312,6 +1502,7 @@ struct ReminderCard: View {
     @State private var showingSnoozePopup = false
     @State private var snoozeMinutesText = "10"
     let onDone: () -> Void
+    let onSkip: () -> Void
     let onSnooze: (Int) -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
@@ -1401,6 +1592,21 @@ struct ReminderCard: View {
         return false
     }
 
+    private var isSkipped: Bool {
+        // The current occurrence is skipped if lastSkippedAt matches nextRunAt closely.
+        // This allows a second firing on the same day to still be skippable.
+        guard let skippedAt = reminder.lastSkippedAt,
+              Calendar.current.isDateInToday(skippedAt) else { return false }
+        if let completedAt = reminder.lastCompletedAt,
+           Calendar.current.isDateInToday(completedAt) { return false }
+        // For recurring reminders with multiple fire times, only treat as skipped
+        // if the skip timestamp is within 90s of the current nextRunAt.
+        if reminder.isRecurring {
+            return abs(skippedAt.timeIntervalSince(reminder.nextRunAt)) <= 90
+        }
+        return true
+    }
+
     private var displayTimeZone: TimeZone {
         TimeZone(identifier: NotificationManager.shared.effectiveTimezoneID) ?? .current
     }
@@ -1488,6 +1694,41 @@ struct ReminderCard: View {
         }
     }
 
+    private var scheduledTimeDates: [Date] {
+        guard let schedule = reminder.schedule else { return [] }
+
+        if schedule.kind == .interval {
+            guard let iv = schedule.intervalMinutes, iv > 0,
+                  let habit = linkedHabit,
+                  !habit.reminderIntervalWindowStart.isEmpty,
+                  !habit.reminderIntervalWindowEnd.isEmpty,
+                  let (wsH, wsM) = ReminderCompute.parseHHMM(habit.reminderIntervalWindowStart),
+                  let (weH, weM) = ReminderCompute.parseHHMM(habit.reminderIntervalWindowEnd)
+            else { return [] }
+            let startTotal = wsH * 60 + wsM
+            let endTotal   = weH * 60 + weM
+            guard endTotal >= startTotal else { return [] }
+            let day = Date()
+            var dates: [Date] = []
+            var cursor = startTotal
+            while cursor <= endTotal {
+                dates.append(ReminderCompute.merge(day: day, hour: cursor / 60, minute: cursor % 60, in: displayTimeZone))
+                cursor += iv
+            }
+            return dates
+        }
+
+        let raw = (schedule.timesOfDay?.isEmpty == false)
+            ? (schedule.timesOfDay ?? [])
+            : (schedule.timeOfDay != nil ? [schedule.timeOfDay!] : [])
+        let parsed = raw.compactMap { s -> (hh: Int, mm: Int)? in
+            guard let (hh, mm) = ReminderCompute.parseHHMM(s) else { return nil }
+            return (hh: hh, mm: mm)
+        }.sorted { ($0.hh, $0.mm) < ($1.hh, $1.mm) }
+        let day = Date()
+        return parsed.map { ReminderCompute.merge(day: day, hour: $0.hh, minute: $0.mm, in: displayTimeZone) }
+    }
+
     private var checklistItems: [String] {
         reminder.checklistItems
     }
@@ -1497,21 +1738,37 @@ struct ReminderCard: View {
         showingReschedulePopup = true
     }
 
+    private var skippedSlotDates: [Date] {
+        let raw = reminder.skippedTimestampsStorage.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty, raw != "[]", let data = raw.data(using: .utf8),
+              let values = try? JSONDecoder().decode([Double].self, from: data) else { return [] }
+        return values.map { Date(timeIntervalSince1970: $0) }
+    }
+
+    private func isSlotSkipped(_ slotDate: Date) -> Bool {
+        // Only apply skip coloring if this reminder's current occurrence is today
+        guard Calendar.current.isDateInToday(reminder.nextRunAt) else { return false }
+        return skippedSlotDates.contains { abs($0.timeIntervalSince(slotDate)) <= 90 }
+    }
+
     @ViewBuilder
     private func timePillsView() -> some View {
         if !scheduledTimes.isEmpty {
+            let slotDates = scheduledTimeDates
             VStack(alignment: .leading, spacing: 3) {
                 ForEach(Array(stride(from: 0, to: scheduledTimes.count, by: 3)), id: \.self) { rowStart in
                     HStack(spacing: 3) {
                         ForEach(rowStart..<min(rowStart + 3, scheduledTimes.count), id: \.self) { i in
+                            let skipped = i < slotDates.count && isSlotSkipped(slotDates[i])
+                            let skipColor = Color(red: 0.36, green: 0.28, blue: 0.90)
                             Text(scheduledTimes[i])
                                 .font(.system(size: 10, weight: .semibold))
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 5)
-                                .background(Color.white.opacity(0.14))
+                                .background(skipped ? skipColor.opacity(0.55) : Color.white.opacity(0.14))
                                 .clipShape(Capsule())
-                                .overlay(Capsule().stroke(Color.white.opacity(0.18), lineWidth: 1))
+                                .overlay(Capsule().stroke(skipped ? skipColor.opacity(0.8) : Color.white.opacity(0.18), lineWidth: 1))
                         }
                     }
                 }
@@ -1888,6 +2145,13 @@ struct ReminderCard: View {
                                     Spacer(minLength: 0)
                                 }
                             }
+
+                            if isSkipped {
+                                HStack(spacing: 6) {
+                                    LBadge(text: "SKIPPED", color: Color(red: 0.36, green: 0.28, blue: 0.90).opacity(0.72))
+                                    Spacer(minLength: 0)
+                                }
+                            }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -1933,7 +2197,16 @@ struct ReminderCard: View {
 
                         HStack(spacing: 10) {
                             LButton(title: "Edit", icon: "pencil", style: .secondary) { onEdit() }
-                            GradientCapsuleButton(title: "Delete", icon: "trashfill") {
+                            let skipDisabled = isSkipped || reminder.linkedKindRaw == "habit" || reminder.linkedKindRaw == "event"
+                            LButton(
+                                title: isSkipped ? "Skipped" : "Skip",
+                                icon: isSkipped ? "slash.circle" : "forward.end",
+                                style: .secondary
+                            ) {
+                                if !skipDisabled { onSkip() }
+                            }
+                            .disabled(skipDisabled)
+                            GradientCapsuleButton(title: "Delete", icon: "fulltrashfill") {
                                 showingDeleteConfirm = true
                             }
                         }
@@ -3994,6 +4267,22 @@ private func isReminderCompleted(_ reminder: LystariaReminder, occurrenceDate: D
     }
 
     return false
+}
+
+private func isReminderSkipped(_ reminder: LystariaReminder) -> Bool {
+    let cal = ReminderCompute.tzCalendar
+    let fireDate = reminder.nextRunAt
+
+    if isReminderCompleted(reminder, occurrenceDate: fireDate) { return false }
+
+    guard let skippedAt = reminder.lastSkippedAt,
+          cal.isDate(skippedAt, inSameDayAs: fireDate) else { return false }
+
+    if reminder.isRecurring {
+        return abs(skippedAt.timeIntervalSince(fireDate)) <= 90
+    }
+
+    return true
 }
 
 /// Returns true when the reminder belongs to a previous calendar day and still is not completed.

@@ -40,7 +40,8 @@ struct MedicationPageView: View {
     @State private var selectedHistoryEntry: MedicationHistoryEntry? = nil
     @State private var showDeleteHistoryConfirm = false
     @State private var showInventoryAdjustPopup = false
-    @State private var inventoryStepAmount = 1
+    @State private var inventoryDecreaseAmount = 1
+    @State private var inventoryIncreaseAmount = 1
 
     var body: some View {
         ZStack {
@@ -400,7 +401,32 @@ struct MedicationPageView: View {
                                 )
                                 .frame(width: 34, height: 34)
 
-                            Image("trashfill")
+                            Image("fulltrashfill")
+                                .renderingMode(.template)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 16, height: 16)
+                                .foregroundStyle(.white)
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        selectedMedication = med
+                        inventoryDecreaseAmount = 1
+                        inventoryIncreaseAmount = 1
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                            showInventoryAdjustPopup = true
+                        }
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.08))
+                                .overlay(
+                                    Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                                )
+                                .frame(width: 34, height: 34)
+                            Image("wavyplus")
                                 .renderingMode(.template)
                                 .resizable()
                                 .scaledToFit()
@@ -410,14 +436,6 @@ struct MedicationPageView: View {
                     }
                     .buttonStyle(.plain)
                 }
-            }
-        }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            selectedMedication = med
-            inventoryStepAmount = 1
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                showInventoryAdjustPopup = true
             }
         }
     }
@@ -744,6 +762,7 @@ struct MedicationPageView: View {
             medication: medication
         )
         modelContext.insert(historyEntry)
+        try? modelContext.save()
     }
 
     private func fillSelectedMedicationToSupply() {
@@ -1030,12 +1049,44 @@ struct MedicationPageView: View {
     }
 
     private var inventoryAdjustPopup: some View {
+        Group {
+            if let medication = selectedMedication {
+                InventoryAdjustPopup(
+                    medication: medication,
+                    decreaseAmount: $inventoryDecreaseAmount,
+                    increaseAmount: $inventoryIncreaseAmount,
+                    onDecrement: { adjustSelectedMedicationInventory(by: -1) },
+                    onIncrement: { adjustSelectedMedicationInventory(by: 1) },
+                    onApplyDecrease: { adjustSelectedMedicationInventory(by: -inventoryDecreaseAmount) },
+                    onApplyIncrease: { adjustSelectedMedicationInventory(by: inventoryIncreaseAmount) },
+                    onSetFull: { fillSelectedMedicationToSupply() },
+                    onClose: {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                            showInventoryAdjustPopup = false
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
+// MARK: - Inventory Adjust Popup
+
+private struct InventoryAdjustPopup: View {
+    let medication: Medication
+    @Binding var decreaseAmount: Int
+    @Binding var increaseAmount: Int
+    let onDecrement: () -> Void
+    let onIncrement: () -> Void
+    let onApplyDecrease: () -> Void
+    let onApplyIncrease: () -> Void
+    let onSetFull: () -> Void
+    let onClose: () -> Void
+
+    var body: some View {
         LystariaOverlayPopup(
-            onClose: {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                    showInventoryAdjustPopup = false
-                }
-            },
+            onClose: onClose,
             width: 560,
             heightRatio: 0.72,
             header: {
@@ -1043,48 +1094,48 @@ struct MedicationPageView: View {
             },
             content: {
                 VStack(alignment: .leading, spacing: 16) {
-                    if let medication = selectedMedication {
-                        detailRow(icon: "heartsum", title: "Medication", value: medication.name)
-                        detailRow(icon: "hashtag", title: "Current Inventory", value: "\(medication.currentAmount)")
-                        detailRow(icon: "handpill", title: "Supply Amount", value: "\(medication.supplyAmount)")
 
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("STEP AMOUNT")
-                                .font(.caption.weight(.bold))
+                    inventoryInfoBubble(icon: "heartsum", title: "MEDICATION", value: medication.name)
+
+                    inventoryInfoBubble(icon: "hashtag", title: "CURRENT INVENTORY", value: "\(medication.currentAmount)")
+
+                    inventoryInfoBubble(icon: "handpill", title: "SUPPLY AMOUNT", value: "\(medication.supplyAmount)")
+
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("STEP AMOUNTS")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(LColors.textSecondary)
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("INCREASE AMOUNT")
+                                .font(.system(size: 11, weight: .bold))
                                 .foregroundStyle(LColors.textSecondary)
 
                             HStack(spacing: 12) {
                                 Button {
-                                    if inventoryStepAmount > 1 {
-                                        inventoryStepAmount -= 1
-                                    }
+                                    if increaseAmount > 1 { increaseAmount -= 1 }
                                 } label: {
                                     Image(systemName: "minus")
                                         .font(.system(size: 12, weight: .bold))
-                                        .foregroundStyle(inventoryStepAmount <= 1 ? LColors.textSecondary.opacity(0.5) : .white)
+                                        .foregroundStyle(.white)
                                         .frame(width: 32, height: 32)
-                                        .background(inventoryStepAmount <= 1 ? Color.white.opacity(0.05) : LColors.accent.opacity(0.85))
+                                        .background(Color.white.opacity(0.08))
                                         .clipShape(Circle())
+                                        .overlay(Circle().stroke(LColors.glassBorder, lineWidth: 1))
                                 }
                                 .buttonStyle(.plain)
-                                .disabled(inventoryStepAmount <= 1)
 
-                                Text("\(inventoryStepAmount)")
+                                Text("+\(increaseAmount)")
                                     .font(.system(size: 14, weight: .bold))
                                     .foregroundStyle(LColors.textPrimary)
                                     .padding(.horizontal, 16)
                                     .padding(.vertical, 8)
                                     .background(Color.white.opacity(0.08))
                                     .clipShape(Capsule())
-                                    .overlay(
-                                        Capsule()
-                                            .stroke(LColors.glassBorder, lineWidth: 1)
-                                    )
+                                    .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
 
                                 Button {
-                                    if inventoryStepAmount < 100 {
-                                        inventoryStepAmount += 1
-                                    }
+                                    if increaseAmount < 100 { increaseAmount += 1 }
                                 } label: {
                                     Image(systemName: "plus")
                                         .font(.system(size: 12, weight: .bold))
@@ -1098,70 +1149,254 @@ struct MedicationPageView: View {
                                 Spacer()
                             }
                         }
-                        .padding(14)
-                        .background(
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .fill(Color.white.opacity(0.08))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .stroke(LColors.glassBorder, lineWidth: 1)
-                        )
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("DECREASE AMOUNT")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(LColors.textSecondary)
+
+                            HStack(spacing: 12) {
+                                Button {
+                                    if decreaseAmount > 1 { decreaseAmount -= 1 }
+                                } label: {
+                                    Image(systemName: "minus")
+                                        .font(.system(size: 12, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .frame(width: 32, height: 32)
+                                        .background(Color.white.opacity(0.08))
+                                        .clipShape(Circle())
+                                        .overlay(Circle().stroke(LColors.glassBorder, lineWidth: 1))
+                                }
+                                .buttonStyle(.plain)
+
+                                Text("-\(decreaseAmount)")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(LColors.textPrimary)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 8)
+                                    .background(Color.white.opacity(0.08))
+                                    .clipShape(Capsule())
+                                    .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
+
+                                Button {
+                                    if decreaseAmount < 100 { decreaseAmount += 1 }
+                                } label: {
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 12, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .frame(width: 32, height: 32)
+                                        .background(LColors.accent.opacity(0.85))
+                                        .clipShape(Circle())
+                                }
+                                .buttonStyle(.plain)
+
+                                Spacer()
+                            }
+                        }
                     }
+                    .padding(14)
+                    .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white.opacity(0.08)))
+                    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(LColors.glassBorder, lineWidth: 1))
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
                 .padding(.bottom, 8)
             },
             footer: {
-                HStack(spacing: 12) {
-                    Button {
-                        adjustSelectedMedicationInventory(by: -inventoryStepAmount)
-                    } label: {
-                        Text("-\(inventoryStepAmount)")
+                WrappingHStack(spacing: 12, lineSpacing: 12) {
+                    Button { onDecrement() } label: {
+                        Text("-1")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 14)
                             .frame(height: 36)
                             .background(Color.white.opacity(0.08))
                             .clipShape(Capsule())
-                            .overlay(
-                                Capsule()
-                                    .stroke(LColors.glassBorder, lineWidth: 1)
-                            )
+                            .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
 
-                    Button {
-                        adjustSelectedMedicationInventory(by: inventoryStepAmount)
-                    } label: {
-                        Text("+\(inventoryStepAmount)")
+                    Button { onIncrement() } label: {
+                        Text("+1")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 14)
                             .frame(height: 36)
                             .background(Color.white.opacity(0.08))
                             .clipShape(Capsule())
-                            .overlay(
-                                Capsule()
-                                    .stroke(LColors.glassBorder, lineWidth: 1)
-                            )
+                            .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
 
-                    LButton(title: "Set Full", style: .secondary) {
-                        fillSelectedMedicationToSupply()
+                    Button { onSetFull() } label: {
+                        Text("Set Full")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 14)
+                            .frame(height: 36)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(Capsule())
+                            .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
                     }
+                    .buttonStyle(.plain)
 
-                    LButton(title: "Close", style: .gradient) {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                            showInventoryAdjustPopup = false
-                        }
+                    Button { onApplyDecrease() } label: {
+                        Text("Apply -\(decreaseAmount)")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 14)
+                            .frame(height: 36)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(Capsule())
+                            .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
                     }
+                    .buttonStyle(.plain)
+
+                    Button { onApplyIncrease() } label: {
+                        Text("Apply +\(increaseAmount)")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 14)
+                            .frame(height: 36)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(Capsule())
+                            .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+
+                    Button { onClose() } label: {
+                        Text("Close")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 14)
+                            .frame(height: 36)
+                            .background(LGradients.blue)
+                            .clipShape(Capsule())
+                            .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 16)
             }
         )
+    }
+
+    private func inventoryInfoBubble(icon: String, title: String, value: String) -> some View {
+        HStack(alignment: .center, spacing: 14) {
+            Image(icon)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 18, height: 18)
+                .foregroundStyle(.white)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(LColors.textSecondary)
+
+                Text(value)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.leading)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 18)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.white.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(LColors.glassBorder, lineWidth: 1)
+        )
+    }
+}
+
+private struct WrappingHStack<Content: View>: View {
+    let spacing: CGFloat
+    let lineSpacing: CGFloat
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        WrappingLayout(spacing: spacing, lineSpacing: lineSpacing) {
+            content
+        }
+    }
+}
+
+private struct WrappingLayout: Layout {
+    let spacing: CGFloat
+    let lineSpacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? 0
+        let rows = rows(for: subviews, maxWidth: maxWidth)
+        let height = rows.reduce(CGFloat.zero) { total, row in
+            total + row.height
+        } + CGFloat(max(rows.count - 1, 0)) * lineSpacing
+        return CGSize(width: maxWidth, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let rows = rows(for: subviews, maxWidth: bounds.width)
+        var y = bounds.minY
+
+        for row in rows {
+            var x = bounds.minX
+            for item in row.items {
+                item.subview.place(
+                    at: CGPoint(x: x, y: y),
+                    proposal: ProposedViewSize(item.size)
+                )
+                x += item.size.width + spacing
+            }
+            y += row.height + lineSpacing
+        }
+    }
+
+    private func rows(for subviews: Subviews, maxWidth: CGFloat) -> [WrappingRow] {
+        var rows: [WrappingRow] = []
+        var currentItems: [WrappingItem] = []
+        var currentWidth: CGFloat = 0
+        var currentHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            let itemWidth = currentItems.isEmpty ? size.width : size.width + spacing
+
+            if !currentItems.isEmpty && currentWidth + itemWidth > maxWidth {
+                rows.append(WrappingRow(items: currentItems, height: currentHeight))
+                currentItems = [WrappingItem(subview: subview, size: size)]
+                currentWidth = size.width
+                currentHeight = size.height
+            } else {
+                currentItems.append(WrappingItem(subview: subview, size: size))
+                currentWidth += itemWidth
+                currentHeight = max(currentHeight, size.height)
+            }
+        }
+
+        if !currentItems.isEmpty {
+            rows.append(WrappingRow(items: currentItems, height: currentHeight))
+        }
+
+        return rows
+    }
+
+    private struct WrappingItem {
+        let subview: LayoutSubview
+        let size: CGSize
+    }
+
+    private struct WrappingRow {
+        let items: [WrappingItem]
+        let height: CGFloat
     }
 }
