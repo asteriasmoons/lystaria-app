@@ -53,11 +53,9 @@ struct JournalBlockDisplayView: View {
             .padding(.leading, CGFloat(block.indentLevel) * 20)
 
         case .callout:
-            HStack(alignment: .center, spacing: 10) {
-                Text(block.calloutEmoji.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "✦" : block.calloutEmoji)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(LGradients.blue)
-                    .frame(width: 22, alignment: .center)
+            HStack(alignment: .center, spacing: 12) {
+                calloutIconView(for: activeCalloutIconItem(for: block))
+                    .frame(width: 20, height: 20, alignment: .center)
                 richTextBlock(for: block, baseFont: .systemFont(ofSize: 15, weight: .regular), textColor: UIColor(LColors.textPrimary))
             }
             .padding(12)
@@ -175,11 +173,47 @@ struct JournalBlockDisplayView: View {
             Capsule().fill(LGradients.blue).frame(width: nil).frame(maxWidth: .infinity).scaleEffect(x: 0.5).frame(height: 2)
         case .dots:
             HStack(spacing: 12) {
-                ForEach(0..<3, id: \.self) { _ in
+                ForEach(0..<5, id: \.self) { _ in
                     Circle().fill(LGradients.blue).frame(width: 7, height: 7)
                 }
             }
             .frame(maxWidth: .infinity)
+        }
+    }
+
+    // MARK: - Callout Icon Helpers
+
+    private func activeCalloutIconItem(for block: JournalBlock) -> BookmarkIconItem {
+        let trimmed = block.calloutEmoji.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let item = BookmarkCombinedIconLibrary.all.first(where: { $0.id == trimmed }) {
+            return item
+        }
+
+        if let legacyAsset = BookmarkAssetIconLibrary.all.first(where: { $0.name == trimmed }) {
+            return legacyAsset
+        }
+
+        if let legacySystem = BookmarkIconLibrary.all.first(where: { $0.name == trimmed }) {
+            return legacySystem
+        }
+
+        return BookmarkIconItem(name: "sparkle", source: .asset)
+    }
+
+    @ViewBuilder
+    private func calloutIconView(for item: BookmarkIconItem) -> some View {
+        switch item.source {
+        case .asset:
+            Image(item.name)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .foregroundStyle(Color.white)
+        case .system:
+            Image(systemName: item.name)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Color.white)
         }
     }
 

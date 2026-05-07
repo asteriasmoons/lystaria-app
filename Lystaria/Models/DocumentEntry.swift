@@ -117,6 +117,20 @@ final class DocumentEntry {
             case .numberedList:
                 let t = block.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 return t.isEmpty ? nil : t
+            case .checklist:
+                let t = block.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !t.isEmpty else { return nil }
+
+                let state = block.languageHint.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                switch state {
+                case "checked":
+                    return "☑ \(t)"
+                case "xmark":
+                    return "☒ \(t)"
+                default:
+                    return "☐ \(t)"
+                }
             case .paragraph, .heading1, .heading2, .heading3, .heading4:
                 let t = block.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 return t.isEmpty ? nil : t

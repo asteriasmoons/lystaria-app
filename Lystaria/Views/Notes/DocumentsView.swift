@@ -289,6 +289,7 @@ struct DocumentBookCard: View {
 
 struct DocumentBookDetailView: View {
     @Environment(\.modelContext) private var modelContext
+    @State private var allBooks: [DocumentBook] = []
     let book: DocumentBook
 
     @State private var entries: [DocumentEntry] = []
@@ -402,6 +403,23 @@ struct DocumentBookDetailView: View {
                                 editorEntryTarget = entry
                                 navigateToEditorPage = true
                             }
+
+                            Menu("Move To Book") {
+                                ForEach(allBooks.filter { $0.persistentModelID != book.persistentModelID }, id: \.persistentModelID) { targetBook in
+                                    Button {
+                                        moveEntry(entry, to: targetBook)
+                                    } label: {
+                                        HStack {
+                                            Text(targetBook.title)
+
+                                            if targetBook.pinOrder > 0 {
+                                                Image("pinfill")
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
                             Button(role: .destructive) {
                                 entry.deletedAt = Date()
                                 entry.updatedAt = Date()
@@ -423,10 +441,40 @@ struct DocumentBookDetailView: View {
         }
     }
 
+    private func moveEntry(_ entry: DocumentEntry, to targetBook: DocumentBook) {
+        entry.book = targetBook
+        entry.updatedAt = Date()
+
+        try? modelContext.save()
+
+        reloadEntries()
+    }
+
     private func loadEntriesIfNeeded() {
         guard !hasLoadedEntries else { return }
+
         hasLoadedEntries = true
+
+        loadBooks()
         reloadEntries()
+    }
+
+    private func loadBooks() {
+        var descriptor = FetchDescriptor<DocumentBook>(
+            predicate: #Predicate<DocumentBook> { book in
+                book.deletedAt == nil
+            },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+
+        descriptor.fetchLimit = 200
+
+        do {
+            allBooks = try modelContext.fetch(descriptor)
+        } catch {
+            allBooks = []
+            print("❌ Failed to load books: \(error.localizedDescription)")
+        }
     }
 
     private func reloadEntries() {
@@ -476,13 +524,13 @@ struct DocumentPageCard: View {
             RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
                 .fill(
                     LinearGradient(
-                        colors: [bookColor.opacity(0.28), .clear],
+                        colors: [bookColor.opacity(0.18), .clear],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
                 )
                 .blendMode(.multiply)
-                .opacity(0.9)
+                .opacity(0.45)
 
             RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
                 .fill(
@@ -498,23 +546,22 @@ struct DocumentPageCard: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text(entry.title.isEmpty ? "Untitled" : entry.title)
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(Color.black.opacity(0.82))
+                    .foregroundStyle(Color.white.opacity(0.94))
                     .lineLimit(3)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.trailing, 24)
 
-                if !entry.blockPreviewText.isEmpty {
-                    Text(entry.blockPreviewText)
-                        .font(.system(size: 12, weight: .regular))
-                        .foregroundStyle(Color.black.opacity(0.56))
-                        .lineLimit(10)
-                        .lineSpacing(3)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                } else {
-                    Text("Blank document")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Color.black.opacity(0.32))
+                Group {
+                    if !entry.blockPreviewText.isEmpty {
+                        previewContent
+                    } else {
+                        Text("Blank document")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color.white.opacity(0.52))
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: 104, alignment: .topLeading)
+                .clipped()
 
                 Spacer(minLength: 0)
 
@@ -524,7 +571,7 @@ struct DocumentPageCard: View {
                     Text(entry.updatedAt.formatted(.dateTime.month(.abbreviated).day().year()))
                         .font(.system(size: 11, weight: .semibold))
                 }
-                .foregroundStyle(Color.black.opacity(0.38))
+                .foregroundStyle(Color.white.opacity(0.58))
             }
             .padding(.leading, 16)
             .padding(.trailing, 16)
@@ -544,12 +591,111 @@ struct DocumentPageCard: View {
         )
     }
 
+    @ViewBuilder
+    private var previewContent: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(previewBlocks.prefix(6), id: \.persistentModelID) { block in
+                switch block.type {
+                case .checklist:
+                    previewChecklistRow(
+                        text: block.text,
+                        state: previewChecklistState(for: block)
+                    )
+
+                default:
+                    Text(block.text)
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(Color.white.opacity(0.70))
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var previewBlocks: [DocumentBlock] {
+        Array(
+            entry.sortedBlocks
+                .filter {
+                    !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                }
+                .prefix(6)
+        )
+    }
+
+    private func previewChecklistState(for block: DocumentBlock) -> PreviewChecklistState {
+        switch block.languageHint.trimmingCharacters(in: .whitespacesAndNewlines) {
+        case "checked":
+            return .checked
+        case "xmark":
+            return .xmark
+        default:
+            return .unchecked
+        }
+    }
+
+    private enum PreviewChecklistState {
+        case unchecked
+        case checked
+        case xmark
+    }
+
+    private func previewChecklistRow(text: String, state: PreviewChecklistState) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 7) {
+            previewChecklistIcon(state: state)
+
+            Text(text)
+                .font(.system(size: 12, weight: .regular))
+                .foregroundStyle(Color.white.opacity(state == .unchecked ? 0.70 : 0.45))
+                .strikethrough(state != .unchecked)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private func previewChecklistIcon(state: PreviewChecklistState) -> some View {
+        switch state {
+        case .unchecked:
+            Circle()
+                .stroke(Color.white.opacity(0.62), lineWidth: 1.2)
+                .frame(width: 11, height: 11)
+
+        case .checked:
+            ZStack {
+                Circle()
+                    .fill(LGradients.blue)
+                    .frame(width: 11, height: 11)
+
+                Image(systemName: "checkmark")
+                    .font(.system(size: 6, weight: .black))
+                    .foregroundStyle(.white)
+            }
+
+        case .xmark:
+            ZStack {
+                Circle()
+                    .fill(Color.white.opacity(0.16))
+                    .frame(width: 11, height: 11)
+                    .overlay(
+                        Circle()
+                            .stroke(bookColor.opacity(0.9), lineWidth: 1)
+                    )
+
+                Image(systemName: "xmark")
+                    .font(.system(size: 6, weight: .black))
+                    .foregroundStyle(Color.white.opacity(0.82))
+            }
+        }
+    }
+
     private var paperGradient: LinearGradient {
         LinearGradient(
             stops: [
-                .init(color: bookColor.opacity(0.34), location: 0),
-                .init(color: bookColor.opacity(0.24), location: 0.42),
-                .init(color: bookColor.opacity(0.16), location: 1)
+                .init(color: bookColor.opacity(0.70), location: 0),
+                .init(color: bookColor.opacity(0.56), location: 0.42),
+                .init(color: bookColor.opacity(0.44), location: 1)
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing

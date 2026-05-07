@@ -43,15 +43,6 @@ struct JournalBlockEditorPage: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button("Close") {
-                    closeWithoutSavingGhostEntry()
-                }
-                .foregroundStyle(.white)
-                .disabled(isCompletingAction)
-                .opacity(isCompletingAction ? 0.5 : 1)
-            }
-
             ToolbarItem(placement: .principal) {
                 VStack(spacing: 1) {
                     Text(existingEntry == nil ? "New Entry" : "Edit Entry")

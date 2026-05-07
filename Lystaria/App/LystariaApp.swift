@@ -41,6 +41,7 @@ struct LystariaApp: App {
     static let sharedModelContainer: ModelContainer = {
         let schema = Schema([
             AuthUser.self,
+            DeveloperSettings.self,
             Note.self,
             NotesTab.self,
             DocumentBook.self,

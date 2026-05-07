@@ -829,7 +829,7 @@ struct JournalBookDetailView: View {
     @State private var showAnalysisSheet = false
     @State private var analysisState: JournalAnalysisOverlay.AnalysisState = .idle
     @State private var analysisDateKeys: [String] = []
-    @State private var analysisDateIndex: Int = 0
+    @State private var selectedAnalysisDateKey: String = JournalBookDetailView.todayAnalysisDateKey()
     
     // Stored prompt feedback state
     @State private var promptShowCopied = false
@@ -951,17 +951,17 @@ struct JournalBookDetailView: View {
                         Task { await runAnalysis() }
                     },
                     dateLabel: formattedAnalysisDateLabel,
-                    hasPrevious: analysisDateIndex < analysisDateKeys.count - 1,
-                    hasNext: analysisDateIndex > 0,
+                    hasPrevious: previousAnalysisDateKey != nil,
+                    hasNext: nextAnalysisDateKey != nil,
                     onPrevious: {
-                        guard analysisDateIndex < analysisDateKeys.count - 1 else { return }
-                        analysisDateIndex += 1
-                        Task { await loadAnalysisForCurrentIndex() }
+                        guard let previousAnalysisDateKey else { return }
+                        selectedAnalysisDateKey = previousAnalysisDateKey
+                        Task { await loadAnalysisForSelectedDate() }
                     },
                     onNext: {
-                        guard analysisDateIndex > 0 else { return }
-                        analysisDateIndex -= 1
-                        Task { await loadAnalysisForCurrentIndex() }
+                        guard let nextAnalysisDateKey else { return }
+                        selectedAnalysisDateKey = nextAnalysisDateKey
+                        Task { await loadAnalysisForSelectedDate() }
                     }
                 )
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
@@ -1029,6 +1029,7 @@ struct JournalBookDetailView: View {
                 .buttonStyle(.plain)
                 
                 Button {
+                    selectedAnalysisDateKey = Self.todayAnalysisDateKey()
                     showAnalysisSheet = true
                     Task { await loadAnalysisDates() }
                 } label: {
@@ -1634,45 +1635,75 @@ struct JournalBookDetailView: View {
     }
     
     private var formattedAnalysisDateLabel: String {
-        guard analysisDateIndex < analysisDateKeys.count else { return "" }
-        let dateKey = analysisDateKeys[analysisDateIndex]
+        let todayKey = Self.todayAnalysisDateKey()
+        guard selectedAnalysisDateKey != todayKey else { return "Today" }
+
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
-        guard let date = formatter.date(from: dateKey) else { return dateKey }
+        guard let date = formatter.date(from: selectedAnalysisDateKey) else { return selectedAnalysisDateKey }
+
         let display = DateFormatter()
         display.dateFormat = "MMM d"
         return display.string(from: date)
     }
 
+    private var analysisNavigationKeys: [String] {
+        let todayKey = Self.todayAnalysisDateKey()
+        return Array(Set(analysisDateKeys + [todayKey])).sorted(by: >)
+    }
+
+    private var selectedAnalysisDateIndex: Int? {
+        analysisNavigationKeys.firstIndex(of: selectedAnalysisDateKey)
+    }
+
+    private var previousAnalysisDateKey: String? {
+        guard let index = selectedAnalysisDateIndex else { return nil }
+        let previousIndex = index + 1
+        guard previousIndex < analysisNavigationKeys.count else { return nil }
+        return analysisNavigationKeys[previousIndex]
+    }
+
+    private var nextAnalysisDateKey: String? {
+        guard let index = selectedAnalysisDateIndex else { return nil }
+        let nextIndex = index - 1
+        guard nextIndex >= 0 else { return nil }
+        return analysisNavigationKeys[nextIndex]
+    }
+
+    private static func todayAnalysisDateKey() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.calendar = Calendar.autoupdatingCurrent
+        formatter.timeZone = TimeZone.autoupdatingCurrent
+        return formatter.string(from: Date())
+    }
+
     private func loadAnalysisDates() async {
         guard let userId = appState.currentAppleUserId,
               !userId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
         let bookId = book.uuid.uuidString
+
         do {
             let dates = try await JournalAnalysisService.shared.fetchAnalysisDates(userId: userId, bookId: bookId)
             await MainActor.run {
                 analysisDateKeys = dates
-                analysisDateIndex = 0
+                if selectedAnalysisDateKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    selectedAnalysisDateKey = Self.todayAnalysisDateKey()
+                }
             }
-            await loadAnalysisForCurrentIndex()
+            await loadAnalysisForSelectedDate()
         } catch {
             await MainActor.run { analysisState = .error(error.localizedDescription) }
         }
     }
 
-    private func loadAnalysisForCurrentIndex() async {
+    private func loadAnalysisForSelectedDate() async {
         guard let userId = appState.currentAppleUserId,
               !userId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
 
         let bookId = book.uuid.uuidString
-
-        // If no saved analyses exist at all, show empty state
-        guard !analysisDateKeys.isEmpty, analysisDateIndex < analysisDateKeys.count else {
-            await MainActor.run { analysisState = .empty }
-            return
-        }
-
-        let dateKey = analysisDateKeys[analysisDateIndex]
+        let dateKey = selectedAnalysisDateKey.isEmpty ? Self.todayAnalysisDateKey() : selectedAnalysisDateKey
 
         await MainActor.run { analysisState = .loading }
 
@@ -1707,13 +1738,19 @@ struct JournalBookDetailView: View {
         }
 
         let bookId = book.uuid.uuidString
+        let targetDateKey = selectedAnalysisDateKey.isEmpty ? Self.todayAnalysisDateKey() : selectedAnalysisDateKey
 
         let cal = Calendar.autoupdatingCurrent
-        let todayStart = cal.startOfDay(for: Date())
-        guard let todayEnd = cal.date(byAdding: .day, value: 1, to: todayStart) else { return }
-        let todayEntries = entries.filter { $0.createdAt >= todayStart && $0.createdAt < todayEnd }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.calendar = cal
+        formatter.timeZone = TimeZone.autoupdatingCurrent
+        let selectedDate = formatter.date(from: targetDateKey) ?? Date()
+        let selectedDayStart = cal.startOfDay(for: selectedDate)
+        guard let selectedDayEnd = cal.date(byAdding: .day, value: 1, to: selectedDayStart) else { return }
+        let selectedDayEntries = entries.filter { $0.createdAt >= selectedDayStart && $0.createdAt < selectedDayEnd }
 
-        guard !todayEntries.isEmpty else {
+        guard !selectedDayEntries.isEmpty else {
             await MainActor.run {
                 analysisState = .empty
             }
@@ -1724,7 +1761,7 @@ struct JournalBookDetailView: View {
             let result = try await JournalAnalysisService.shared.analyze(
                 userId: userId,
                 bookId: bookId,
-                entries: todayEntries
+                entries: selectedDayEntries
             )
             await MainActor.run {
                 analysisState = .result(
@@ -1737,7 +1774,7 @@ struct JournalBookDetailView: View {
             if let dates = try? await JournalAnalysisService.shared.fetchAnalysisDates(userId: userId, bookId: bookId) {
                 await MainActor.run {
                     analysisDateKeys = dates
-                    analysisDateIndex = 0
+                    selectedAnalysisDateKey = targetDateKey
                 }
             }
         } catch {

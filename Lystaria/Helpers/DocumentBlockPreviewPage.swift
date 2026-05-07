@@ -62,16 +62,6 @@ struct DocumentBlockPreviewPage: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button("Back") {
-                    guard !isCompletingAction else { return }
-                    isCompletingAction = true
-                    dismiss()
-                }
-                .foregroundStyle(.white)
-                .disabled(isCompletingAction)
-                .opacity(isCompletingAction ? 0.5 : 1)
-            }
             ToolbarItem(placement: .principal) {
                 VStack(spacing: 1) {
                     Text("Document")
@@ -146,15 +136,76 @@ struct DocumentBlockPreviewPage: View {
 
 struct DocumentBlockDisplayView: View {
     let entry: DocumentEntry
+    @Environment(\.modelContext) private var modelContext
+
+    private func indentPadding(for block: DocumentBlock) -> CGFloat {
+        switch block.type {
+        case .paragraph, .heading1, .heading2, .heading3, .heading4,
+             .toggle, .bulletedList, .numberedList, .checklist, .blockquote, .callout:
+            return CGFloat(block.indentLevel) * 20
+        case .divider, .code, .image:
+            return 0
+        }
+    }
+
+    private var wrapperSupportedTypes: [DocumentBlockType] {
+        [.paragraph, .heading1, .heading2, .heading3, .heading4, .toggle, .bulletedList, .numberedList, .checklist]
+    }
+
+    private func prefixWrapperAlignmentPadding(for block: DocumentBlock) -> CGFloat {
+        block.isBlockquoteStyle || block.isCalloutStyle ? 12 : 0
+    }
+
+    // Split visible blocks into pages at .pageBreak dividers
+    private var blockPages: [[DocumentBlock]] {
+        var pages: [[DocumentBlock]] = [[]]
+        for block in visibleBlocks {
+            if block.type == .divider,
+               (DividerStyles(rawValue: block.languageHint) ?? .line) == .pageBreak {
+                pages.append([])
+            } else {
+                pages[pages.count - 1].append(block)
+            }
+        }
+        return pages
+    }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
-                ForEach(visibleBlocks) { block in
-                    renderBlock(block)
+        let pages = blockPages
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(pages.enumerated()), id: \.offset) { index, page in
+
+                // Outer page spacing
+                VStack(spacing: 0) {
+                    // Floating page sheet
+                    VStack(alignment: .leading, spacing: 14) {
+                        ForEach(page) { block in
+                            renderBlock(block)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 28)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .fill(Color.white.opacity(0.07))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                    .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                            )
+                    )
+                    .shadow(color: Color.black.opacity(0.25), radius: 12, x: 0, y: 4)
+                    .padding(.horizontal, 16)
+                }
+                .padding(.vertical, 8)
+
+                // Page break gap
+                if index < pages.count - 1 {
+                    Color.clear
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 8)
                 }
             }
-            .padding()
         }
     }
 
@@ -162,20 +213,31 @@ struct DocumentBlockDisplayView: View {
     private func renderBlock(_ block: DocumentBlock) -> some View {
         switch block.type {
         case .paragraph:
-            documentTextBlock(block, font: .systemFont(ofSize: 16, weight: .regular))
-
+            styledContent(block) {
+                documentTextBlock(block, font: .systemFont(ofSize: 16, weight: .regular))
+                    .padding(.leading, indentPadding(for: block))
+            }
         case .heading1:
-            documentTextBlock(block, font: .systemFont(ofSize: 28, weight: .bold)).padding(.top, 2)
-
+            styledContent(block) {
+                documentTextBlock(block, font: .systemFont(ofSize: 28, weight: .bold))
+                    .padding(.top, 2)
+                    .padding(.leading, indentPadding(for: block))
+            }
         case .heading2:
-            documentTextBlock(block, font: .systemFont(ofSize: 22, weight: .bold))
-
+            styledContent(block) {
+                documentTextBlock(block, font: .systemFont(ofSize: 22, weight: .bold))
+                    .padding(.leading, indentPadding(for: block))
+            }
         case .heading3:
-            documentTextBlock(block, font: .systemFont(ofSize: 18, weight: .semibold))
-
+            styledContent(block) {
+                documentTextBlock(block, font: .systemFont(ofSize: 18, weight: .semibold))
+                    .padding(.leading, indentPadding(for: block))
+            }
         case .heading4:
-            documentTextBlock(block, font: .systemFont(ofSize: 16, weight: .semibold))
-
+            styledContent(block) {
+                documentTextBlock(block, font: .systemFont(ofSize: 16, weight: .semibold))
+                    .padding(.leading, indentPadding(for: block))
+            }
         case .blockquote:
             HStack(alignment: .top, spacing: 10) {
                 RoundedRectangle(cornerRadius: 2).fill(LGradients.blue).frame(width: 4)
@@ -184,69 +246,134 @@ struct DocumentBlockDisplayView: View {
             .padding(12)
             .background(Color.white.opacity(0.04))
             .clipShape(RoundedRectangle(cornerRadius: 14))
-            .padding(.leading, CGFloat(block.indentLevel) * 20)
-
+            .padding(.leading, indentPadding(for: block))
         case .callout:
-            HStack(alignment: .center, spacing: 10) {
-                Text(block.calloutEmoji.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "✦" : block.calloutEmoji)
-                    .font(.system(size: 18, weight: .semibold)).foregroundStyle(LGradients.blue)
-                    .frame(width: 22, alignment: .center)
+            HStack(alignment: .center, spacing: 12) {
+                calloutIconView(for: activeCalloutIconItem(for: block))
+                    .frame(width: 20, height: 20, alignment: .center)
                 documentTextBlock(block, font: .systemFont(ofSize: 15, weight: .regular))
             }
             .padding(12)
             .background(Color.white.opacity(0.06))
             .overlay(RoundedRectangle(cornerRadius: 14).stroke(LGradients.blue, lineWidth: 1))
             .clipShape(RoundedRectangle(cornerRadius: 14))
-            .padding(.leading, CGFloat(block.indentLevel) * 20)
-
+            .padding(.leading, indentPadding(for: block))
         case .toggle:
             Button { block.isExpanded.toggle() } label: {
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: block.isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 16, weight: .bold)).foregroundStyle(LGradients.blue).frame(width: 22, alignment: .leading)
-                    documentTextBlock(block, font: .systemFont(ofSize: 16, weight: .regular))
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(LGradients.blue)
+                        .frame(width: 22, alignment: .leading)
+                        .padding(.top, prefixWrapperAlignmentPadding(for: block))
+
+                    styledContent(block) {
+                        documentTextBlock(block, font: .systemFont(ofSize: 16, weight: .regular))
+                    }
                 }
-                .padding(.leading, CGFloat(block.indentLevel) * 20)
+                .padding(.leading, indentPadding(for: block))
             }
             .buttonStyle(.plain)
-
         case .bulletedList:
             HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "circle.fill")
-                    .font(.system(size: 8, weight: .bold)).foregroundStyle(LColors.textPrimary)
-                    .frame(width: 22, alignment: .leading).padding(.top, 6)
-                documentTextBlock(block, font: .systemFont(ofSize: 16, weight: .regular))
-            }
-            .padding(.leading, CGFloat(block.indentLevel) * 20)
+                Image(systemName: bulletSymbolName(for: block.indentLevel))
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(LColors.textPrimary)
+                    .frame(width: 22, alignment: .leading)
+                    .padding(.top, 6 + prefixWrapperAlignmentPadding(for: block))
 
+                styledContent(block) {
+                    documentTextBlock(block, font: .systemFont(ofSize: 16, weight: .regular))
+                }
+            }
+            .padding(.leading, indentPadding(for: block))
         case .numberedList:
             HStack(alignment: .top, spacing: 10) {
                 Text(numberPrefix(for: block))
-                    .font(.system(size: 16, weight: .semibold)).foregroundStyle(LColors.textPrimary)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(LColors.textPrimary)
                     .frame(width: 28, alignment: .leading)
-                documentTextBlock(block, font: .systemFont(ofSize: 16, weight: .regular))
-            }
-            .padding(.leading, CGFloat(block.indentLevel) * 20)
+                    .padding(.top, prefixWrapperAlignmentPadding(for: block))
 
-        case .divider:
-            Capsule().fill(LGradients.blue).frame(maxWidth: .infinity).frame(height: 3).padding(.vertical, 4)
-
-        case .code:
-            VStack(alignment: .leading, spacing: 8) {
-                if !block.languageHint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(block.languageHint.uppercased())
-                        .font(.system(size: 11, weight: .semibold)).foregroundStyle(LColors.textSecondary)
+                styledContent(block) {
+                    documentTextBlock(block, font: .systemFont(ofSize: 16, weight: .regular))
                 }
-                Text(block.text)
-                    .font(.system(.body, design: .monospaced)).foregroundStyle(LColors.textPrimary)
-                    .frame(maxWidth: .infinity, alignment: .leading).fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.leading, indentPadding(for: block))
+        case .checklist:
+            HStack(alignment: .top, spacing: 10) {
+                checklistPrefixButton(for: block)
+                    .frame(width: 22, alignment: .leading)
+                    .padding(.top, 4 + prefixWrapperAlignmentPadding(for: block))
+
+                styledContent(block) {
+                    documentTextBlock(block, font: .systemFont(ofSize: 16, weight: .regular))
+                }
+            }
+            .padding(.leading, indentPadding(for: block))
+        case .divider:
+            dividerView(style: DividerStyles(rawValue: block.languageHint) ?? .line)
+        case .code:
+            ZStack(alignment: .topTrailing) {
+                VStack(alignment: .leading, spacing: 8) {
+                    if !block.languageHint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(block.languageHint.uppercased())
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(LColors.textSecondary)
+                            .padding(.trailing, 40)
+                    }
+
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(codeLines(for: block).enumerated()), id: \.offset) { index, line in
+                            HStack(alignment: .top, spacing: 0) {
+                                Text("\(index + 1)")
+                                    .font(.system(size: codePreviewUIFont.pointSize, weight: .regular, design: .monospaced))
+                                    .foregroundStyle(LColors.textSecondary.opacity(0.58))
+                                    .frame(width: codeGutterWidth(for: block), alignment: .trailing)
+                                    .padding(.trailing, 8)
+
+                                Rectangle()
+                                    .fill(Color.white.opacity(0.06))
+                                    .frame(width: 1)
+                                    .frame(maxHeight: .infinity)
+
+                                Text(line.isEmpty ? " " : line)
+                                    .font(.system(.body, design: .monospaced))
+                                    .foregroundStyle(LColors.textPrimary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .padding(.leading, 10)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.trailing, 36)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Button {
+                    UIPasteboard.general.string = block.text
+                } label: {
+                    Image("copyfill")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .foregroundStyle(Color.white)
+                        .frame(width: 15, height: 15)
+                        .frame(width: 30, height: 30)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(LColors.glassBorder, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Copy code")
             }
             .padding(12)
             .background(Color.white.opacity(0.05))
             .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.10), lineWidth: 1))
             .clipShape(RoundedRectangle(cornerRadius: 14))
-            .padding(.leading, CGFloat(block.indentLevel) * 20)
-
         case .image:
             if let data = block.imageData, let uiImage = UIImage(data: data) {
                 let size = block.imageSize; let mode = block.imageDisplayMode
@@ -268,6 +395,179 @@ struct DocumentBlockDisplayView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: block.imageAlignment == .center ? .center : .leading)
             }
+        }
+    }
+    
+    
+    @ViewBuilder
+    private func dividerView(style: DividerStyles) -> some View {
+        switch style {
+        case .pageBreak:
+            VStack(spacing: 0) {
+                Rectangle()
+                    .fill(Color.white.opacity(0.08))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 1)
+
+                Color.black.opacity(0.4)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 28)
+
+                Rectangle()
+                    .fill(Color.white.opacity(0.08))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 1)
+            }
+            .padding(.vertical, 8)
+
+        case .line:
+            Capsule()
+                .fill(LGradients.blue)
+                .frame(maxWidth: .infinity)
+                .frame(height: 3)
+                .padding(.vertical, 4)
+
+        case .dotted:
+            let dotSize: CGFloat = 4
+            let gap: CGFloat = 8
+
+            GeometryReader { geo in
+                let count = max(1, Int(geo.size.width / (dotSize + gap)))
+                HStack(spacing: gap) {
+                    ForEach(0..<count, id: \.self) { _ in
+                        Circle()
+                            .fill(LGradients.blue)
+                            .frame(width: dotSize, height: dotSize)
+                    }
+                }
+                .frame(maxHeight: .infinity, alignment: .center)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: dotSize)
+            .padding(.vertical, 4)
+
+        case .dash:
+            Capsule()
+                .fill(LGradients.blue)
+                .frame(maxWidth: .infinity)
+                .scaleEffect(x: 0.5)
+                .frame(height: 2)
+                .padding(.vertical, 4)
+
+        case .dots:
+            HStack(spacing: 12) {
+                ForEach(0..<5, id: \.self) { _ in
+                    Circle()
+                        .fill(LGradients.blue)
+                        .frame(width: 7, height: 7)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 4)
+        }
+    }
+
+    private var codePreviewUIFont: UIFont {
+        UIFont.monospacedSystemFont(
+            ofSize: UIFont.preferredFont(forTextStyle: .body).pointSize,
+            weight: .regular
+        )
+    }
+
+    private func codeLines(for block: DocumentBlock) -> [String] {
+        let lines = block.text.components(separatedBy: "\n")
+        return lines.isEmpty ? [""] : lines
+    }
+
+    private func codeLineCount(for block: DocumentBlock) -> Int {
+        max(1, codeLines(for: block).count)
+    }
+
+    private func codeGutterWidth(for block: DocumentBlock) -> CGFloat {
+        let digits = String(codeLineCount(for: block)).count
+        return CGFloat(max(1, digits)) * 8 + 4
+    }
+
+    @ViewBuilder
+    private func styledContent<Content: View>(_ block: DocumentBlock, @ViewBuilder content: () -> Content) -> some View {
+        if !wrapperSupportedTypes.contains(block.type) {
+            content()
+        } else if block.isCalloutStyle {
+            calloutStyleWrapper(block) {
+                if block.isBlockquoteStyle {
+                    blockquoteStyleWrapper { content() }
+                } else {
+                    content()
+                }
+            }
+        } else if block.isBlockquoteStyle {
+            blockquoteStyleWrapper { content() }
+        } else {
+            content()
+        }
+    }
+
+    private func blockquoteStyleWrapper<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(LGradients.blue)
+                .frame(width: 4)
+
+            content()
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.white.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func calloutStyleWrapper<Content: View>(_ block: DocumentBlock, @ViewBuilder content: () -> Content) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            calloutIconView(for: activeCalloutIconItem(for: block))
+                .frame(width: 20, height: 20, alignment: .center)
+
+            content()
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.white.opacity(0.06))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(LGradients.blue, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func activeCalloutIconItem(for block: DocumentBlock) -> BookmarkIconItem {
+        let trimmed = block.calloutEmoji.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let item = BookmarkCombinedIconLibrary.all.first(where: { $0.id == trimmed }) {
+            return item
+        }
+
+        if let legacyAsset = BookmarkAssetIconLibrary.all.first(where: { $0.name == trimmed }) {
+            return legacyAsset
+        }
+
+        if let legacySystem = BookmarkIconLibrary.all.first(where: { $0.name == trimmed }) {
+            return legacySystem
+        }
+
+        return BookmarkAssetIconLibrary.all.first ?? BookmarkIconLibrary.all.first ?? BookmarkIconItem(name: "sparkles", source: .system)
+    }
+
+    @ViewBuilder
+    private func calloutIconView(for item: BookmarkIconItem) -> some View {
+        switch item.source {
+        case .asset:
+            Image(item.name)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .foregroundStyle(Color.white)
+        case .system:
+            Image(systemName: item.name)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Color.white)
         }
     }
 
@@ -301,6 +601,8 @@ struct DocumentBlockDisplayView: View {
                     }
                 case .underline:
                     mutable.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+                case .strikethrough:
+                    mutable.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: range)
                 case .link:
                     let t = style.urlString.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !t.isEmpty, let url = URL(string: t) {
@@ -313,6 +615,11 @@ struct DocumentBlockDisplayView: View {
                     mutable.addAttribute(.backgroundColor, value: UIColor.white.withAlphaComponent(0.1), range: range)
                 }
             }
+        }
+        if block.type == .checklist && !checklistState(for: block).isEmpty && fullLength > 0 {
+            let fullRange = NSRange(location: 0, length: fullLength)
+            mutable.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: fullRange)
+            mutable.addAttribute(.foregroundColor, value: UIColor(LColors.textSecondary), range: fullRange)
         }
         return RichBlockTextView(attributedText: mutable, isSelectable: true, linkTintColor: UIColor.systemBlue)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -336,8 +643,193 @@ struct DocumentBlockDisplayView: View {
 
     private func numberPrefix(for block: DocumentBlock) -> String {
         guard block.type == .numberedList, let groupID = block.listGroupID else { return "1." }
-        let siblings = entry.sortedBlocks.filter { $0.type == .numberedList && $0.listGroupID == groupID }
+        let siblings = entry.sortedBlocks.filter {
+            $0.type == .numberedList &&
+            $0.listGroupID == groupID &&
+            $0.indentLevel == block.indentLevel
+        }
         guard let index = siblings.firstIndex(where: { $0.id == block.id }) else { return "1." }
         return "\(index + 1)."
+    }
+
+    private func checklistPrefixButton(for block: DocumentBlock) -> some View {
+        checklistPrefixIcon(for: block)
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2) {
+                block.languageHint = "xmark"
+                block.touch()
+                try? modelContext.save()
+            }
+            .onTapGesture {
+                let state = checklistState(for: block)
+                block.languageHint = state == "checked" ? "" : "checked"
+                block.touch()
+                try? modelContext.save()
+            }
+    }
+
+    @ViewBuilder
+    private func checklistPrefixIcon(for block: DocumentBlock) -> some View {
+        switch checklistState(for: block) {
+        case "checked":
+            ZStack {
+                Circle()
+                    .fill(LGradients.blue)
+                    .frame(width: 17, height: 17)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 10, weight: .black))
+                    .foregroundStyle(Color.white)
+            }
+        case "xmark":
+            ZStack {
+                Circle()
+                    .fill(Color.white.opacity(0.18))
+                    .frame(width: 17, height: 17)
+                    .overlay(Circle().stroke(LGradients.blue, lineWidth: 1.3))
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .black))
+                    .foregroundStyle(Color.white)
+            }
+        default:
+            Circle()
+                .stroke(LColors.textSecondary, lineWidth: 1.4)
+                .frame(width: 17, height: 17)
+        }
+    }
+
+    private func checklistState(for block: DocumentBlock) -> String {
+        block.languageHint.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func bulletSymbolName(for indentLevel: Int) -> String {
+        indentLevel % 2 == 1 ? "circle" : "circle.fill"
+    }
+}
+
+private struct CodeBlockPreviewTextView: UIViewRepresentable {
+    let text: String
+    let font: UIFont
+    let textColor: UIColor
+    let lineNumberColor: UIColor
+
+    func makeUIView(context: Context) -> CodeLineNumberTextView {
+        let textView = CodeLineNumberTextView()
+        textView.backgroundColor = .clear
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.isScrollEnabled = false
+        textView.textContainerInset = UIEdgeInsets(top: 0, left: 42, bottom: 0, right: 0)
+        textView.textContainer.lineFragmentPadding = 0
+        textView.textContainer.widthTracksTextView = true
+        textView.textContainer.lineBreakMode = .byCharWrapping
+        textView.textContainer.maximumNumberOfLines = 0
+        textView.alwaysBounceHorizontal = false
+        textView.showsHorizontalScrollIndicator = false
+        textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        textView.setContentCompressionResistancePriority(.required, for: .vertical)
+        textView.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        textView.setContentHuggingPriority(.required, for: .vertical)
+        textView.font = font
+        textView.textColor = textColor
+        textView.codeLineNumberFont = font
+        textView.codeLineNumberColor = lineNumberColor
+        textView.text = text.isEmpty ? " " : text
+        return textView
+    }
+
+    func updateUIView(_ uiView: CodeLineNumberTextView, context: Context) {
+        uiView.font = font
+        uiView.textColor = textColor
+        uiView.codeLineNumberFont = font
+        uiView.codeLineNumberColor = lineNumberColor
+        uiView.textContainerInset = UIEdgeInsets(top: 0, left: 42, bottom: 0, right: 0)
+        uiView.textContainer.lineBreakMode = .byCharWrapping
+
+        let newText = text.isEmpty ? " " : text
+        if uiView.text != newText {
+            uiView.text = newText
+        }
+
+        uiView.invalidateIntrinsicContentSize()
+        uiView.setNeedsDisplay()
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: CodeLineNumberTextView, context: Context) -> CGSize? {
+        guard let width = proposal.width, width > 0 else { return nil }
+
+        uiView.bounds.size.width = width
+        uiView.textContainer.size = CGSize(
+            width: max(1, width - uiView.textContainerInset.left - uiView.textContainerInset.right),
+            height: .greatestFiniteMagnitude
+        )
+        uiView.layoutManager.ensureLayout(for: uiView.textContainer)
+
+        let usedRect = uiView.layoutManager.usedRect(for: uiView.textContainer)
+        let height = ceil(usedRect.height + uiView.textContainerInset.top + uiView.textContainerInset.bottom)
+
+        return CGSize(width: width, height: max(height, uiView.font?.lineHeight ?? 18))
+    }
+
+    final class CodeLineNumberTextView: UITextView {
+        var codeLineNumberFont: UIFont = .monospacedSystemFont(ofSize: 16, weight: .regular)
+        var codeLineNumberColor: UIColor = .secondaryLabel
+        private let codeLineNumberWidth: CGFloat = 34
+
+        override var intrinsicContentSize: CGSize {
+            layoutManager.ensureLayout(for: textContainer)
+            let usedRect = layoutManager.usedRect(for: textContainer)
+            return CGSize(width: UIView.noIntrinsicMetric, height: ceil(usedRect.height + textContainerInset.top + textContainerInset.bottom))
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            invalidateIntrinsicContentSize()
+            setNeedsDisplay()
+        }
+
+        override func draw(_ rect: CGRect) {
+            super.draw(rect)
+            drawVisualCodeLineNumbers()
+        }
+
+        private func drawVisualCodeLineNumbers() {
+            guard let context = UIGraphicsGetCurrentContext() else { return }
+            context.saveGState()
+            defer { context.restoreGState() }
+
+            layoutManager.ensureLayout(for: textContainer)
+
+            let glyphRange = layoutManager.glyphRange(for: textContainer)
+            var visualLineNumber = 1
+
+            let paragraphStyle = NSMutableParagraphStyle()
+            paragraphStyle.alignment = .right
+
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: codeLineNumberFont,
+                .foregroundColor: codeLineNumberColor,
+                .paragraphStyle: paragraphStyle
+            ]
+
+            if glyphRange.length == 0 {
+                ("1" as NSString).draw(
+                    in: CGRect(x: 0, y: textContainerInset.top, width: codeLineNumberWidth, height: codeLineNumberFont.lineHeight),
+                    withAttributes: attributes
+                )
+                return
+            }
+
+            layoutManager.enumerateLineFragments(forGlyphRange: glyphRange) { _, usedRect, _, _, _ in
+                let numberString = "\(visualLineNumber)" as NSString
+                let drawRect = CGRect(
+                    x: 0,
+                    y: usedRect.minY + self.textContainerInset.top,
+                    width: self.codeLineNumberWidth,
+                    height: max(self.codeLineNumberFont.lineHeight, usedRect.height)
+                )
+                numberString.draw(in: drawRect, withAttributes: attributes)
+                visualLineNumber += 1
+            }
+        }
     }
 }

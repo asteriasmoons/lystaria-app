@@ -306,6 +306,8 @@
 		CFEEED3E2FAA42E500F03103 /* DocumentBlockPreviewPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED3B2FAA42E500F03103 /* DocumentBlockPreviewPage.swift */; };
 		CFEEED3F2FAA42E500F03103 /* DocumentBlockRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED3C2FAA42E500F03103 /* DocumentBlockRow.swift */; };
 		CFEEED402FAA42E500F03103 /* DocumentBlockEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED3A2FAA42E500F03103 /* DocumentBlockEditorView.swift */; };
+		CFEEED422FAAEB3700F03103 /* DeveloperSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED412FAAEB3100F03103 /* DeveloperSettings.swift */; };
+		CFEEED442FAC52F900F03103 /* DividerStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED432FAC52F100F03103 /* DividerStyles.swift */; };
 		CFF7C5AF2F72EA0D00A67EC3 /* Medication.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFF7C5AE2F72EA0800A67EC3 /* Medication.swift */; };
 		CFF7C5B12F72F19300A67EC3 /* MedicationPageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFF7C5B02F72F18900A67EC3 /* MedicationPageView.swift */; };
 		CFF7C5B32F734D8000A67EC3 /* DailyReadingProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFF7C5B22F734D7900A67EC3 /* DailyReadingProgress.swift */; };
@@ -635,6 +637,8 @@
 		CFEEED3A2FAA42E500F03103 /* DocumentBlockEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentBlockEditorView.swift; sourceTree = "<group>"; };
 		CFEEED3B2FAA42E500F03103 /* DocumentBlockPreviewPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentBlockPreviewPage.swift; sourceTree = "<group>"; };
 		CFEEED3C2FAA42E500F03103 /* DocumentBlockRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentBlockRow.swift; sourceTree = "<group>"; };
+		CFEEED412FAAEB3100F03103 /* DeveloperSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeveloperSettings.swift; sourceTree = "<group>"; };
+		CFEEED432FAC52F100F03103 /* DividerStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DividerStyles.swift; sourceTree = "<group>"; };
 		CFF7C5AE2F72EA0800A67EC3 /* Medication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Medication.swift; sourceTree = "<group>"; };
 		CFF7C5B02F72F18900A67EC3 /* MedicationPageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MedicationPageView.swift; sourceTree = "<group>"; };
 		CFF7C5B22F734D7900A67EC3 /* DailyReadingProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyReadingProgress.swift; sourceTree = "<group>"; };
@@ -929,6 +933,7 @@
 		CF8B7F612F6B33E5006A7D3B /* Helpers */ = {
 			isa = PBXGroup;
 			children = (
+				CFEEED432FAC52F100F03103 /* DividerStyles.swift */,
 				CFEEED392FAA42E500F03103 /* DocumentBlockEditorPage.swift */,
 				CFEEED3A2FAA42E500F03103 /* DocumentBlockEditorView.swift */,
 				CFEEED3B2FAA42E500F03103 /* DocumentBlockPreviewPage.swift */,
@@ -1136,6 +1141,7 @@
 		CF8D832C2F50A4940092FC98 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				CFEEED412FAAEB3100F03103 /* DeveloperSettings.swift */,
 				CFEEED2F2FAA42B100F03103 /* DocumentBlock.swift */,
 				CFEEED302FAA42B100F03103 /* DocumentBook.swift */,
 				CFEEED312FAA42B100F03103 /* DocumentEntry.swift */,
@@ -1610,6 +1616,7 @@
 				CF822EC12F90555100CC5B80 /* SharedEventsAPIService.swift in Sources */,
 				CF29FC882F6F603000EC47F8 /* EventCalendar.swift in Sources */,
 				CFC6B1E82F99AD2E00A60409 /* BuddyGroupView.swift in Sources */,
+				CFEEED442FAC52F900F03103 /* DividerStyles.swift in Sources */,
 				CFC6B1E92F99AD2E00A60409 /* BuddyReadingView.swift in Sources */,
 				CFC6B1EA2F99AD2E00A60409 /* BuddyProgressUpdateSheet.swift in Sources */,
 				CFC6B1EB2F99AD2E00A60409 /* BuddyPostAnnouncementSheet.swift in Sources */,
@@ -1691,6 +1698,7 @@
 				CF84219E2F607BAE0069F12F /* OnboardingOverlay.swift in Sources */,
 				CF8B7F6D2F6B3553006A7D3B /* JournalBlock.swift in Sources */,
 				CF92D5602F7591A400174F04 /* DailyCompletionSettings.swift in Sources */,
+				CFEEED422FAAEB3700F03103 /* DeveloperSettings.swift in Sources */,
 				CF13B66B2F69B454008D3CE9 /* HealthPageView.swift in Sources */,
 				CF13B66D2F69B524008D3CE9 /* AddHealthMetricsPopupView.swift in Sources */,
 				CF13B6752F69B6DB008D3CE9 /* ExerciseHistoryPopupView.swift in Sources */,

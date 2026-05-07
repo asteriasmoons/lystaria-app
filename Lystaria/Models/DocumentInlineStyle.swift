@@ -12,6 +12,7 @@ enum DocumentInlineStyleType: String, Codable, CaseIterable {
     case bold
     case italic
     case underline
+    case strikethrough
     case link
     case inlineCode
 }

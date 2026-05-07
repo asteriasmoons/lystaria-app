@@ -165,7 +165,7 @@ struct JournalBlockEditorView: View {
             listGroupID: type == .bulletedList || type == .numberedList ? UUID() : nil,
             isExpanded: type == .toggle,
             indentLevel: 0,
-            calloutEmoji: type == .callout ? "✦" : "",
+            calloutEmoji: type == .callout ? defaultCalloutIconID : "",
             languageHint: type == .divider ? DividerStyle.line.rawValue : ""
         )
         // Image blocks start with no data — the user picks from Photos in the row UI
@@ -227,7 +227,7 @@ struct JournalBlockEditorView: View {
             listGroupID: inheritedListGroupID,
             isExpanded: type == .toggle,
             indentLevel: inheritedIndentLevel,
-            calloutEmoji: type == .callout ? "✦" : "",
+            calloutEmoji: type == .callout ? defaultCalloutIconID : "",
             languageHint: type == .divider ? DividerStyle.line.rawValue : ""
         )
         newBlock.entry = entry
@@ -367,7 +367,7 @@ struct JournalBlockEditorView: View {
             block.parentBlockID = nil
             block.indentLevel = 0
             if block.calloutEmoji.isEmpty {
-                block.calloutEmoji = "✦"
+                block.calloutEmoji = defaultCalloutIconID
             }
         case .divider:
             block.parentBlockID = nil
@@ -411,6 +411,10 @@ struct JournalBlockEditorView: View {
         block.touch()
         entry.normalizeBlockSortOrders()
         save()
+    }
+
+    private var defaultCalloutIconID: String {
+        "asset:sparkle"
     }
 
     private func labelForType(_ type: JournalBlockType) -> String {

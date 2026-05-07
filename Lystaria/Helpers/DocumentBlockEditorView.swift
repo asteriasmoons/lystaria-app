@@ -15,10 +15,33 @@ struct DocumentBlockEditorView: View {
     @State private var isMutatingBlocks = false
     @State private var draggingBlock: DocumentBlock? = nil
     @State private var dragOverIndex: Int? = nil
+    @State private var selectedBlockIDs: Set<UUID> = []
+
+    // Split visible blocks into page segments at .pageBreak dividers
+    // Each entry: (page blocks, optional page break block that follows it)
+    private var blockPages: [(blocks: [(Int, DocumentBlock)], breakBlock: DocumentBlock?)] {
+        var pages: [(blocks: [(Int, DocumentBlock)], breakBlock: DocumentBlock?)] = [([], nil)]
+        for item in Array(visibleBlocks.enumerated()) {
+            let block = item.element
+            if block.type == .divider,
+               (DividerStyles(rawValue: block.languageHint) ?? .line) == .pageBreak {
+                // Close current page with this break block, open new page
+                let last = pages[pages.count - 1]
+                pages[pages.count - 1] = (last.blocks, block)
+                pages.append(([], nil))
+            } else {
+                pages[pages.count - 1].blocks.append((item.offset, block))
+            }
+        }
+        return pages
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
+                let pages = blockPages
+
+                // Drop zone before everything
                 if draggingBlock != nil {
                     DocumentBlockDropZone(index: 0, dragOverIndex: $dragOverIndex)
                         .onDrop(of: [.plainText], delegate: DocumentIndexedDropDelegate(
@@ -30,48 +53,103 @@ struct DocumentBlockEditorView: View {
                         ))
                 }
 
-                ForEach(Array(visibleBlocks.enumerated()), id: \.element.id) { i, block in
-                    DocumentBlockRow(
-                        block: block,
-                        onAddBelow: { b, type, initialText in insertBlockBelow(b, type, initialText) },
-                        onDelete: deleteBlock,
-                        onMoveUp: moveBlockUp,
-                        onMoveDown: moveBlockDown,
-                        onTransform: transformBlock
-                    )
-                    .opacity(draggingBlock?.id == block.id ? 0.4 : 1)
-                    .contextMenu {
-                        Button(role: .destructive) { deleteBlock(block) } label: {
-                            Label("Delete Block", systemImage: "trash")
-                        }
-                        Button { moveBlockUp(block) } label: {
-                            Label("Move Up", systemImage: "arrow.up")
-                        }
-                        Button { moveBlockDown(block) } label: {
-                            Label("Move Down", systemImage: "arrow.down")
-                        }
-                    }
-                    .onDrag {
-                        draggingBlock = block
-                        dragOverIndex = nil
-                        return NSItemProvider(object: block.id.uuidString as NSString)
-                    }
-                    .padding(.vertical, 6)
+                ForEach(Array(pages.enumerated()), id: \.offset) { pageIndex, pageEntry in
+                    let page = pageEntry.blocks
+                    // Floating page sheet
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(page, id: \.1.id) { (i, block) in
+                            DocumentBlockRow(
+                                block: block,
+                                onAddBelow: { b, type, initialText in insertBlockBelow(b, type, initialText) },
+                                onDelete: deleteBlock,
+                                onMoveUp: moveBlockUp,
+                                onMoveDown: moveBlockDown,
+                                onTransform: transformBlock,
+                                isSelectionMode: isSelectionMode,
+                                isSelectedForBatchAction: selectedBlockIDs.contains(block.id),
+                                selectedBlockCount: selectedBlockIDs.count,
+                                onEnterSelectionMode: enterSelectionMode,
+                                onToggleBatchSelection: toggleBlockSelection,
+                                onClearBatchSelection: clearBlockSelection,
+                                onDeleteSelectedBlocks: deleteSelectedBlocks,
+                                onIndentSelectedBlocksIn: indentSelectedBlocksIn,
+                                onIndentSelectedBlocksOut: indentSelectedBlocksOut
+                            )
+                            .opacity(draggingBlock?.id == block.id ? 0.4 : 1)
+                            .onDrag {
+                                draggingBlock = block
+                                dragOverIndex = nil
+                                return NSItemProvider(object: block.id.uuidString as NSString)
+                            }
+                            .padding(.vertical, isSelectionMode ? 3 : 6)
 
-                    if draggingBlock != nil {
-                        DocumentBlockDropZone(index: i + 1, dragOverIndex: $dragOverIndex)
-                            .onDrop(of: [.plainText], delegate: DocumentIndexedDropDelegate(
-                                index: i + 1,
-                                draggingBlock: $draggingBlock,
-                                dragOverIndex: $dragOverIndex,
-                                visibleBlocks: visibleBlocks,
-                                onMove: reorderBlockToIndex
-                            ))
+                            if draggingBlock != nil {
+                                DocumentBlockDropZone(index: i + 1, dragOverIndex: $dragOverIndex)
+                                    .onDrop(of: [.plainText], delegate: DocumentIndexedDropDelegate(
+                                        index: i + 1,
+                                        draggingBlock: $draggingBlock,
+                                        dragOverIndex: $dragOverIndex,
+                                        visibleBlocks: visibleBlocks,
+                                        onMove: reorderBlockToIndex
+                                    ))
+                            }
+                        }
+
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 28)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .fill(Color.white.opacity(0.07))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                    .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                            )
+                            .overlay(
+                                PageSheetTapOverlay {
+                                    guard !isSelectionMode else { return }
+                                    if let last = page.last?.1 {
+                                        if last.type == .paragraph && last.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                            // Already a blank paragraph — just focus it
+                                            let id = last.id
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                                NotificationCenter.default.post(name: .documentBlockRequestFocus, object: id)
+                                            }
+                                        } else {
+                                            insertBlockBelow(last, .paragraph, "")
+                                        }
+                                    }
+                                }
+                                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                            )
+                    )
+                    .shadow(color: Color.black.opacity(0.25), radius: 12, x: 0, y: 4)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+
+                    // Render the page break block between sheets so it's tappable
+                    if let breakBlock = pageEntry.breakBlock {
+                        DocumentBlockRow(
+                            block: breakBlock,
+                            onAddBelow: { b, type, initialText in insertBlockBelow(b, type, initialText) },
+                            onDelete: deleteBlock,
+                            onMoveUp: moveBlockUp,
+                            onMoveDown: moveBlockDown,
+                            onTransform: transformBlock,
+                            isSelectionMode: isSelectionMode,
+                            isSelectedForBatchAction: selectedBlockIDs.contains(breakBlock.id),
+                            selectedBlockCount: selectedBlockIDs.count,
+                            onEnterSelectionMode: enterSelectionMode,
+                            onToggleBatchSelection: toggleBlockSelection,
+                            onClearBatchSelection: clearBlockSelection,
+                            onDeleteSelectedBlocks: deleteSelectedBlocks,
+                            onIndentSelectedBlocksIn: indentSelectedBlocksIn,
+                            onIndentSelectedBlocksOut: indentSelectedBlocksOut
+                        )
+                        .padding(.horizontal, 16)
                     }
                 }
             }
-            .padding(.horizontal)
-            .padding(.top)
             .padding(.bottom, 140)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -96,11 +174,143 @@ struct DocumentBlockEditorView: View {
     private var bottomAddBlockBar: some View {
         HStack {
             Spacer(minLength: 0)
-            addBlockMenu
+
+            if isSelectionMode {
+                batchSelectionBar
+            } else {
+                addBlockMenu
+            }
+
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
+    }
+
+    private var isSelectionMode: Bool {
+        !selectedBlockIDs.isEmpty
+    }
+
+    private var batchSelectionBar: some View {
+        HStack(spacing: 10) {
+            Button {
+                clearBlockSelection()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 34, height: 34)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+
+            Text("\(selectedBlockIDs.count) Selected")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
+
+            Button {
+                indentSelectedBlocksOut()
+            } label: {
+                Image(systemName: "decrease.indent")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 34, height: 34)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                indentSelectedBlocksIn()
+            } label: {
+                Image(systemName: "increase.indent")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 34, height: 34)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+
+            Button(role: .destructive) {
+                deleteSelectedBlocks()
+            } label: {
+                Image(systemName: "trash")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 34, height: 34)
+                    .background(Color.red.opacity(0.26))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color.black.opacity(0.36))
+        .clipShape(Capsule())
+        .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
+    }
+    private func enterSelectionMode(_ block: DocumentBlock) {
+        selectedBlockIDs = [block.id]
+    }
+
+    private func toggleBlockSelection(_ block: DocumentBlock) {
+        if selectedBlockIDs.contains(block.id) {
+            selectedBlockIDs.remove(block.id)
+        } else {
+            selectedBlockIDs.insert(block.id)
+        }
+    }
+
+    private func clearBlockSelection() {
+        selectedBlockIDs.removeAll()
+    }
+
+    private func selectedBlocksInOrder() -> [DocumentBlock] {
+        entry.sortedBlocks.filter { selectedBlockIDs.contains($0.id) }
+    }
+
+    private func deleteSelectedBlocks() {
+        let blocks = selectedBlocksInOrder()
+        guard !blocks.isEmpty else { return }
+        clearBlockSelection()
+        for block in blocks {
+            deleteBlock(block)
+        }
+    }
+
+    private func indentSelectedBlocksIn() {
+        let blocks = selectedBlocksInOrder()
+        guard !blocks.isEmpty else { return }
+        for block in blocks where canIndentBatchBlock(block) {
+            block.indentLevel = min(5, block.indentLevel + 1)
+            block.touch()
+        }
+        save()
+    }
+
+    private func indentSelectedBlocksOut() {
+        let blocks = selectedBlocksInOrder()
+        guard !blocks.isEmpty else { return }
+        for block in blocks where canIndentBatchBlock(block) {
+            block.indentLevel = max(0, block.indentLevel - 1)
+            block.touch()
+        }
+        save()
+    }
+
+    private func canIndentBatchBlock(_ block: DocumentBlock) -> Bool {
+        switch block.type {
+        case .paragraph, .heading1, .heading2, .heading3, .heading4,
+             .toggle, .bulletedList, .numberedList, .checklist, .blockquote, .callout:
+            return true
+        case .divider, .code, .image:
+            return false
+        }
     }
 
     private var addBlockMenu: some View {
@@ -128,6 +338,7 @@ struct DocumentBlockEditorView: View {
 
     private func appendBlock(type: DocumentBlockType) {
         guard !isMutatingBlocks else { return }
+        clearBlockSelection()
         isMutatingBlocks = true
         defer { isMutatingBlocks = false }
 
@@ -139,7 +350,7 @@ struct DocumentBlockEditorView: View {
             listGroupID: type == .bulletedList || type == .numberedList ? UUID() : nil,
             isExpanded: type == .toggle,
             indentLevel: 0,
-            calloutEmoji: type == .callout ? "✦" : "",
+            calloutEmoji: type == .callout ? defaultCalloutIconID : "",
             languageHint: type == .divider ? DividerStyle.line.rawValue : ""
         )
         newBlock.entry = entry
@@ -153,6 +364,7 @@ struct DocumentBlockEditorView: View {
 
     private func insertBlockBelow(_ block: DocumentBlock, _ type: DocumentBlockType, _ initialText: String = "") {
         guard !isMutatingBlocks else { return }
+        clearBlockSelection()
         isMutatingBlocks = true
         defer { isMutatingBlocks = false }
 
@@ -185,7 +397,7 @@ struct DocumentBlockEditorView: View {
             listGroupID: inheritedListGroupID,
             isExpanded: type == .toggle,
             indentLevel: inheritedIndentLevel,
-            calloutEmoji: type == .callout ? "✦" : "",
+            calloutEmoji: type == .callout ? defaultCalloutIconID : "",
             languageHint: type == .divider ? DividerStyle.line.rawValue : ""
         )
         newBlock.entry = entry
@@ -214,6 +426,7 @@ struct DocumentBlockEditorView: View {
         defer { isMutatingBlocks = false }
 
         let blockID = block.id
+        selectedBlockIDs.remove(blockID)
         let blockSortOrder = block.sortOrder
 
         for inlineStyle in (block.inlineStyles ?? []) { modelContext.delete(inlineStyle) }
@@ -285,7 +498,7 @@ struct DocumentBlockEditorView: View {
 
         block.type = type
 
-        if type == .bulletedList || type == .numberedList {
+        if type == .bulletedList || type == .numberedList || type == .checklist {
             if block.listGroupID == nil { block.listGroupID = UUID() }
         } else {
             block.listGroupID = nil
@@ -297,7 +510,7 @@ struct DocumentBlockEditorView: View {
         switch type {
         case .callout:
             block.parentBlockID = nil; block.indentLevel = 0
-            if block.calloutEmoji.isEmpty { block.calloutEmoji = "✦" }
+            if block.calloutEmoji.isEmpty { block.calloutEmoji = defaultCalloutIconID }
         case .divider:
             block.parentBlockID = nil; block.indentLevel = 0
             block.text = ""; block.languageHint = DividerStyle.line.rawValue
@@ -318,11 +531,20 @@ struct DocumentBlockEditorView: View {
             block.parentBlockID = nil; block.indentLevel = 0; block.languageHint = ""; block.isExpanded = true
         case .bulletedList, .numberedList:
             block.parentBlockID = nil; block.indentLevel = 0; block.languageHint = ""
+        case .checklist:
+            block.parentBlockID = nil; block.indentLevel = 0
+            if block.languageHint != "checked" && block.languageHint != "xmark" {
+                block.languageHint = ""
+            }
         }
 
         block.touch()
         entry.normalizeBlockSortOrders()
         save()
+    }
+
+    private var defaultCalloutIconID: String {
+        "asset:sparkle"
     }
 
     private func labelForType(_ type: DocumentBlockType) -> String {
@@ -335,6 +557,7 @@ struct DocumentBlockEditorView: View {
         case .toggle: return "Toggle"
         case .bulletedList: return "Bulleted List"
         case .numberedList: return "Numbered List"
+        case .checklist: return "Checklist"
         case .blockquote: return "Blockquote"
         case .callout: return "Callout"
         case .divider: return "Divider"
@@ -385,6 +608,34 @@ struct DocumentBlockDropZone: View {
         }
         .frame(maxWidth: .infinity).frame(height: 16)
         .contentShape(Rectangle())
+    }
+}
+
+// MARK: - Passthrough Tap Recognizer
+
+struct PageSheetTapOverlay: UIViewRepresentable {
+    let onTap: () -> Void
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.backgroundColor = .clear
+        view.isUserInteractionEnabled = true
+        let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.tapped))
+        tap.cancelsTouchesInView = false
+        view.addGestureRecognizer(tap)
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        context.coordinator.onTap = onTap
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(onTap: onTap) }
+
+    final class Coordinator: NSObject {
+        var onTap: () -> Void
+        init(onTap: @escaping () -> Void) { self.onTap = onTap }
+        @objc func tapped() { onTap() }
     }
 }
 

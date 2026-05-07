@@ -22,6 +22,7 @@ enum DocumentBlockType: String, Codable, CaseIterable {
     case toggle
     case bulletedList
     case numberedList
+    case checklist
 }
 
 @Model
@@ -36,6 +37,8 @@ final class DocumentBlock {
     var listGroupID: UUID? = nil
     var isExpanded: Bool = true
     var indentLevel: Int = 0
+    var isBlockquoteStyle: Bool = false
+    var isCalloutStyle: Bool = false
 
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
@@ -83,7 +86,7 @@ final class DocumentBlock {
 
     var isListBlock: Bool {
         switch type {
-        case .bulletedList, .numberedList: return true
+        case .bulletedList, .numberedList, .checklist: return true
         default: return false
         }
     }

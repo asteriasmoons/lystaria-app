@@ -17,6 +17,7 @@ struct ProfileTabView: View {
     @EnvironmentObject private var appState: AppState
     @Query private var authUsers: [AuthUser]
     @Query private var userSettings: [UserSettings]
+    @Query private var developerSettingsRows: [DeveloperSettings]
 
     // MARK: - Profile state
 
@@ -34,9 +35,6 @@ struct ProfileTabView: View {
     @State private var selectedTimezoneIdentifier: String = TimeZone.current.identifier
     @State private var useSystemTimezone: Bool = true
     @State private var timezoneSearch: String = ""
-    @AppStorage("isAdminMode") private var isAdminMode: Bool = false
-    @AppStorage("isPremiumDevBypass") private var isPremiumDevBypass: Bool = false
-    @AppStorage("forceFreeMode") private var forceFreeMode: Bool = false
     @AppStorage("settings.showOnboardingNextLaunch") private var showOnboardingNextLaunch: Bool = false
     @AppStorage("hasSeenWelcome") private var hasSeenWelcome: Bool = true
 
@@ -48,6 +46,60 @@ struct ProfileTabView: View {
         currentUser?.appleUserId == "001664.f2fefbb84f024544b98e865fa6c6b49e.1524"
     }
     private var settings: UserSettings? { userSettings.first }
+
+    private var currentDeveloperSettings: DeveloperSettings? {
+        guard let appleUserId = currentUser?.appleUserId, !appleUserId.isEmpty else { return nil }
+        return developerSettingsRows.first { $0.appleUserId == appleUserId }
+    }
+
+    private func ensureDeveloperSettings() -> DeveloperSettings? {
+        guard isAdminUser,
+              let appleUserId = currentUser?.appleUserId,
+              !appleUserId.isEmpty else { return nil }
+
+        if let existing = currentDeveloperSettings { return existing }
+
+        let settings = DeveloperSettings(appleUserId: appleUserId)
+        modelContext.insert(settings)
+        try? modelContext.save()
+        return settings
+    }
+
+    private var adminModeBinding: Binding<Bool> {
+        Binding(
+            get: { isAdminUser && (currentDeveloperSettings?.isAdminMode ?? false) },
+            set: { newValue in
+                guard let settings = ensureDeveloperSettings() else { return }
+                settings.isAdminMode = newValue
+                settings.updatedAt = Date()
+                try? modelContext.save()
+            }
+        )
+    }
+
+    private var forceFreeModeBinding: Binding<Bool> {
+        Binding(
+            get: { isAdminUser && (currentDeveloperSettings?.forceFreeMode ?? false) },
+            set: { newValue in
+                guard let settings = ensureDeveloperSettings() else { return }
+                settings.forceFreeMode = newValue
+                settings.updatedAt = Date()
+                try? modelContext.save()
+            }
+        )
+    }
+
+    private var premiumDevBypassBinding: Binding<Bool> {
+        Binding(
+            get: { isAdminUser && (currentDeveloperSettings?.isPremiumDevBypass ?? false) },
+            set: { newValue in
+                guard let settings = ensureDeveloperSettings() else { return }
+                settings.isPremiumDevBypass = newValue
+                settings.updatedAt = Date()
+                try? modelContext.save()
+            }
+        )
+    }
 
     private func ensureSettings() -> UserSettings {
         if let s = settings { return s }
@@ -362,7 +414,7 @@ struct ProfileTabView: View {
                     .foregroundStyle(LColors.textSecondary)
 
                 if isAdminUser {
-                    Toggle(isOn: $isAdminMode) {
+                    Toggle(isOn: adminModeBinding) {
                         HStack(spacing: 10) {
                             Image("shieldstar").renderingMode(.template).resizable()
                                 .scaledToFit().frame(width: 18, height: 18).foregroundStyle(.white)
@@ -375,7 +427,7 @@ struct ProfileTabView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 14))
                     .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
 
-                    Toggle(isOn: $forceFreeMode) {
+                    Toggle(isOn: forceFreeModeBinding) {
                         HStack(spacing: 10) {
                             Image(systemName: "lock.heart.fill")
                                 .font(.system(size: 16, weight: .semibold))
@@ -389,7 +441,7 @@ struct ProfileTabView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 14))
                     .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
 
-                    Toggle(isOn: $isPremiumDevBypass) {
+                    Toggle(isOn: premiumDevBypassBinding) {
                         HStack(spacing: 10) {
                             Image(systemName: "crown.fill").font(.system(size: 16, weight: .semibold)).foregroundStyle(.white)
                             Text("Premium Dev Bypass").font(.system(size: 16, weight: .semibold))

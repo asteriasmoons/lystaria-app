@@ -24,20 +24,217 @@ struct DocumentBlockRow: View {
     var onMoveDown: (DocumentBlock) -> Void
     var onTransform: (DocumentBlock, DocumentBlockType) -> Void
 
+    var isSelectionMode: Bool = false
+    var isSelectedForBatchAction: Bool = false
+    var selectedBlockCount: Int = 0
+    var onEnterSelectionMode: (DocumentBlock) -> Void = { _ in }
+    var onToggleBatchSelection: (DocumentBlock) -> Void = { _ in }
+    var onClearBatchSelection: () -> Void = {}
+    var onDeleteSelectedBlocks: () -> Void = {}
+    var onIndentSelectedBlocksIn: () -> Void = {}
+    var onIndentSelectedBlocksOut: () -> Void = {}
+
     @State private var selectedRange: NSRange = NSRange(location: 0, length: 0)
     @State private var showLinkEditor = false
     @State private var linkDraft = ""
     @State private var selectedPhotoItem: PhotosPickerItem? = nil
+    @State private var showCalloutIconPicker = false
+    @State private var isScrollingCalloutIconPicker = false
+
+    private let maxIndentLevel = 5
+
+    private var indentPadding: CGFloat {
+        CGFloat(block.indentLevel) * 20
+    }
+
+    private var paragraphTopPadding: CGFloat {
+        guard block.type == .paragraph else { return 0 }
+        return block.indentLevel > 0 ? 0 : 3
+    }
+
+    private var prefixWrapperAlignmentPadding: CGFloat {
+        block.isBlockquoteStyle || block.isCalloutStyle ? 12 : 0
+    }
+    
+    @ViewBuilder
+    private func transformButton(_ title: String, icon: String, type: DocumentBlockType) -> some View {
+        Button {
+            onTransform(block, type)
+        } label: {
+            Label(title, systemImage: icon)
+        }
+        .disabled(block.type == type)
+    }
+
+    private func toggleBlockquoteStyle() {
+        guard supportsWrapperStyles else { return }
+        block.isBlockquoteStyle.toggle()
+        block.touch()
+    }
+
+    private func toggleCalloutStyle() {
+        guard supportsWrapperStyles else { return }
+        block.isCalloutStyle.toggle()
+        if block.isCalloutStyle && block.calloutEmoji.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            block.calloutEmoji = defaultCalloutIconID
+        }
+        block.touch()
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 2) {
             if supportsInlineFormatting && selectedRange.length > 0 {
                 selectionFormatMenu
             }
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: block.isListBlock ? 2 : 4) {
                 contentColumn
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, isSelectionMode ? 4 : 0)
+        .padding(.horizontal, isSelectionMode ? 8 : 0)
+        .background(batchSelectionBackground)
+        .overlay(batchSelectionOverlay)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard isSelectionMode else { return }
+            onToggleBatchSelection(block)
+        }
+        .padding(.top, paragraphTopPadding)
+        .contextMenu {
+            if isSelectionMode {
+                Button {
+                    onToggleBatchSelection(block)
+                } label: {
+                    Label(isSelectedForBatchAction ? "Deselect Block" : "Select Block", systemImage: isSelectedForBatchAction ? "checkmark.circle.fill" : "circle")
+                }
+
+                if selectedBlockCount > 0 {
+                    Menu {
+                        Button {
+                            onIndentSelectedBlocksOut()
+                        } label: {
+                            Label("Indent Out", systemImage: "decrease.indent")
+                        }
+
+                        Button {
+                            onIndentSelectedBlocksIn()
+                        } label: {
+                            Label("Indent In", systemImage: "increase.indent")
+                        }
+
+                        Divider()
+
+                        Button(role: .destructive) {
+                            onDeleteSelectedBlocks()
+                        } label: {
+                            Label("Delete Selected", systemImage: "trash")
+                        }
+                    } label: {
+                        Label("Selected Actions", systemImage: "checklist")
+                    }
+                }
+
+                Button {
+                    onClearBatchSelection()
+                } label: {
+                    Label("Clear Selection", systemImage: "xmark.circle")
+                }
+
+                Divider()
+            } else {
+                Button {
+                    onEnterSelectionMode(block)
+                } label: {
+                    Label("Select Multiple", systemImage: "checklist")
+                }
+
+                Divider()
+            }
+
+            if canIndentBlock {
+                Button {
+                    indentOut()
+                } label: {
+                    Label("Indent Out", systemImage: "decrease.indent")
+                }
+                .disabled(block.indentLevel <= 0)
+
+                Button {
+                    indentIn()
+                } label: {
+                    Label("Indent In", systemImage: "increase.indent")
+                }
+                .disabled(block.indentLevel >= maxIndentLevel)
+
+                Divider()
+            }
+
+            Menu {
+                transformButton("Paragraph", icon: "text.alignleft", type: .paragraph)
+                transformButton("Heading 1", icon: "textformat.size.larger", type: .heading1)
+                transformButton("Heading 2", icon: "textformat.size", type: .heading2)
+                transformButton("Heading 3", icon: "textformat", type: .heading3)
+                transformButton("Heading 4", icon: "textformat", type: .heading4)
+
+                Divider()
+
+                transformButton("Bullet List", icon: "list.bullet", type: .bulletedList)
+                transformButton("Numbered List", icon: "list.number", type: .numberedList)
+                transformButton("Checklist", icon: "checklist", type: .checklist)
+                transformButton("Toggle", icon: "chevron.right.square", type: .toggle)
+
+                Divider()
+
+                transformButton("Code", icon: "chevron.left.forwardslash.chevron.right", type: .code)
+                transformButton("Divider", icon: "minus", type: .divider)
+            } label: {
+                Label("Turn Into", systemImage: "wand.and.stars")
+            }
+
+            if supportsWrapperStyles {
+                Menu {
+                    Button {
+                        toggleBlockquoteStyle()
+                    } label: {
+                        Label(block.isBlockquoteStyle ? "Remove Blockquote" : "Blockquote", systemImage: "quote.opening")
+                    }
+
+                    Button {
+                        toggleCalloutStyle()
+                    } label: {
+                        Label(block.isCalloutStyle ? "Remove Callout" : "Callout", systemImage: "sparkles")
+                    }
+                } label: {
+                    Label("Apply Style", systemImage: "paintbrush")
+                }
+            }
+
+            Divider()
+
+            Button {
+                onMoveUp(block)
+            } label: {
+                Label("Move Up", systemImage: "arrow.up")
+            }
+
+            Button {
+                onMoveDown(block)
+            } label: {
+                Label("Move Down", systemImage: "arrow.down")
+            }
+
+            Button(role: .destructive) {
+                onDelete(block)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        .sheet(isPresented: $showCalloutIconPicker) {
+            calloutIconPickerSheet
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+                .preferredColorScheme(.dark)
         }
         .alert("Insert Link", isPresented: $showLinkEditor) {
             TextField("https://example.com", text: $linkDraft)
@@ -50,6 +247,16 @@ struct DocumentBlockRow: View {
         }
     }
 
+    private var batchSelectionBackground: some View {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(isSelectedForBatchAction ? AnyShapeStyle(LGradients.blue.opacity(0.22)) : AnyShapeStyle(Color.white.opacity(isSelectionMode ? 0.04 : 0)))
+    }
+
+    private var batchSelectionOverlay: some View {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .stroke(isSelectedForBatchAction ? AnyShapeStyle(LGradients.blue) : AnyShapeStyle(Color.clear), lineWidth: 1)
+    }
+
     // MARK: - Format Menu
 
     private var selectionFormatMenu: some View {
@@ -57,6 +264,7 @@ struct DocumentBlockRow: View {
             Button(rangeHasStyle(.bold) ? "Remove Bold" : "Bold") { toggleInlineStyle(.bold) }
             Button(rangeHasStyle(.italic) ? "Remove Italic" : "Italic") { toggleInlineStyle(.italic) }
             Button(rangeHasStyle(.underline) ? "Remove Underline" : "Underline") { toggleInlineStyle(.underline) }
+            Button(rangeHasStyle(.strikethrough) ? "Remove Strikethrough" : "Strikethrough") { toggleInlineStyle(.strikethrough) }
             Button(rangeHasStyle(.inlineCode) ? "Remove Code" : "Code") { toggleInlineStyle(.inlineCode) }
             Button(rangeHasStyle(.link) ? "Edit Link" : "Add Link") { prepareLinkEditor() }
         } label: {
@@ -85,6 +293,174 @@ struct DocumentBlockRow: View {
         }
     }
 
+    @ViewBuilder
+    private func styledContent<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        if block.isCalloutStyle {
+            calloutStyleWrapper {
+                if block.isBlockquoteStyle {
+                    blockquoteStyleWrapper { content() }
+                } else {
+                    content()
+                }
+            }
+        } else if block.isBlockquoteStyle {
+            blockquoteStyleWrapper { content() }
+        } else {
+            content()
+        }
+    }
+
+    private func blockquoteStyleWrapper<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(LGradients.blue)
+                .frame(width: 4)
+
+            content()
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.white.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func calloutStyleWrapper<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            calloutIconPicker
+
+            content()
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.white.opacity(0.06))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(LGradients.blue, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+
+    private var calloutIconPicker: some View {
+        Button {
+            showCalloutIconPicker = true
+        } label: {
+            calloutIconView(for: activeCalloutIconItem)
+                .frame(width: 22, height: 22)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var calloutIconPickerSheet: some View {
+        NavigationStack {
+            ZStack {
+                LystariaBackground()
+                    .ignoresSafeArea()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
+                        calloutIconSection(title: "Custom Icons", items: BookmarkAssetIconLibrary.all)
+                        calloutIconSection(title: "SF Symbols", items: BookmarkIconLibrary.all)
+                    }
+                    .padding(.horizontal, LSpacing.pageHorizontal)
+                    .padding(.top, 18)
+                    .padding(.bottom, 36)
+                }
+                .scrollIndicators(.hidden)
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 8)
+                        .onChanged { _ in
+                            isScrollingCalloutIconPicker = true
+                        }
+                        .onEnded { _ in
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+                                isScrollingCalloutIconPicker = false
+                            }
+                        }
+                )
+            }
+            .navigationTitle("Choose Icon")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
+        }
+    }
+
+    private func calloutIconSection(title: String, items: [BookmarkIconItem]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(LColors.textSecondary)
+                .padding(.horizontal, 2)
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 54), spacing: 12)], spacing: 12) {
+                ForEach(items, id: \.id) { item in
+                    calloutIconGridButton(for: item)
+                }
+            }
+        }
+    }
+
+    private func calloutIconGridButton(for item: BookmarkIconItem) -> some View {
+        let isSelected = activeCalloutIconItem.id == item.id
+
+        return Button {
+            guard !isScrollingCalloutIconPicker else { return }
+            block.calloutEmoji = item.id
+            block.touch()
+            showCalloutIconPicker = false
+        } label: {
+            calloutIconView(for: item)
+                .frame(width: 22, height: 22)
+                .frame(width: 54, height: 54)
+                .background(isSelected ? AnyShapeStyle(LGradients.blue) : AnyShapeStyle(Color.white.opacity(0.08)))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(isSelected ? AnyShapeStyle(LGradients.blue) : AnyShapeStyle(LColors.glassBorder), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+
+    private var defaultCalloutIconID: String {
+        BookmarkAssetIconLibrary.all.first?.id ?? BookmarkIconLibrary.all.first?.id ?? "system:sparkles"
+    }
+
+    private var activeCalloutIconItem: BookmarkIconItem {
+        let trimmed = block.calloutEmoji.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let item = BookmarkCombinedIconLibrary.all.first(where: { $0.id == trimmed }) {
+            return item
+        }
+
+        if let legacyAsset = BookmarkAssetIconLibrary.all.first(where: { $0.name == trimmed }) {
+            return legacyAsset
+        }
+
+        if let legacySystem = BookmarkIconLibrary.all.first(where: { $0.name == trimmed }) {
+            return legacySystem
+        }
+
+        return BookmarkAssetIconLibrary.all.first ?? BookmarkIconLibrary.all.first ?? BookmarkIconItem(name: "sparkles", source: .system)
+    }
+
+    @ViewBuilder
+    private func calloutIconView(for item: BookmarkIconItem) -> some View {
+        switch item.source {
+        case .asset:
+            Image(item.name)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .foregroundStyle(Color.white)
+        case .system:
+            Image(systemName: item.name)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Color.white)
+        }
+    }
+
+
     // MARK: - Text Editor
 
     private var textEditor: some View {
@@ -98,52 +474,70 @@ struct DocumentBlockRow: View {
                         textColor: UIColor(LColors.textPrimary),
                         placeholder: placeholderText, isCodeBlock: false,
                         onCreateParagraphBelow: { suffix in onAddBelow(block, .paragraph, suffix) },
+                        onCreateTypedBlockBelow: { type, text in onAddBelow(block, type, text) },
+                        onMergeWithPrevious: { mergeWithPreviousBlock(block) },
                         onDeleteEmptyBlock: { onDelete(block) }, onExitList: nil
                     )
                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.leading, CGFloat(block.indentLevel) * 20)
                 .padding(12)
                 .background(Color.white.opacity(0.04))
                 .clipShape(RoundedRectangle(cornerRadius: 14))
-            } else if block.type == .toggle || block.type == .bulletedList || block.type == .numberedList {
-                HStack(alignment: .top, spacing: 10) {
+                .padding(.leading, indentPadding)
+            } else if block.type == .toggle || block.type == .bulletedList || block.type == .numberedList || block.type == .checklist {
+                HStack(alignment: .top, spacing: 8) {
                     if block.type == .toggle {
                         Button {
                             block.isExpanded.toggle()
                             block.touch()
                         } label: {
-                            prefixView(for: block).frame(width: 22, alignment: .leading)
+                            prefixView(for: block)
+                                .frame(width: 22, alignment: .leading)
+                                .padding(.top, prefixWrapperAlignmentPadding)
                         }
                         .buttonStyle(.plain)
+                    } else if block.type == .checklist {
+                        checklistPrefixButton
+                            .frame(width: 22, alignment: .leading)
+                            .padding(.top, prefixWrapperAlignmentPadding)
                     } else {
-                        prefixView(for: block).frame(width: 22, alignment: .leading)
+                        prefixView(for: block)
+                            .frame(width: 22, alignment: .leading)
+                            .padding(.top, prefixWrapperAlignmentPadding)
                     }
+                    styledContent {
+                        DocumentRichEditableBlockTextView(
+                            block: block, selectedRange: $selectedRange,
+                            baseUIFont: uiFontForBlockType(block.type),
+                            textColor: UIColor(LColors.textPrimary),
+                            placeholder: placeholderText, isCodeBlock: false,
+                            onCreateParagraphBelow: { suffix in onAddBelow(block, nextBlockTypeOnReturn(for: block.type), suffix) },
+                            onCreateTypedBlockBelow: { type, text in onAddBelow(block, type, text) },
+                            onMergeWithPrevious: { mergeWithPreviousBlock(block) },
+                            onDeleteEmptyBlock: { onDelete(block) },
+                            onExitList: { onAddBelow(block, .paragraph, ""); onDelete(block) }
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, indentPadding)
+            } else {
+                styledContent {
                     DocumentRichEditableBlockTextView(
                         block: block, selectedRange: $selectedRange,
                         baseUIFont: uiFontForBlockType(block.type),
                         textColor: UIColor(LColors.textPrimary),
                         placeholder: placeholderText, isCodeBlock: false,
-                        onCreateParagraphBelow: { suffix in onAddBelow(block, nextBlockTypeOnReturn(for: block.type), suffix) },
-                        onDeleteEmptyBlock: { onDelete(block) },
-                        onExitList: { onAddBelow(block, .paragraph, ""); onDelete(block) }
+                        onCreateParagraphBelow: { suffix in onAddBelow(block, .paragraph, suffix) },
+                        onCreateTypedBlockBelow: { type, text in onAddBelow(block, type, text) },
+                        onMergeWithPrevious: { mergeWithPreviousBlock(block) },
+                        onDeleteEmptyBlock: { onDelete(block) }, onExitList: nil
                     )
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.leading, CGFloat(block.indentLevel) * 20)
-            } else {
-                DocumentRichEditableBlockTextView(
-                    block: block, selectedRange: $selectedRange,
-                    baseUIFont: uiFontForBlockType(block.type),
-                    textColor: UIColor(LColors.textPrimary),
-                    placeholder: placeholderText, isCodeBlock: false,
-                    onCreateParagraphBelow: { suffix in onAddBelow(block, .paragraph, suffix) },
-                    onDeleteEmptyBlock: { onDelete(block) }, onExitList: nil
-                )
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.leading, CGFloat(block.indentLevel) * 20)
+                .padding(.leading, indentPadding)
             }
         }
     }
@@ -151,17 +545,16 @@ struct DocumentBlockRow: View {
     // MARK: - Callout Editor
 
     private var calloutEditor: some View {
-        HStack(alignment: .center, spacing: 6) {
-            TextField("✦", text: $block.calloutEmoji)
-                .textFieldStyle(.plain)
-                .frame(width: 22)
-                .onChange(of: block.calloutEmoji) { block.touch() }
+        HStack(alignment: .center, spacing: 12) {
+            calloutIconPicker
             DocumentRichEditableBlockTextView(
                 block: block, selectedRange: $selectedRange,
                 baseUIFont: UIFont.systemFont(ofSize: 15, weight: .regular),
                 textColor: UIColor(LColors.textPrimary),
                 placeholder: "Write callout...", isCodeBlock: false,
                 onCreateParagraphBelow: { suffix in onAddBelow(block, .paragraph, suffix) },
+                onCreateTypedBlockBelow: { type, text in onAddBelow(block, type, text) },
+                onMergeWithPrevious: { mergeWithPreviousBlock(block) },
                 onDeleteEmptyBlock: { onDelete(block) }, onExitList: nil
             )
             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
@@ -171,17 +564,18 @@ struct DocumentBlockRow: View {
         .background(Color.white.opacity(0.06))
         .overlay(RoundedRectangle(cornerRadius: 14).stroke(LGradients.blue, lineWidth: 1))
         .clipShape(RoundedRectangle(cornerRadius: 14))
+        .padding(.leading, indentPadding)
     }
 
     // MARK: - Divider Editor
 
     private var dividerEditor: some View {
-        let current = DividerStyle(rawValue: block.languageHint) ?? .line
+        let current = DividerStyles(rawValue: block.languageHint) ?? .line
         return dividerPreview(style: current)
             .padding(.vertical, 8)
             .contentShape(Rectangle())
             .onTapGesture {
-                let all = DividerStyle.allCases
+                let all = DividerStyles.allCases
                 let next = all[(all.firstIndex(of: current)! + 1) % all.count]
                 block.languageHint = next.rawValue
                 block.touch()
@@ -189,8 +583,13 @@ struct DocumentBlockRow: View {
     }
 
     @ViewBuilder
-    private func dividerPreview(style: DividerStyle) -> some View {
+    private func dividerPreview(style: DividerStyles) -> some View {
         switch style {
+        case .pageBreak:
+            Color.clear
+                .frame(maxWidth: .infinity)
+                .frame(height: 1)
+                .padding(.vertical, 4)
         case .line:
             Capsule().fill(LGradients.blue).frame(maxWidth: .infinity).frame(height: 3)
         case .dotted:
@@ -224,15 +623,29 @@ struct DocumentBlockRow: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(LColors.textSecondary)
                 .onChange(of: block.languageHint) { block.touch() }
-            DocumentRichEditableBlockTextView(
-                block: block, selectedRange: $selectedRange,
-                baseUIFont: UIFont.monospacedSystemFont(ofSize: UIFont.preferredFont(forTextStyle: .body).pointSize, weight: .regular),
-                textColor: UIColor(LColors.textPrimary),
-                placeholder: "Write code...", isCodeBlock: true,
-                onCreateParagraphBelow: { suffix in onAddBelow(block, .paragraph, suffix) },
-                onDeleteEmptyBlock: { onDelete(block) }, onExitList: nil
-            )
-            .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+
+            HStack(alignment: .top, spacing: 0) {
+                codeLineNumberGutter
+
+                Rectangle()
+                    .fill(Color.white.opacity(0.06))
+                    .frame(width: 1)
+                    .frame(maxHeight: .infinity)
+
+                DocumentRichEditableBlockTextView(
+                    block: block, selectedRange: $selectedRange,
+                    baseUIFont: codeEditorUIFont,
+                    textColor: UIColor(LColors.textPrimary),
+                    placeholder: "Write code...", isCodeBlock: true,
+                    onCreateParagraphBelow: { suffix in onAddBelow(block, .paragraph, suffix) },
+                    onCreateTypedBlockBelow: { type, text in onAddBelow(block, type, text) },
+                    onMergeWithPrevious: { mergeWithPreviousBlock(block) },
+                    onDeleteEmptyBlock: { onDelete(block) }, onExitList: nil
+                )
+                .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+                .padding(.leading, 12)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
@@ -240,6 +653,36 @@ struct DocumentBlockRow: View {
         .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.10), lineWidth: 1))
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
+
+    private var codeEditorUIFont: UIFont {
+        UIFont.monospacedSystemFont(
+            ofSize: UIFont.preferredFont(forTextStyle: .body).pointSize,
+            weight: .regular
+        )
+    }
+    
+    private var codeLineNumberGutter: some View {
+        VStack(alignment: .trailing, spacing: 0) {
+            ForEach(1...codeLineCount, id: \.self) { number in
+                Text("\(number)")
+                    .font(.system(size: codeEditorUIFont.pointSize, weight: .regular, design: .monospaced))
+                    .foregroundStyle(LColors.textSecondary.opacity(0.58))
+                    .frame(width: codeGutterWidth, height: codeEditorUIFont.lineHeight, alignment: .trailing)
+            }
+        }
+        .padding(.top, 0)
+        .padding(.trailing, 8)
+    }
+
+    private var codeLineCount: Int {
+        max(1, block.text.components(separatedBy: "\n").count)
+    }
+
+    private var codeGutterWidth: CGFloat {
+        let digits = String(codeLineCount).count
+        return CGFloat(max(1, digits)) * 8 + 4
+    }
+
 
     // MARK: - Image Editor
 
@@ -359,8 +802,18 @@ struct DocumentBlockRow: View {
     private var supportsInlineFormatting: Bool {
         switch block.type {
         case .paragraph, .heading1, .heading2, .heading3, .heading4,
-             .toggle, .bulletedList, .numberedList, .blockquote, .callout: return true
+                .toggle, .bulletedList, .numberedList, .checklist, .blockquote, .callout: return true
         case .divider, .code, .image: return false
+        }
+    }
+
+    private var supportsWrapperStyles: Bool {
+        switch block.type {
+        case .paragraph, .heading1, .heading2, .heading3, .heading4,
+                .toggle, .bulletedList, .numberedList, .checklist:
+            return true
+        case .blockquote, .callout, .divider, .code, .image:
+            return false
         }
     }
 
@@ -438,19 +891,88 @@ struct DocumentBlockRow: View {
             Image(systemName: block.isExpanded ? "chevron.down" : "chevron.right")
                 .font(.system(size: 16, weight: .bold)).foregroundStyle(LGradients.blue)
         case .bulletedList:
-            Image(systemName: "circle.fill")
+            Image(systemName: bulletSymbolName(for: block.indentLevel))
                 .font(.system(size: 8, weight: .bold))
-                .foregroundStyle(LColors.textPrimary).padding(.top, 6)
+                .foregroundStyle(LColors.textPrimary)
+                .padding(.top, 5)
         case .numberedList:
             Text(numberPrefix(for: block))
                 .font(.system(size: 16, weight: .semibold)).foregroundStyle(LColors.textPrimary)
+        case .checklist:
+            checklistPrefixIcon
         default: EmptyView()
         }
+    }
+    
+    private var checklistPrefixButton: some View {
+        checklistPrefixIcon
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2) {
+                block.languageHint = "xmark"
+                block.touch()
+            }
+            .onTapGesture {
+                toggleChecklistCheckedState()
+            }
+    }
+
+    @ViewBuilder
+    private var checklistPrefixIcon: some View {
+        switch checklistState {
+        case "checked":
+            ZStack {
+                Circle()
+                    .fill(LGradients.blue)
+                    .frame(width: 17, height: 17)
+
+                Image(systemName: "checkmark")
+                    .font(.system(size: 10, weight: .black))
+                    .foregroundStyle(Color.white)
+            }
+            .padding(.top, 4)
+
+        case "xmark":
+            ZStack {
+                Circle()
+                    .fill(Color.white.opacity(0.18))
+                    .frame(width: 17, height: 17)
+                    .overlay(Circle().stroke(LGradients.blue, lineWidth: 1.3))
+
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .black))
+                    .foregroundStyle(Color.white)
+            }
+            .padding(.top, 4)
+
+        default:
+            Circle()
+                .stroke(LColors.textSecondary, lineWidth: 1.4)
+                .frame(width: 17, height: 17)
+                .padding(.top, 4)
+        }
+    }
+
+    private var checklistState: String {
+        block.languageHint.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func toggleChecklistCheckedState() {
+        if checklistState == "checked" {
+            block.languageHint = ""
+        } else {
+            block.languageHint = "checked"
+        }
+
+        block.touch()
     }
 
     private func numberPrefix(for block: DocumentBlock) -> String {
         guard let entry = block.entry, block.type == .numberedList, let groupID = block.listGroupID else { return "1." }
-        let siblings = entry.sortedBlocks.filter { $0.type == .numberedList && $0.listGroupID == groupID }
+        let siblings = entry.sortedBlocks.filter {
+            $0.type == .numberedList &&
+            $0.listGroupID == groupID &&
+            $0.indentLevel == block.indentLevel
+        }
         guard let index = siblings.firstIndex(where: { $0.id == block.id }) else { return "1." }
         return "\(index + 1)."
     }
@@ -460,7 +982,89 @@ struct DocumentBlockRow: View {
         case .toggle: return .paragraph
         case .bulletedList: return .bulletedList
         case .numberedList: return .numberedList
+        case .checklist: return .checklist
         default: return .paragraph
+        }
+    }
+
+    private var canIndentBlock: Bool {
+        switch block.type {
+        case .paragraph, .heading1, .heading2, .heading3, .heading4,
+                .toggle, .bulletedList, .numberedList, .checklist, .blockquote, .callout:
+            return true
+        case .divider, .code, .image:
+            return false
+        }
+    }
+
+    private func indentIn() {
+        guard canIndentBlock else { return }
+        block.indentLevel = min(maxIndentLevel, block.indentLevel + 1)
+        block.touch()
+    }
+
+    private func indentOut() {
+        guard canIndentBlock else { return }
+        block.indentLevel = max(0, block.indentLevel - 1)
+        block.touch()
+    }
+
+    private func bulletSymbolName(for indentLevel: Int) -> String {
+        indentLevel % 2 == 1 ? "circle" : "circle.fill"
+    }
+
+    private func mergeWithPreviousBlock(_ currentBlock: DocumentBlock) -> Bool {
+        guard let entry = currentBlock.entry else { return false }
+        let sortedBlocks = entry.sortedBlocks
+        guard let currentIndex = sortedBlocks.firstIndex(where: { $0.id == currentBlock.id }), currentIndex > 0 else { return false }
+
+        let previousBlock = sortedBlocks[currentIndex - 1]
+        guard canMergeText(into: previousBlock), canMergeText(from: currentBlock) else { return false }
+
+        let previousLength = (previousBlock.text as NSString).length
+        previousBlock.text += currentBlock.text
+
+        if let currentStyles = currentBlock.inlineStyles, !currentStyles.isEmpty {
+            if previousBlock.inlineStyles == nil {
+                previousBlock.inlineStyles = []
+            }
+
+            for style in currentStyles {
+                style.rangeLocation += previousLength
+                style.block = previousBlock
+                previousBlock.inlineStyles?.append(style)
+            }
+
+            currentBlock.inlineStyles?.removeAll()
+        }
+
+        previousBlock.touch()
+        onDelete(currentBlock)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            NotificationCenter.default.post(name: .documentBlockRequestFocus, object: previousBlock.id)
+        }
+
+        return true
+    }
+
+    private func canMergeText(into block: DocumentBlock) -> Bool {
+        switch block.type {
+        case .paragraph, .heading1, .heading2, .heading3, .heading4,
+                .toggle, .bulletedList, .numberedList, .checklist, .blockquote, .callout, .code:
+            return true
+        case .divider, .image:
+            return false
+        }
+    }
+
+    private func canMergeText(from block: DocumentBlock) -> Bool {
+        switch block.type {
+        case .paragraph, .heading1, .heading2, .heading3, .heading4,
+                .toggle, .bulletedList, .numberedList, .checklist, .blockquote, .callout, .code:
+            return true
+        case .divider, .image:
+            return false
         }
     }
 
@@ -474,6 +1078,7 @@ struct DocumentBlockRow: View {
         case .toggle: return "Toggle"
         case .bulletedList: return "List item"
         case .numberedList: return "List item"
+        case .checklist: return "Checklist item"
         case .blockquote: return "Quote"
         case .callout: return "Callout"
         case .divider: return ""
@@ -506,6 +1111,8 @@ struct DocumentRichEditableBlockTextView: UIViewRepresentable {
     let placeholder: String
     let isCodeBlock: Bool
     let onCreateParagraphBelow: ((String) -> Void)?
+    var onCreateTypedBlockBelow: ((DocumentBlockType, String) -> Void)? = nil
+    var onMergeWithPrevious: (() -> Bool)? = nil
     let onDeleteEmptyBlock: (() -> Void)?
     let onExitList: (() -> Void)?
 
@@ -547,6 +1154,9 @@ struct DocumentRichEditableBlockTextView: UIViewRepresentable {
         textView.placeholderLabel.textColor = UIColor(LColors.textSecondary)
         textView.placeholderLabel.font = baseUIFont
         textView.placeholderLabel.isHidden = !block.text.isEmpty
+        textView.showsCodeLineNumbers = false
+        textView.codeLineNumberFont = baseUIFont
+        textView.codeLineNumberColor = UIColor(LColors.textSecondary).withAlphaComponent(0.72)
 
         let blockID = block.id
         NotificationCenter.default.addObserver(
@@ -561,6 +1171,13 @@ struct DocumentRichEditableBlockTextView: UIViewRepresentable {
 
     func updateUIView(_ uiView: UITextView, context: Context) {
         let attributed = buildAttributedText()
+        if let codeTextView = uiView as? DocumentPlaceholderTextView {
+            codeTextView.showsCodeLineNumbers = false
+            codeTextView.codeLineNumberFont = baseUIFont
+            codeTextView.codeLineNumberColor = UIColor(LColors.textSecondary).withAlphaComponent(0.72)
+            codeTextView.textContainerInset = .zero
+            codeTextView.setNeedsDisplay()
+        }
         if uiView.attributedText != attributed {
             let priorSelection = uiView.selectedRange
             context.coordinator.isApplyingProgrammaticChange = true
@@ -580,6 +1197,8 @@ struct DocumentRichEditableBlockTextView: UIViewRepresentable {
         }
         context.coordinator.parent = self
         context.coordinator.onCreateParagraphBelow = self.onCreateParagraphBelow
+        context.coordinator.onCreateTypedBlockBelow = self.onCreateTypedBlockBelow
+        context.coordinator.onMergeWithPrevious = self.onMergeWithPrevious
         context.coordinator.onDeleteEmptyBlock = self.onDeleteEmptyBlock
         context.coordinator.onExitList = self.onExitList
     }
@@ -620,6 +1239,8 @@ struct DocumentRichEditableBlockTextView: UIViewRepresentable {
                 }
             case .underline:
                 mutable.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+            case .strikethrough:
+                mutable.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: range)
             case .link:
                 let trimmed = style.urlString.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !trimmed.isEmpty, let url = URL(string: trimmed) else { continue }
@@ -631,11 +1252,21 @@ struct DocumentRichEditableBlockTextView: UIViewRepresentable {
                 mutable.addAttribute(.backgroundColor, value: UIColor.white.withAlphaComponent(0.1), range: range)
             }
         }
+        if block.type == .checklist && !block.languageHint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let fullRange = NSRange(location: 0, length: fullLength)
+            mutable.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: fullRange)
+            mutable.addAttribute(.foregroundColor, value: UIColor(LColors.textSecondary), range: fullRange)
+        }
+
         return mutable
     }
 
     final class DocumentPlaceholderTextView: UITextView {
         let placeholderLabel = UILabel()
+        var showsCodeLineNumbers = false
+        var codeLineNumberFont: UIFont = .monospacedSystemFont(ofSize: 16, weight: .regular)
+        var codeLineNumberColor: UIColor = .secondaryLabel
+        private let codeLineNumberWidth: CGFloat = 34
         override init(frame: CGRect, textContainer: NSTextContainer?) {
             super.init(frame: frame, textContainer: textContainer)
             setup()
@@ -647,10 +1278,64 @@ struct DocumentRichEditableBlockTextView: UIViewRepresentable {
             placeholderLabel.translatesAutoresizingMaskIntoConstraints = false
             addSubview(placeholderLabel)
             NSLayoutConstraint.activate([
-                placeholderLabel.leadingAnchor.constraint(equalTo: leadingAnchor),
+                placeholderLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: textContainerInset.left),
                 placeholderLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor),
                 placeholderLabel.topAnchor.constraint(equalTo: topAnchor)
             ])
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            setNeedsDisplay()
+        }
+
+        override func setNeedsDisplay() {
+            super.setNeedsDisplay()
+        }
+
+        override func draw(_ rect: CGRect) {
+            super.draw(rect)
+            guard showsCodeLineNumbers else { return }
+            drawVisualCodeLineNumbers()
+        }
+
+        private func drawVisualCodeLineNumbers() {
+            guard let context = UIGraphicsGetCurrentContext() else { return }
+            context.saveGState()
+            defer { context.restoreGState() }
+
+            layoutManager.ensureLayout(for: textContainer)
+
+            let glyphRange = layoutManager.glyphRange(for: textContainer)
+            var visualLineNumber = 1
+
+            let paragraphStyle = NSMutableParagraphStyle()
+            paragraphStyle.alignment = .right
+
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: codeLineNumberFont,
+                .foregroundColor: codeLineNumberColor,
+                .paragraphStyle: paragraphStyle
+            ]
+
+            layoutManager.enumerateLineFragments(forGlyphRange: glyphRange) { _, usedRect, _, _, _ in
+                let numberString = "\(visualLineNumber)" as NSString
+                let drawRect = CGRect(
+                    x: 0,
+                    y: usedRect.minY + self.textContainerInset.top,
+                    width: self.codeLineNumberWidth,
+                    height: max(self.codeLineNumberFont.lineHeight, usedRect.height)
+                )
+                numberString.draw(in: drawRect, withAttributes: attributes)
+                visualLineNumber += 1
+            }
+
+            if glyphRange.length == 0 {
+                ("1" as NSString).draw(
+                    in: CGRect(x: 0, y: textContainerInset.top, width: codeLineNumberWidth, height: codeLineNumberFont.lineHeight),
+                    withAttributes: attributes
+                )
+            }
         }
     }
 
@@ -658,14 +1343,23 @@ struct DocumentRichEditableBlockTextView: UIViewRepresentable {
         var parent: DocumentRichEditableBlockTextView
         var isApplyingProgrammaticChange = false
         var onCreateParagraphBelow: ((String) -> Void)?
+        var onCreateTypedBlockBelow: ((DocumentBlockType, String) -> Void)?
+        var onMergeWithPrevious: (() -> Bool)?
         var onDeleteEmptyBlock: (() -> Void)?
         var onExitList: (() -> Void)?
 
         init(parent: DocumentRichEditableBlockTextView) {
             self.parent = parent
             self.onCreateParagraphBelow = parent.onCreateParagraphBelow
+            self.onCreateTypedBlockBelow = parent.onCreateTypedBlockBelow
+            self.onMergeWithPrevious = parent.onMergeWithPrevious
             self.onDeleteEmptyBlock = parent.onDeleteEmptyBlock
             self.onExitList = parent.onExitList
+        }
+
+        private struct PastedBlockPayload {
+            let type: DocumentBlockType
+            let text: String
         }
 
         func textViewDidChangeSelection(_ textView: UITextView) {
@@ -675,12 +1369,22 @@ struct DocumentRichEditableBlockTextView: UIViewRepresentable {
 
         func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
             guard !isApplyingProgrammaticChange else { return true }
+            if text.isEmpty && range.length == 0 && range.location == 0 {
+                if onMergeWithPrevious?() == true {
+                    return false
+                }
+            }
             if text.isEmpty {
                 let isEmpty = (textView.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 if isEmpty { onDeleteEmptyBlock?(); return false }
             }
+            guard !parent.isCodeBlock else { return true }
+
+            if text.contains("\n") && text != "\n" {
+                return handleMultilinePaste(in: textView, range: range, replacementText: text)
+            }
+
             guard text == "\n", range.length == 0 else { return true }
-            if parent.isCodeBlock { return true }
 
             let isListBlock = parent.block.type == .bulletedList || parent.block.type == .numberedList
             let isEmpty = (textView.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -709,6 +1413,156 @@ struct DocumentRichEditableBlockTextView: UIViewRepresentable {
 
             onCreateParagraphBelow?(suffixText)
             return false
+        }
+
+        private func handleMultilinePaste(in textView: UITextView, range: NSRange, replacementText text: String) -> Bool {
+            let normalized = text
+                .replacingOccurrences(of: "\r\n", with: "\n")
+                .replacingOccurrences(of: "\r", with: "\n")
+
+            let pastedBlocks = parsePastedBlocks(from: normalized)
+
+            guard pastedBlocks.count > 1 else { return true }
+
+            let fullText = textView.text ?? ""
+            let nsText = fullText as NSString
+            let safeLocation = max(0, min(range.location, nsText.length))
+            let safeLength = max(0, min(range.length, nsText.length - safeLocation))
+            let safeRange = NSRange(location: safeLocation, length: safeLength)
+
+            let prefixText = nsText.substring(to: safeRange.location)
+            let suffixText = nsText.substring(from: safeRange.location + safeRange.length)
+
+            let firstBlock = pastedBlocks[0]
+            let currentBlockText = prefixText + firstBlock.text
+            let trailingSuffix = suffixText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            var blocksToInsert = Array(pastedBlocks.dropFirst())
+            if !trailingSuffix.isEmpty, let last = blocksToInsert.indices.last {
+                blocksToInsert[last] = PastedBlockPayload(
+                    type: blocksToInsert[last].type,
+                    text: blocksToInsert[last].text + "\n" + trailingSuffix
+                )
+            } else if !trailingSuffix.isEmpty {
+                blocksToInsert.append(PastedBlockPayload(type: .paragraph, text: trailingSuffix))
+            }
+
+            isApplyingProgrammaticChange = true
+            parent.block.text = currentBlockText
+            parent.block.touch()
+            textView.attributedText = NSAttributedString(string: currentBlockText, attributes: parent.baseAttributes())
+            let newCursorLocation = (currentBlockText as NSString).length
+            textView.selectedRange = NSRange(location: newCursorLocation, length: 0)
+            textView.invalidateIntrinsicContentSize()
+            isApplyingProgrammaticChange = false
+
+            if var styles = parent.block.inlineStyles {
+                let newLength = (currentBlockText as NSString).length
+                styles = styles.filter { $0.rangeLocation < newLength }
+                for style in styles where style.rangeLocation + style.rangeLength > newLength {
+                    style.rangeLength = newLength - style.rangeLocation
+                }
+                parent.block.inlineStyles = styles
+            }
+
+            for payload in blocksToInsert.reversed() {
+                if let onCreateTypedBlockBelow {
+                    onCreateTypedBlockBelow(payload.type, payload.text)
+                } else {
+                    onCreateParagraphBelow?(payload.text)
+                }
+            }
+
+            return false
+        }
+
+        private func parsePastedBlocks(from text: String) -> [PastedBlockPayload] {
+            let lines = text.components(separatedBy: "\n")
+            var payloads: [PastedBlockPayload] = []
+            var codeBuffer: [String] = []
+            var isInsideCodeFence = false
+
+            for rawLine in lines {
+                let trimmed = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                if trimmed.hasPrefix("```") {
+                    if isInsideCodeFence {
+                        payloads.append(PastedBlockPayload(type: .code, text: codeBuffer.joined(separator: "\n")))
+                        codeBuffer.removeAll()
+                        isInsideCodeFence = false
+                    } else {
+                        isInsideCodeFence = true
+                        codeBuffer.removeAll()
+                    }
+                    continue
+                }
+
+                if isInsideCodeFence {
+                    codeBuffer.append(rawLine)
+                    continue
+                }
+
+                guard !trimmed.isEmpty else { continue }
+                payloads.append(classifyPastedLine(trimmed))
+            }
+
+            if isInsideCodeFence, !codeBuffer.isEmpty {
+                payloads.append(PastedBlockPayload(type: .code, text: codeBuffer.joined(separator: "\n")))
+            }
+
+            return payloads
+        }
+
+        private func classifyPastedLine(_ line: String) -> PastedBlockPayload {
+            if line == "---" || line == "***" || line == "___" {
+                return PastedBlockPayload(type: .divider, text: "")
+            }
+
+            if line.hasPrefix("#### ") {
+                return PastedBlockPayload(type: .heading4, text: String(line.dropFirst(5)).trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+
+            if line.hasPrefix("### ") {
+                return PastedBlockPayload(type: .heading3, text: String(line.dropFirst(4)).trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+
+            if line.hasPrefix("## ") {
+                return PastedBlockPayload(type: .heading2, text: String(line.dropFirst(3)).trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+
+            if line.hasPrefix("# ") {
+                return PastedBlockPayload(type: .heading1, text: String(line.dropFirst(2)).trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+
+            if line.hasPrefix("> ") {
+                return PastedBlockPayload(type: .blockquote, text: String(line.dropFirst(2)).trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+
+            if line.hasPrefix("! ") {
+                return PastedBlockPayload(type: .callout, text: String(line.dropFirst(2)).trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+
+            if line.hasPrefix("[!NOTE]") {
+                return PastedBlockPayload(type: .callout, text: String(line.dropFirst(7)).trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+            
+            if line.hasPrefix("- [ ] ") || line.hasPrefix("* [ ] ") {
+                return PastedBlockPayload(type: .checklist, text: String(line.dropFirst(6)).trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+
+            if line.hasPrefix("- [x] ") || line.hasPrefix("- [X] ") || line.hasPrefix("* [x] ") || line.hasPrefix("* [X] ") {
+                return PastedBlockPayload(type: .checklist, text: String(line.dropFirst(6)).trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+
+            if line.hasPrefix("- ") || line.hasPrefix("* ") || line.hasPrefix("• ") {
+                return PastedBlockPayload(type: .bulletedList, text: String(line.dropFirst(2)).trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+
+            if let range = line.range(of: #"^\d+[\.)]\s+"#, options: .regularExpression) {
+                return PastedBlockPayload(type: .numberedList, text: String(line[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+
+            return PastedBlockPayload(type: .paragraph, text: line)
         }
 
         func textViewDidBeginEditing(_ textView: UITextView) {

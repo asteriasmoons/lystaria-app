@@ -2,9 +2,6 @@
 //  JournalBlockRow.swift
 //  Lystaria
 //
-//  Created by Asteria Moon on 3/18/26.
-//
-
 
 import SwiftUI
 import SwiftData
@@ -34,11 +31,17 @@ struct JournalBlockRow: View {
     @State private var showMentionPicker = false
     @State private var mentionQuery = ""
     @State private var mentionAtLocation: Int = 0
+    @State private var showCalloutIconPicker = false
+    @State private var isScrollingCalloutIconPicker = false
 
     @Query(filter: #Predicate<JournalBook> { $0.deletedAt == nil }, sort: \JournalBook.createdAt, order: .reverse)
     private var allBooks: [JournalBook]
 
     @FocusState private var isFocused: Bool
+
+    private var defaultCalloutIconID: String {
+        "asset:sparkle"
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -50,6 +53,12 @@ struct JournalBlockRow: View {
                 contentColumn
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .sheet(isPresented: $showCalloutIconPicker) {
+            calloutIconPickerSheet
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+                .preferredColorScheme(.dark)
         }
         .alert("Insert Link", isPresented: $showLinkEditor) {
             TextField("https://example.com", text: $linkDraft)
@@ -504,13 +513,8 @@ struct JournalBlockRow: View {
     }
 
     private var calloutEditor: some View {
-        HStack(alignment: .center, spacing: 6) {
-            TextField("✦", text: $block.calloutEmoji)
-                .textFieldStyle(.plain)
-                .frame(width: 22)
-                .onChange(of: block.calloutEmoji) {
-                    block.touch()
-                }
+        HStack(alignment: .center, spacing: 12) {
+            calloutIconPicker
 
             RichEditableBlockTextView(
                 block: block,
@@ -534,6 +538,126 @@ struct JournalBlockRow: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
+
+
+    private var calloutIconPicker: some View {
+        Button {
+            showCalloutIconPicker = true
+        } label: {
+            calloutIconView(for: activeCalloutIconItem)
+                .frame(width: 22, height: 22)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var calloutIconPickerSheet: some View {
+        NavigationStack {
+            ZStack {
+                LystariaBackground()
+                    .ignoresSafeArea()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
+                        calloutIconSection(title: "Custom Icons", items: BookmarkAssetIconLibrary.all)
+                        calloutIconSection(title: "SF Symbols", items: BookmarkIconLibrary.all)
+                    }
+                    .padding(.horizontal, LSpacing.pageHorizontal)
+                    .padding(.top, 18)
+                    .padding(.bottom, 36)
+                }
+                .scrollIndicators(.hidden)
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 8)
+                        .onChanged { _ in
+                            isScrollingCalloutIconPicker = true
+                        }
+                        .onEnded { _ in
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+                                isScrollingCalloutIconPicker = false
+                            }
+                        }
+                )
+            }
+            .navigationTitle("Choose Icon")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
+        }
+    }
+
+    private func calloutIconSection(title: String, items: [BookmarkIconItem]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(LColors.textSecondary)
+                .padding(.horizontal, 2)
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 54), spacing: 12)], spacing: 12) {
+                ForEach(items, id: \.id) { item in
+                    calloutIconGridButton(for: item)
+                }
+            }
+        }
+    }
+
+    private func calloutIconGridButton(for item: BookmarkIconItem) -> some View {
+        let isSelected = activeCalloutIconItem.id == item.id
+
+        return Button {
+            guard !isScrollingCalloutIconPicker else { return }
+            block.calloutEmoji = item.id
+            block.touch()
+            showCalloutIconPicker = false
+        } label: {
+            calloutIconView(for: item)
+                .frame(width: 22, height: 22)
+                .frame(width: 54, height: 54)
+                .background(isSelected ? AnyShapeStyle(LGradients.blue) : AnyShapeStyle(Color.white.opacity(0.08)))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(isSelected ? AnyShapeStyle(LGradients.blue) : AnyShapeStyle(LColors.glassBorder), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+
+    private var activeCalloutIconItem: BookmarkIconItem {
+        let trimmed = block.calloutEmoji.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let item = BookmarkCombinedIconLibrary.all.first(where: { $0.id == trimmed }) {
+            return item
+        }
+
+        if let legacyAsset = BookmarkAssetIconLibrary.all.first(where: { $0.name == trimmed }) {
+            return legacyAsset
+        }
+
+        if let legacySystem = BookmarkIconLibrary.all.first(where: { $0.name == trimmed }) {
+            return legacySystem
+        }
+
+        return BookmarkCombinedIconLibrary.all.first(where: { $0.id == defaultCalloutIconID })
+            ?? BookmarkIconItem(name: "sparkle", source: .asset)
+    }
+
+    @ViewBuilder
+    private func calloutIconView(for item: BookmarkIconItem) -> some View {
+        switch item.source {
+        case .asset:
+            Image(item.name)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .foregroundStyle(Color.white)
+        case .system:
+            Image(systemName: item.name)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Color.white)
+        }
+    }
+
 
     private var dividerEditor: some View {
         let current = DividerStyle(rawValue: block.languageHint) ?? .line
