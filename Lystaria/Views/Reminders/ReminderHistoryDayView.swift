@@ -8,10 +8,15 @@ struct ReminderHistoryDayView: View {
     let initialDay: Date
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @Query private var allHistory: [ReminderHistoryEntry]
 
     @State private var selectedDay: Date
     @State private var displayedMonth: Date
+
+    // Delete confirmation state
+    @State private var entryPendingDelete: ReminderHistoryEntry? = nil
+    @State private var showDeleteConfirm = false
 
     private let cal = Calendar.current
 
@@ -128,6 +133,20 @@ struct ReminderHistoryDayView: View {
             .sorted { $0.occurredAt > $1.occurredAt }
     }
 
+    // MARK: - Delete
+
+    private func requestDelete(_ entry: ReminderHistoryEntry) {
+        entryPendingDelete = entry
+        showDeleteConfirm = true
+    }
+
+    private func confirmDelete() {
+        guard let entry = entryPendingDelete else { return }
+        modelContext.delete(entry)
+        try? modelContext.save()
+        entryPendingDelete = nil
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -147,7 +166,7 @@ struct ReminderHistoryDayView: View {
                                 sectionHeader("Completed", icon: "checkmark.circle.fill", color: LColors.success)
                                 VStack(spacing: 12) {
                                     ForEach(completedEntries) { entry in
-                                        HistoryEntryCard(entry: entry)
+                                        HistoryEntryCard(entry: entry, onDelete: { requestDelete(entry) })
                                     }
                                 }
                             }
@@ -157,7 +176,7 @@ struct ReminderHistoryDayView: View {
                                               color: Color(red: 0.36, green: 0.28, blue: 0.90))
                                 VStack(spacing: 12) {
                                     ForEach(skippedEntries) { entry in
-                                        HistoryEntryCard(entry: entry)
+                                        HistoryEntryCard(entry: entry, onDelete: { requestDelete(entry) })
                                     }
                                 }
                             }
@@ -172,6 +191,15 @@ struct ReminderHistoryDayView: View {
                 .scrollBounceBehavior(.basedOnSize, axes: .vertical)
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
+        }
+        .lystariaAlertConfirm(
+            isPresented: $showDeleteConfirm,
+            title: "Delete history entry?",
+            message: "This will permanently remove this record from your reminder history.",
+            confirmTitle: "Delete",
+            confirmRole: .destructive
+        ) {
+            confirmDelete()
         }
     }
 
@@ -348,6 +376,7 @@ struct ReminderHistoryDayView: View {
 
 private struct HistoryEntryCard: View {
     let entry: ReminderHistoryEntry
+    let onDelete: () -> Void
 
     private static let skipColor = Color(red: 0.36, green: 0.28, blue: 0.90)
 
@@ -406,6 +435,13 @@ private struct HistoryEntryCard: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .contextMenu {
+            Button(role: .destructive) {
+                onDelete()
+            } label: {
+                Label("Delete Entry", systemImage: "trash")
+            }
         }
     }
 

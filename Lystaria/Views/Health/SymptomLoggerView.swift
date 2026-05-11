@@ -19,8 +19,9 @@ struct SymptomLoggerView: View {
     @State private var showDetailPopup = false
     @State private var showDeleteConfirm = false
     @State private var selectedLog: SymptomLog? = nil
+    @State private var editingLog: SymptomLog? = nil
 
-    // Add form state
+    // Add/Edit form state
     @State private var selectedSymptoms: [String] = []
     @State private var severity: Int = 0
     @State private var note: String = ""
@@ -204,25 +205,45 @@ struct SymptomLoggerView: View {
 
                     Spacer()
 
-                    Button {
-                        selectedLog = log
-                        showDeleteConfirm = true
-                    } label: {
-                        ZStack {
-                            Circle()
-                                .fill(LGradients.blue)
-                                .overlay(Circle().stroke(LColors.glassBorder, lineWidth: 1))
-                                .frame(width: 34, height: 34)
+                    HStack(spacing: 8) {
+                        Button {
+                            editLog(log)
+                        } label: {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.white.opacity(0.08))
+                                    .overlay(Circle().stroke(LColors.glassBorder, lineWidth: 1))
+                                    .frame(width: 34, height: 34)
 
-                            Image("fulltrashfill")
-                                .renderingMode(.template)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 16, height: 16)
-                                .foregroundStyle(.white)
+                                Image(systemName: "pencil")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 14, height: 14)
+                                    .foregroundStyle(.white)
+                            }
                         }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            selectedLog = log
+                            showDeleteConfirm = true
+                        } label: {
+                            ZStack {
+                                Circle()
+                                    .fill(LGradients.blue)
+                                    .overlay(Circle().stroke(LColors.glassBorder, lineWidth: 1))
+                                    .frame(width: 34, height: 34)
+
+                                Image("fulltrashfill")
+                                    .renderingMode(.template)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 16, height: 16)
+                                    .foregroundStyle(.white)
+                            }
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
 
                 if !log.symptoms.isEmpty {
@@ -320,12 +341,13 @@ struct SymptomLoggerView: View {
             onClose: {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                     showAddPopup = false
+                    editingLog = nil
                 }
             },
             width: 560,
             heightRatio: 0.80,
             header: {
-                GradientTitle(text: "Log Symptoms", size: 28)
+                GradientTitle(text: editingLog == nil ? "Log Symptoms" : "Edit Entry", size: 28)
             },
             content: {
                 VStack(alignment: .leading, spacing: 16) {
@@ -429,6 +451,7 @@ struct SymptomLoggerView: View {
                     LButton(title: "Cancel", style: .secondary) {
                         withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                             showAddPopup = false
+                            editingLog = nil
                         }
                     }
 
@@ -567,18 +590,38 @@ struct SymptomLoggerView: View {
         severity = 0
         note = ""
         logDate = Date()
+        editingLog = nil
+    }
+
+    private func editLog(_ log: SymptomLog) {
+        editingLog = log
+        selectedSymptoms = log.symptoms
+        severity = log.severity
+        note = log.note
+        logDate = log.date
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+            showAddPopup = true
+        }
     }
 
     private func saveLog() {
         guard !selectedSymptoms.isEmpty else { return }
 
-        let log = SymptomLog(
-            symptoms: selectedSymptoms,
-            severity: severity,
-            note: note.trimmingCharacters(in: .whitespacesAndNewlines),
-            date: logDate
-        )
-        modelContext.insert(log)
+        if let existing = editingLog {
+            existing.symptoms = selectedSymptoms
+            existing.severity = severity
+            existing.note = note.trimmingCharacters(in: .whitespacesAndNewlines)
+            existing.date = logDate
+        } else {
+            let log = SymptomLog(
+                symptoms: selectedSymptoms,
+                severity: severity,
+                note: note.trimmingCharacters(in: .whitespacesAndNewlines),
+                date: logDate
+            )
+            modelContext.insert(log)
+        }
+
         resetForm()
 
         withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {

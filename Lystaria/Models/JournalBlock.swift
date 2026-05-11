@@ -14,16 +14,32 @@ enum JournalBlockType: String, Codable, CaseIterable {
     case heading2
     case heading3
     case heading4
+    case heading5
+    case heading6
+    case toggleHeading1
+    case toggleHeading2
+    case toggleHeading3
+    case toggleHeading4
+    case toggleHeading5
+    case toggleHeading6
     case blockquote
     case callout
     case divider
     case code
     case image
-
-    // Lists & Toggles
+    case table
     case toggle
     case bulletedList
     case numberedList
+    case checklist
+
+    var isToggleHeading: Bool {
+        switch self {
+        case .toggleHeading1, .toggleHeading2, .toggleHeading3,
+             .toggleHeading4, .toggleHeading5, .toggleHeading6: return true
+        default: return false
+        }
+    }
 }
 
 @Model
@@ -41,12 +57,22 @@ final class JournalBlock {
     var isExpanded: Bool = true
     var indentLevel: Int = 0
 
+    // Blockquote / callout overlay styles
+    var isBlockquoteStyle: Bool = false
+    var isCalloutStyle: Bool = false
+
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
 
     // Optional metadata, but stored CloudKit-safe with defaults
     var calloutEmoji: String = ""
     var languageHint: String = ""
+
+    // Per-block accent color overrides — stored as "RRGGBB:RRGGBB" (two-stop gradient)
+    // Empty string = use default LGradients.blue
+    var dividerColorHex: String = ""
+    var blockquoteColorHex: String = ""
+    var calloutColorHex: String = ""
 
     // Image block data. languageHint stores alignment: "" = left, "center" = center.
     var imageData: Data? = nil
@@ -63,6 +89,8 @@ final class JournalBlock {
         listGroupID: UUID? = nil,
         isExpanded: Bool = true,
         indentLevel: Int = 0,
+        isBlockquoteStyle: Bool = false,
+        isCalloutStyle: Bool = false,
         calloutEmoji: String = "",
         languageHint: String = "",
         imageData: Data? = nil
@@ -75,6 +103,8 @@ final class JournalBlock {
         self.listGroupID = listGroupID
         self.isExpanded = isExpanded
         self.indentLevel = indentLevel
+        self.isBlockquoteStyle = isBlockquoteStyle
+        self.isCalloutStyle = isCalloutStyle
         self.createdAt = Date()
         self.updatedAt = Date()
         self.calloutEmoji = calloutEmoji
@@ -89,11 +119,15 @@ final class JournalBlock {
 
     var isListBlock: Bool {
         switch type {
-        case .bulletedList, .numberedList:
+        case .bulletedList, .numberedList, .checklist:
             return true
         default:
             return false
         }
+    }
+
+    var isToggleBlock: Bool {
+        type == .toggle
     }
 
     // languageHint stores pipe-separated image options: "alignment|size|displayMode"
@@ -128,10 +162,6 @@ final class JournalBlock {
     var imageDisplayMode: ImageBlockDisplayMode {
         get { ImageBlockDisplayMode(rawValue: imageParts[2]) ?? .fit }
         set { setImagePart(2, value: newValue.rawValue) }
-    }
-
-    var isToggleBlock: Bool {
-        type == .toggle
     }
 
     var sortedInlineStyles: [JournalInlineStyle] {

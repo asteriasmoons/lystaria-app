@@ -2,68 +2,160 @@
 //  JournalBlockDisplayView.swift
 //  Lystaria
 //
-//  Created by Asteria Moon on 3/18/26.
-//
 
 import SwiftUI
+import SwiftData
 import UIKit
 
 struct JournalBlockDisplayView: View {
     let entry: JournalEntry
+    @Environment(\.modelContext) private var modelContext
     var onMentionTapped: ((String) -> Void)? = nil
 
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
-                ForEach(visibleBlocks) { block in
-                    render(block)
-                }
-            }
-            .padding()
+    private var resolvedTextColor: UIColor {
+        let hex = entry.textColorHex.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !hex.isEmpty,
+              let r = UInt8(hex.prefix(2), radix: 16),
+              let g = UInt8(hex.dropFirst(2).prefix(2), radix: 16),
+              let b = UInt8(hex.dropFirst(4).prefix(2), radix: 16) else {
+            return UIColor(LColors.textPrimary)
+        }
+        return UIColor(red: CGFloat(r) / 255, green: CGFloat(g) / 255, blue: CGFloat(b) / 255, alpha: 1)
+    }
+
+    private func indentPadding(for block: JournalBlock) -> CGFloat {
+        switch block.type {
+        case .paragraph, .heading1, .heading2, .heading3, .heading4, .heading5, .heading6,
+             .toggleHeading1, .toggleHeading2, .toggleHeading3, .toggleHeading4, .toggleHeading5, .toggleHeading6,
+             .toggle, .bulletedList, .numberedList, .checklist, .blockquote, .callout:
+            return CGFloat(block.indentLevel) * 20
+        case .divider, .code, .image, .table:
+            return 0
         }
     }
 
+    private var wrapperSupportedTypes: [JournalBlockType] {
+        [.paragraph, .heading1, .heading2, .heading3, .heading4, .heading5, .heading6,
+         .toggle, .toggleHeading1, .toggleHeading2, .toggleHeading3, .toggleHeading4, .toggleHeading5, .toggleHeading6,
+         .bulletedList, .numberedList, .checklist]
+    }
+
+    private func prefixWrapperAlignmentPadding(for block: JournalBlock) -> CGFloat {
+        block.isBlockquoteStyle || block.isCalloutStyle ? 12 : 0
+    }
+
+    var body: some View {
+        let pages = blockPages
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(pages.enumerated()), id: \.offset) { index, page in
+                VStack(spacing: 0) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        ForEach(page) { block in
+                            renderBlock(block)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 28)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .fill(Color.black.opacity(0.34))
+                            .background(
+                                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                    .fill(.ultraThinMaterial)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                    .stroke(Color.white.opacity(0.16), lineWidth: 1)
+                            )
+                    )
+                    .shadow(color: Color.black.opacity(0.25), radius: 12, x: 0, y: 4)
+                    .padding(.horizontal, 16)
+                }
+                .padding(.vertical, 8)
+
+                if index < pages.count - 1 {
+                    Color.clear.frame(maxWidth: .infinity).frame(height: 8)
+                }
+            }
+        }
+    }
+
+    // MARK: - Block pages — split at .pageBreak dividers
+
+    private var blockPages: [[JournalBlock]] {
+        var pages: [[JournalBlock]] = [[]]
+        for block in visibleBlocks {
+            if block.type == .divider,
+               (DividerStyle(rawValue: block.languageHint) ?? .line) == .pageBreak {
+                pages.append([])
+            } else {
+                pages[pages.count - 1].append(block)
+            }
+        }
+        return pages
+    }
+
     @ViewBuilder
-    private func render(_ block: JournalBlock) -> some View {
+    private func renderBlock(_ block: JournalBlock) -> some View {
         switch block.type {
         case .paragraph:
-            richTextBlock(for: block, baseFont: .systemFont(ofSize: 16, weight: .regular), textColor: UIColor(LColors.textPrimary))
-
+            styledContent(block) {
+                journalTextBlock(block, font: .systemFont(ofSize: 16, weight: .regular))
+                    .padding(.leading, indentPadding(for: block))
+            }
         case .heading1:
-            richTextBlock(for: block, baseFont: .systemFont(ofSize: 28, weight: .bold), textColor: UIColor(LColors.textPrimary))
-                .padding(.top, 2)
-
+            styledContent(block) {
+                journalTextBlock(block, font: .systemFont(ofSize: 28, weight: .bold))
+                    .padding(.top, 2)
+                    .padding(.leading, indentPadding(for: block))
+            }
         case .heading2:
-            richTextBlock(for: block, baseFont: .systemFont(ofSize: 22, weight: .bold), textColor: UIColor(LColors.textPrimary))
-
+            styledContent(block) {
+                journalTextBlock(block, font: .systemFont(ofSize: 22, weight: .bold))
+                    .padding(.leading, indentPadding(for: block))
+            }
         case .heading3:
-            richTextBlock(for: block, baseFont: .systemFont(ofSize: 18, weight: .semibold), textColor: UIColor(LColors.textPrimary))
-
+            styledContent(block) {
+                journalTextBlock(block, font: .systemFont(ofSize: 18, weight: .semibold))
+                    .padding(.leading, indentPadding(for: block))
+            }
         case .heading4:
-            richTextBlock(for: block, baseFont: .systemFont(ofSize: 16, weight: .semibold), textColor: UIColor(LColors.textPrimary))
-
+            styledContent(block) {
+                journalTextBlock(block, font: .systemFont(ofSize: 16, weight: .semibold))
+                    .padding(.leading, indentPadding(for: block))
+            }
+        case .heading5:
+            styledContent(block) {
+                journalTextBlock(block, font: .systemFont(ofSize: 14, weight: .semibold))
+                    .padding(.leading, indentPadding(for: block))
+            }
+        case .heading6:
+            styledContent(block) {
+                journalTextBlock(block, font: .systemFont(ofSize: 13, weight: .medium))
+                    .padding(.leading, indentPadding(for: block))
+            }
         case .blockquote:
             HStack(alignment: .top, spacing: 10) {
-                RoundedRectangle(cornerRadius: 2).fill(LGradients.blue).frame(width: 4)
-                richTextBlock(for: block, baseFont: .systemFont(ofSize: 16, weight: .regular), textColor: UIColor(LColors.textPrimary))
+                RoundedRectangle(cornerRadius: 2).fill(blockGradient(block.blockquoteColorHex)).frame(width: 4)
+                journalTextBlock(block, font: .systemFont(ofSize: 16, weight: .regular))
             }
             .padding(12)
-            .background(Color.white.opacity(0.04))
+            .background(Color.white.opacity(0.12))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.24), lineWidth: 1.5))
             .clipShape(RoundedRectangle(cornerRadius: 14))
-            .padding(.leading, CGFloat(block.indentLevel) * 20)
-
+            .padding(.leading, indentPadding(for: block))
         case .callout:
             HStack(alignment: .center, spacing: 12) {
                 calloutIconView(for: activeCalloutIconItem(for: block))
                     .frame(width: 20, height: 20, alignment: .center)
-                richTextBlock(for: block, baseFont: .systemFont(ofSize: 15, weight: .regular), textColor: UIColor(LColors.textPrimary))
+                journalTextBlock(block, font: .systemFont(ofSize: 15, weight: .regular))
             }
             .padding(12)
-            .background(Color.white.opacity(0.06))
-            .overlay(RoundedRectangle(cornerRadius: 14).stroke(LGradients.blue, lineWidth: 1))
+            .background(Color.white.opacity(0.14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(blockGradient(block.calloutColorHex), lineWidth: 5))
             .clipShape(RoundedRectangle(cornerRadius: 14))
-            .padding(.leading, CGFloat(block.indentLevel) * 20)
-
+            .padding(.leading, indentPadding(for: block))
         case .toggle:
             Button { block.isExpanded.toggle() } label: {
                 HStack(alignment: .top, spacing: 10) {
@@ -71,91 +163,181 @@ struct JournalBlockDisplayView: View {
                         .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(LGradients.blue)
                         .frame(width: 22, alignment: .leading)
-                    richTextBlock(for: block, baseFont: .systemFont(ofSize: 16, weight: .regular), textColor: UIColor(LColors.textPrimary))
+                        .padding(.top, prefixWrapperAlignmentPadding(for: block))
+
+                    styledContent(block) {
+                        journalTextBlock(block, font: .systemFont(ofSize: 16, weight: .regular))
+                    }
                 }
-                .padding(.leading, CGFloat(block.indentLevel) * 20)
+                .padding(.leading, indentPadding(for: block))
             }
             .buttonStyle(.plain)
-
+        case .toggleHeading1:
+            toggleHeadingBlock(block, font: .systemFont(ofSize: 28, weight: .bold))
+        case .toggleHeading2:
+            toggleHeadingBlock(block, font: .systemFont(ofSize: 22, weight: .bold))
+        case .toggleHeading3:
+            toggleHeadingBlock(block, font: .systemFont(ofSize: 18, weight: .semibold))
+        case .toggleHeading4:
+            toggleHeadingBlock(block, font: .systemFont(ofSize: 16, weight: .semibold))
+        case .toggleHeading5:
+            toggleHeadingBlock(block, font: .systemFont(ofSize: 14, weight: .semibold))
+        case .toggleHeading6:
+            toggleHeadingBlock(block, font: .systemFont(ofSize: 13, weight: .medium))
         case .bulletedList:
             HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "circle.fill")
+                Image(systemName: bulletSymbolName(for: block.indentLevel))
                     .font(.system(size: 8, weight: .bold))
                     .foregroundStyle(LColors.textPrimary)
                     .frame(width: 22, alignment: .leading)
-                    .padding(.top, 6)
-                richTextBlock(for: block, baseFont: .systemFont(ofSize: 16, weight: .regular), textColor: UIColor(LColors.textPrimary))
-            }
-            .padding(.leading, CGFloat(block.indentLevel) * 20)
+                    .padding(.top, 6 + prefixWrapperAlignmentPadding(for: block))
 
+                styledContent(block) {
+                    journalTextBlock(block, font: .systemFont(ofSize: 16, weight: .regular))
+                }
+            }
+            .padding(.leading, indentPadding(for: block))
         case .numberedList:
             HStack(alignment: .top, spacing: 10) {
                 Text(numberPrefix(for: block))
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(LColors.textPrimary)
                     .frame(width: 28, alignment: .leading)
-                richTextBlock(for: block, baseFont: .systemFont(ofSize: 16, weight: .regular), textColor: UIColor(LColors.textPrimary))
-            }
-            .padding(.leading, CGFloat(block.indentLevel) * 20)
+                    .padding(.top, prefixWrapperAlignmentPadding(for: block))
 
-        case .divider:
-            dividerView(style: DividerStyle(rawValue: block.languageHint) ?? .line)
-                .padding(.vertical, 4)
-                .padding(.leading, CGFloat(block.indentLevel) * 20)
-
-        case .code:
-            VStack(alignment: .leading, spacing: 8) {
-                if !block.languageHint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(block.languageHint.uppercased())
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(LColors.textSecondary)
+                styledContent(block) {
+                    journalTextBlock(block, font: .systemFont(ofSize: 16, weight: .regular))
                 }
-                Text(block.text)
-                    .font(.system(.body, design: .monospaced))
-                    .foregroundStyle(LColors.textPrimary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(12)
-            .background(Color.white.opacity(0.05))
+            .padding(.leading, indentPadding(for: block))
+        case .checklist:
+            HStack(alignment: .top, spacing: 10) {
+                checklistPrefixButton(for: block)
+                    .frame(width: 22, alignment: .leading)
+                    .padding(.top, 4 + prefixWrapperAlignmentPadding(for: block))
+
+                styledContent(block) {
+                    journalTextBlock(block, font: .systemFont(ofSize: 16, weight: .regular))
+                }
+            }
+            .padding(.leading, indentPadding(for: block))
+        case .divider:
+            dividerView(block: block, style: DividerStyle(rawValue: block.languageHint) ?? .line)
+        case .code:
+            let lang = CodeLanguage.from(block.languageHint)
+            let theme = CodeTheme.from(block.calloutEmoji)
+            let highlighted = CodeHighlighter.highlight(block.text, language: lang, theme: theme)
+            ZStack(alignment: .topTrailing) {
+                HStack(alignment: .top, spacing: 0) {
+                    VStack(alignment: .trailing, spacing: 0) {
+                        ForEach(Array(block.text.components(separatedBy: "\n").enumerated()), id: \.offset) { i, _ in
+                            Text("\(i + 1)")
+                                .font(.system(size: UIFont.preferredFont(forTextStyle: .body).pointSize, weight: .regular, design: .monospaced))
+                                .foregroundStyle(Color(theme.colors.comment))
+                                .frame(minWidth: 24, alignment: .trailing)
+                        }
+                    }
+                    .padding(.trailing, 8)
+
+                    Rectangle()
+                        .fill(Color.white.opacity(0.06))
+                        .frame(width: 1)
+                        .frame(maxHeight: .infinity)
+
+                    Text(AttributedString(highlighted))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.leading, 10)
+                }
+                .padding(12)
+
+                Button {
+                    UIPasteboard.general.string = block.text
+                } label: {
+                    Image("copyfill")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .foregroundStyle(Color.white)
+                        .frame(width: 15, height: 15)
+                        .frame(width: 30, height: 30)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(LColors.glassBorder, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .padding(8)
+            }
+            .frame(maxWidth: .infinity)
+            .background(RoundedRectangle(cornerRadius: 14).fill(Color(theme.colors.background)))
             .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.10), lineWidth: 1))
             .clipShape(RoundedRectangle(cornerRadius: 14))
-            .padding(.leading, CGFloat(block.indentLevel) * 20)
-
         case .image:
             if let data = block.imageData, let uiImage = UIImage(data: data) {
-                displayImageView(uiImage: uiImage, block: block)
-                    .frame(maxWidth: .infinity, alignment: block.imageAlignment == .center ? .center : .leading)
+                let size = block.imageSize; let mode = block.imageDisplayMode
+                Group {
+                    if let maxH = size.maxHeight {
+                        if mode == .fill {
+                            Image(uiImage: uiImage).resizable().scaledToFill()
+                                .frame(maxWidth: .infinity).frame(height: maxH)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                        } else {
+                            Image(uiImage: uiImage).resizable().scaledToFit()
+                                .frame(maxWidth: .infinity).frame(maxHeight: maxH)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                        }
+                    } else {
+                        Image(uiImage: uiImage).resizable().scaledToFit()
+                            .frame(maxWidth: .infinity).clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: block.imageAlignment == .center ? .center : .leading)
             }
+        case .table:
+            JournalTablePreviewView(block: block, resolvedTextColor: resolvedTextColor)
         }
     }
 
-    @ViewBuilder
-    private func displayImageView(uiImage: UIImage, block: JournalBlock) -> some View {
-        let size = block.imageSize
-        let mode = block.imageDisplayMode
-        if let maxH = size.maxHeight {
-            if mode == .fill {
-                Image(uiImage: uiImage).resizable().scaledToFill()
-                    .frame(maxWidth: .infinity).frame(height: maxH)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-            } else {
-                Image(uiImage: uiImage).resizable().scaledToFit()
-                    .frame(maxWidth: .infinity).frame(maxHeight: maxH)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-            }
-        } else {
-            Image(uiImage: uiImage).resizable().scaledToFit()
-                .frame(maxWidth: .infinity)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+    // MARK: - Divider
+
+    private func blockGradient(_ hex: String) -> AnyShapeStyle {
+        let parts = hex.components(separatedBy: ":")
+        if parts.count == 2,
+           let c1 = uiColorFromHex(parts[0]),
+           let c2 = uiColorFromHex(parts[1]) {
+            return AnyShapeStyle(LinearGradient(
+                colors: [Color(c1), Color(c2)],
+                startPoint: .leading, endPoint: .trailing
+            ))
         }
+        return AnyShapeStyle(LGradients.blue)
     }
 
     @ViewBuilder
-    private func dividerView(style: DividerStyle) -> some View {
+    private func dividerView(block: JournalBlock, style: DividerStyle) -> some View {
+        let grad = blockGradient(block.dividerColorHex)
         switch style {
+        case .pageBreak:
+            VStack(spacing: 0) {
+                Rectangle()
+                    .fill(Color.white.opacity(0.08))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 1)
+                Color.black.opacity(0.4)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 28)
+                Rectangle()
+                    .fill(Color.white.opacity(0.08))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 1)
+            }
+            .padding(.vertical, 8)
         case .line:
-            Capsule().fill(LGradients.blue).frame(maxWidth: .infinity).frame(height: 3)
+            Capsule()
+                .fill(grad)
+                .frame(maxWidth: .infinity)
+                .frame(height: 3)
+                .padding(.vertical, 4)
         case .dotted:
             let dotSize: CGFloat = 4
             let gap: CGFloat = 8
@@ -163,309 +345,356 @@ struct JournalBlockDisplayView: View {
                 let count = max(1, Int(geo.size.width / (dotSize + gap)))
                 HStack(spacing: gap) {
                     ForEach(0..<count, id: \.self) { _ in
-                        Circle().fill(LGradients.blue).frame(width: dotSize, height: dotSize)
+                        Circle().fill(grad).frame(width: dotSize, height: dotSize)
                     }
                 }
                 .frame(maxHeight: .infinity, alignment: .center)
             }
             .frame(maxWidth: .infinity).frame(height: dotSize)
+            .padding(.vertical, 4)
         case .dash:
-            Capsule().fill(LGradients.blue).frame(width: nil).frame(maxWidth: .infinity).scaleEffect(x: 0.5).frame(height: 2)
+            Capsule()
+                .fill(grad)
+                .frame(maxWidth: .infinity)
+                .scaleEffect(x: 0.5)
+                .frame(height: 2)
+                .padding(.vertical, 4)
         case .dots:
             HStack(spacing: 12) {
-                ForEach(0..<5, id: \.self) { _ in
-                    Circle().fill(LGradients.blue).frame(width: 7, height: 7)
-                }
+                ForEach(0..<5, id: \.self) { _ in Circle().fill(grad).frame(width: 7, height: 7) }
             }
             .frame(maxWidth: .infinity)
+            .padding(.vertical, 4)
         }
     }
 
-    // MARK: - Callout Icon Helpers
+    // MARK: - Toggle Heading
+
+    @ViewBuilder
+    private func toggleHeadingBlock(_ block: JournalBlock, font: UIFont) -> some View {
+        Button { block.isExpanded.toggle() } label: {
+            HStack(alignment: .center, spacing: 4) {
+                Image(systemName: block.isExpanded ? "chevron.down" : "chevron.right")
+                    .font(.system(size: font.pointSize * 0.7, weight: .bold))
+                    .foregroundStyle(LGradients.blue)
+                    .frame(width: 16, alignment: .center)
+
+                journalTextBlock(block, font: font)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.leading, indentPadding(for: block))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Styled Content Wrapper
+
+    @ViewBuilder
+    private func styledContent<Content: View>(_ block: JournalBlock, @ViewBuilder content: () -> Content) -> some View {
+        if !wrapperSupportedTypes.contains(block.type) {
+            content()
+        } else if block.isCalloutStyle {
+            calloutStyleWrapper(block) {
+                if block.isBlockquoteStyle {
+                    blockquoteStyleWrapper(block: block) { content() }
+                } else {
+                    content()
+                }
+            }
+        } else if block.isBlockquoteStyle {
+            blockquoteStyleWrapper(block: block) { content() }
+        } else {
+            content()
+        }
+    }
+
+    private func blockquoteStyleWrapper<Content: View>(block: JournalBlock, @ViewBuilder content: () -> Content) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            RoundedRectangle(cornerRadius: 2).fill(blockGradient(block.blockquoteColorHex)).frame(width: 4)
+            content().frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.white.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func calloutStyleWrapper<Content: View>(_ block: JournalBlock, @ViewBuilder content: () -> Content) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            calloutIconView(for: activeCalloutIconItem(for: block))
+                .frame(width: 20, height: 20, alignment: .center)
+            content().frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.white.opacity(0.06))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(blockGradient(block.calloutColorHex), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+
+    // MARK: - Callout Icon
 
     private func activeCalloutIconItem(for block: JournalBlock) -> BookmarkIconItem {
         let trimmed = block.calloutEmoji.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if let item = BookmarkCombinedIconLibrary.all.first(where: { $0.id == trimmed }) {
-            return item
-        }
-
-        if let legacyAsset = BookmarkAssetIconLibrary.all.first(where: { $0.name == trimmed }) {
-            return legacyAsset
-        }
-
-        if let legacySystem = BookmarkIconLibrary.all.first(where: { $0.name == trimmed }) {
-            return legacySystem
-        }
-
-        return BookmarkIconItem(name: "sparkle", source: .asset)
+        if let item = BookmarkCombinedIconLibrary.all.first(where: { $0.id == trimmed }) { return item }
+        if let leg = BookmarkAssetIconLibrary.all.first(where: { $0.name == trimmed }) { return leg }
+        if let leg = BookmarkIconLibrary.all.first(where: { $0.name == trimmed }) { return leg }
+        return BookmarkAssetIconLibrary.all.first ?? BookmarkIconLibrary.all.first ?? BookmarkIconItem(name: "sparkles", source: .system)
     }
 
     @ViewBuilder
     private func calloutIconView(for item: BookmarkIconItem) -> some View {
         switch item.source {
         case .asset:
-            Image(item.name)
-                .renderingMode(.template)
-                .resizable()
-                .scaledToFit()
-                .foregroundStyle(Color.white)
+            Image(item.name).renderingMode(.template).resizable().scaledToFit().foregroundStyle(Color.white)
         case .system:
-            Image(systemName: item.name)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(Color.white)
+            Image(systemName: item.name).font(.system(size: 16, weight: .semibold)).foregroundStyle(Color.white)
         }
     }
 
-    private func richTextBlock(for block: JournalBlock, baseFont: UIFont, textColor: UIColor) -> some View {
-        let hasMention = block.sortedInlineStyles.contains { $0.type == .mention }
+    // MARK: - Text Block Builder
 
-        if hasMention, let onMentionTapped {
-            return AnyView(
-                MentionBlockView(
-                    block: block,
-                    baseFont: baseFont,
-                    textColor: textColor,
-                    onMentionTapped: onMentionTapped
-                )
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .layoutPriority(1)
-                .padding(.leading, CGFloat(block.indentLevel) * 20)
-            )
+    private func journalTextBlock(_ block: JournalBlock, font: UIFont) -> AnyView {
+        let mutable = NSMutableAttributedString(string: block.text, attributes: [
+            .font: font,
+            .foregroundColor: resolvedTextColor
+        ])
+        let fullLength = (block.text as NSString).length
+
+        if fullLength > 0 {
+            for style in block.sortedInlineStyles {
+                let raw = style.safeRange
+                let maxLen = max(0, fullLength - raw.location)
+                let clamped = min(raw.length, maxLen)
+                guard raw.location >= 0, raw.location < fullLength, clamped > 0 else { continue }
+                let range = NSRange(location: raw.location, length: clamped)
+
+                switch style.type {
+                case .bold:
+                    mutable.enumerateAttribute(.font, in: range) { v, r, _ in
+                        let f = (v as? UIFont) ?? font
+                        if let d = f.fontDescriptor.withSymbolicTraits(f.fontDescriptor.symbolicTraits.union(.traitBold)) {
+                            mutable.addAttribute(.font, value: UIFont(descriptor: d, size: f.pointSize), range: r)
+                        }
+                    }
+                case .italic:
+                    mutable.enumerateAttribute(.font, in: range) { v, r, _ in
+                        let f = (v as? UIFont) ?? font
+                        if let d = f.fontDescriptor.withSymbolicTraits(f.fontDescriptor.symbolicTraits.union(.traitItalic)) {
+                            mutable.addAttribute(.font, value: UIFont(descriptor: d, size: f.pointSize), range: r)
+                        }
+                    }
+                case .underline:
+                    mutable.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+                case .strikethrough:
+                    mutable.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+                case .link:
+                    let t = style.urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !t.isEmpty, let url = URL(string: t) {
+                        mutable.addAttribute(.link, value: url, range: range)
+                        mutable.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+                    }
+                case .inlineCode:
+                    let mono = UIFont.monospacedSystemFont(ofSize: font.pointSize * 0.9, weight: .regular)
+                    mutable.addAttribute(.font, value: mono, range: range)
+                    mutable.addAttribute(.backgroundColor, value: UIColor.white.withAlphaComponent(0.1), range: range)
+                case .highlight:
+                    let parts = style.urlString.components(separatedBy: ":")
+                    guard parts.count == 2,
+                          let color1 = uiColorFromHex(parts[0]),
+                          let color2 = uiColorFromHex(parts[1]),
+                          range.length > 0 else { continue }
+                    var r1: CGFloat = 0, g1: CGFloat = 0, b1: CGFloat = 0, a1: CGFloat = 0
+                    var r2: CGFloat = 0, g2: CGFloat = 0, b2: CGFloat = 0, a2: CGFloat = 0
+                    color1.getRed(&r1, green: &g1, blue: &b1, alpha: &a1)
+                    color2.getRed(&r2, green: &g2, blue: &b2, alpha: &a2)
+                    let count = CGFloat(range.length)
+                    for i in 0..<range.length {
+                        let t = count > 1 ? CGFloat(i) / (count - 1) : 0
+                        let blended = UIColor(red: r1+(r2-r1)*t, green: g1+(g2-g1)*t, blue: b1+(b2-b1)*t, alpha: 1)
+                        mutable.addAttribute(.foregroundColor, value: blended, range: NSRange(location: range.location + i, length: 1))
+                    }
+                case .mention:
+                    mutable.addAttribute(.foregroundColor, value: UIColor.systemBlue, range: range)
+                    mutable.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+                }
+            }
         }
 
-        let attributed = buildAttributedString(for: block, baseFont: baseFont, textColor: textColor)
+        if block.type == .checklist && !checklistState(for: block).isEmpty && fullLength > 0 {
+            let fullRange = NSRange(location: 0, length: fullLength)
+            mutable.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: fullRange)
+            mutable.addAttribute(.foregroundColor, value: UIColor(LColors.textSecondary), range: fullRange)
+        }
+
         return AnyView(
-            RichBlockTextView(attributedText: attributed, isSelectable: true, linkTintColor: UIColor.systemBlue)
+            RichBlockTextView(attributedText: mutable, isSelectable: true, linkTintColor: UIColor.systemBlue)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
                 .layoutPriority(1)
-                .padding(.leading, CGFloat(block.indentLevel) * 20)
         )
     }
 
-    private func buildAttributedString(for block: JournalBlock, baseFont: UIFont, textColor: UIColor) -> NSAttributedString {
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.lineBreakMode = .byWordWrapping
-        paragraphStyle.alignment = .natural
+    // MARK: - Checklist
 
-        let text = block.text
-        let mutable = NSMutableAttributedString(string: text, attributes: [
-            .font: baseFont,
-            .foregroundColor: textColor,
-            .paragraphStyle: paragraphStyle
-        ])
-
-        let fullLength = (text as NSString).length
-        guard fullLength > 0 else { return mutable }
-
-        for style in block.sortedInlineStyles {
-            let rawRange = style.safeRange
-            let maxLength = max(0, fullLength - rawRange.location)
-            let clampedLength = min(rawRange.length, maxLength)
-            guard rawRange.location >= 0, rawRange.location < fullLength, clampedLength > 0 else { continue }
-            let range = NSRange(location: rawRange.location, length: clampedLength)
-
-            switch style.type {
-            case .bold:   applyBold(to: mutable, range: range, fallbackBaseFont: baseFont)
-            case .italic: applyItalic(to: mutable, range: range, fallbackBaseFont: baseFont)
-            case .underline:
-                mutable.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
-            case .link:
-                let trimmed = style.urlString.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmed.isEmpty, let url = URL(string: trimmed) else { continue }
-                mutable.addAttribute(.link, value: url, range: range)
-                mutable.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
-            case .inlineCode:
-                let monoFont = UIFont.monospacedSystemFont(ofSize: baseFont.pointSize * 0.9, weight: .regular)
-                mutable.addAttribute(.font, value: monoFont, range: range)
-                mutable.addAttribute(.backgroundColor, value: UIColor.white.withAlphaComponent(0.1), range: range)
-            case .mention:
-                mutable.addAttribute(.foregroundColor, value: UIColor.systemBlue, range: range)
-                mutable.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+    private func checklistPrefixButton(for block: JournalBlock) -> some View {
+        checklistPrefixIcon(for: block)
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2) {
+                block.languageHint = "xmark"
+                block.touch()
+                try? modelContext.save()
             }
-        }
-        return mutable
+            .onTapGesture {
+                let state = checklistState(for: block)
+                block.languageHint = state == "checked" ? "" : "checked"
+                block.touch()
+                try? modelContext.save()
+            }
     }
 
-    private func applyBold(to attributed: NSMutableAttributedString, range: NSRange, fallbackBaseFont: UIFont) {
-        attributed.enumerateAttribute(.font, in: range) { value, subrange, _ in
-            let currentFont = (value as? UIFont) ?? fallbackBaseFont
-            let traits = currentFont.fontDescriptor.symbolicTraits.union(.traitBold)
-            if let descriptor = currentFont.fontDescriptor.withSymbolicTraits(traits) {
-                attributed.addAttribute(.font, value: UIFont(descriptor: descriptor, size: currentFont.pointSize), range: subrange)
-            } else {
-                attributed.addAttribute(.font, value: UIFont.systemFont(ofSize: currentFont.pointSize, weight: .bold), range: subrange)
+    @ViewBuilder
+    private func checklistPrefixIcon(for block: JournalBlock) -> some View {
+        switch checklistState(for: block) {
+        case "checked":
+            ZStack {
+                Circle().fill(LGradients.blue).frame(width: 17, height: 17)
+                Image(systemName: "checkmark").font(.system(size: 10, weight: .black)).foregroundStyle(Color.white)
             }
+        case "xmark":
+            ZStack {
+                Circle().fill(Color.white.opacity(0.18)).frame(width: 17, height: 17)
+                    .overlay(Circle().stroke(LGradients.blue, lineWidth: 1.3))
+                Image(systemName: "xmark").font(.system(size: 9, weight: .black)).foregroundStyle(Color.white)
+            }
+        default:
+            Circle().stroke(LColors.textSecondary, lineWidth: 1.4).frame(width: 17, height: 17)
         }
     }
 
-    private func applyItalic(to attributed: NSMutableAttributedString, range: NSRange, fallbackBaseFont: UIFont) {
-        attributed.enumerateAttribute(.font, in: range) { value, subrange, _ in
-            let currentFont = (value as? UIFont) ?? fallbackBaseFont
-            let traits = currentFont.fontDescriptor.symbolicTraits.union(.traitItalic)
-            if let descriptor = currentFont.fontDescriptor.withSymbolicTraits(traits) {
-                attributed.addAttribute(.font, value: UIFont(descriptor: descriptor, size: currentFont.pointSize), range: subrange)
-            } else {
-                attributed.addAttribute(.font, value: UIFont.italicSystemFont(ofSize: currentFont.pointSize), range: subrange)
-            }
-        }
+    private func checklistState(for block: JournalBlock) -> String {
+        block.languageHint.trimmingCharacters(in: .whitespacesAndNewlines)
     }
+
+    // MARK: - Visible Blocks
 
     private var visibleBlocks: [JournalBlock] {
         var hiddenParentIDs = Set<UUID>()
         var result: [JournalBlock] = []
         for block in entry.sortedBlocks {
             if let parentID = block.parentBlockID, hiddenParentIDs.contains(parentID) {
-                if block.isToggleBlock { hiddenParentIDs.insert(block.id) }
+                if block.isToggleBlock || block.type.isToggleHeading { hiddenParentIDs.insert(block.id) }
                 continue
             }
             result.append(block)
-            if block.isToggleBlock && !block.isExpanded { hiddenParentIDs.insert(block.id) }
+            if (block.isToggleBlock || block.type.isToggleHeading) && !block.isExpanded {
+                hiddenParentIDs.insert(block.id)
+            }
         }
         return result
     }
 
+    // MARK: - Numbered List
+
     private func numberPrefix(for block: JournalBlock) -> String {
         guard block.type == .numberedList, let groupID = block.listGroupID else { return "1." }
-        let siblings = entry.sortedBlocks.filter { $0.type == .numberedList && $0.listGroupID == groupID }
+        let siblings = entry.sortedBlocks.filter {
+            $0.type == .numberedList && $0.listGroupID == groupID && $0.indentLevel == block.indentLevel
+        }
         guard let index = siblings.firstIndex(where: { $0.id == block.id }) else { return "1." }
         return "\(index + 1)."
     }
+
+    private func bulletSymbolName(for indentLevel: Int) -> String {
+        indentLevel % 2 == 1 ? "circle" : "circle.fill"
+    }
 }
 
-// MARK: - MentionBlockView
-// Renders a block that contains mention tokens as tappable SwiftUI Buttons,
-// with surrounding plain text as Text views. No URLs, no UIKit tap detection.
+// MARK: - Table Preview
 
-struct MentionBlockView: View {
+struct JournalTablePreviewView: View {
     let block: JournalBlock
-    let baseFont: UIFont
-    let textColor: UIColor
-    let onMentionTapped: (String) -> Void
+    let resolvedTextColor: UIColor
 
-    var body: some View {
-        let segments = buildSegments()
-        return flowing(segments: segments)
+    private var tableData: JournalTableData {
+        JournalTableData.from(block.text)
     }
 
-    // Split block text into alternating plain / mention segments
-    private func buildSegments() -> [Segment] {
-        let text = block.text
-        let nsText = text as NSString
-        let fullLength = nsText.length
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            VStack(spacing: 0) {
+                ForEach(0..<tableData.rowCount, id: \.self) { row in
+                    HStack(spacing: 0) {
+                        ForEach(0..<tableData.colCount, id: \.self) { col in
+                            let isHeader = row == 0
+                            let baseFont: UIFont = isHeader
+                                ? .systemFont(ofSize: 13, weight: .bold)
+                                : .systemFont(ofSize: 13, weight: .regular)
+                            let attributed = tableData.attributedText(
+                                row: row, col: col,
+                                baseFont: baseFont,
+                                textColor: resolvedTextColor
+                            )
+                            JournalAttributedTextView(attributed: attributed)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 8)
+                                .frame(minWidth: 80, maxWidth: 200, alignment: .leading)
+                                .background({
+                                    let bgHex = tableData.cellBgColor(row: row, col: col)
+                                    if !bgHex.isEmpty, let bg = uiColorFromHex(bgHex) {
+                                        return Color(bg)
+                                    } else if isHeader {
+                                        return Color.white.opacity(0.06)
+                                    } else {
+                                        return Color.clear
+                                    }
+                                }())
 
-        // Collect mention styles sorted by location
-        let mentions = block.sortedInlineStyles
-            .filter { $0.type == .mention }
-            .sorted { $0.rangeLocation < $1.rangeLocation }
+                            if col < tableData.colCount - 1 {
+                                Rectangle().fill(Color.white.opacity(0.12)).frame(width: 1)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
 
-        var segments: [Segment] = []
-        var cursor = 0
-
-        for mention in mentions {
-            let loc = max(0, mention.rangeLocation)
-            let len = min(mention.rangeLength, max(0, fullLength - loc))
-            guard loc < fullLength, len > 0 else { continue }
-
-            // Plain text before this mention
-            if cursor < loc {
-                let plainRange = NSRange(location: cursor, length: loc - cursor)
-                if let range = Range(plainRange, in: text) {
-                    segments.append(.plain(String(text[range])))
+                    if row < tableData.rowCount - 1 {
+                        Rectangle().fill(Color.white.opacity(0.12)).frame(height: 1)
+                    }
                 }
             }
-
-            // Mention token
-            let mentionRange = NSRange(location: loc, length: len)
-            if let range = Range(mentionRange, in: text) {
-                segments.append(.mention(String(text[range]), mention.urlString))
-            }
-
-            cursor = loc + len
+            .background(Color.white.opacity(0.04))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.12), lineWidth: 1))
         }
-
-        // Remaining plain text after last mention
-        if cursor < fullLength {
-            let tailRange = NSRange(location: cursor, length: fullLength - cursor)
-            if let range = Range(tailRange, in: text) {
-                segments.append(.plain(String(text[range])))
-            }
-        }
-
-        return segments
-    }
-
-    private func flowing(segments: [Segment]) -> some View {
-        let font = Font(baseFont)
-        let color = Color(textColor)
-
-        // Concatenate into a single Text with inline buttons not possible in SwiftUI,
-        // so we use a wrapping HStack that reflows. For simplicity, render as one
-        // Text with the mention token styled, wrapped in an overlay Button per mention.
-        // Actually the simplest correct approach: render segments in a FlowLayout-style
-        // using a single attributed Text where mention tokens are replaced with
-        // a placeholder, plus absolute-positioned buttons — too complex.
-        //
-        // Simplest working approach: render the full block as a VStack of lines,
-        // splitting on newlines, and within each line split on mention boundaries.
-        // Use HStack(spacing:0) per line with wrapping via a custom layout.
-        //
-        // For now: render as plain Text (styled) + a transparent Button overlay
-        // that covers just the mention token character rect. Since we can't get
-        // the rect without TextKit, use the simplest approach that actually works:
-        // render as a single Text but replace the mention with a clearly tappable
-        // inline Button by splitting lines and using HStack with flexibleWidth.
-
-        return SegmentedTextView(
-            segments: segments,
-            font: font,
-            color: color,
-            onMentionTapped: onMentionTapped
-        )
-    }
-
-    enum Segment {
-        case plain(String)
-        case mention(String, String) // (displayText, urlString/id)
     }
 }
 
-// Renders segments inline. Plain text as Text, mentions as Button.
-// Uses a wrapping flow layout so text wraps naturally.
-struct SegmentedTextView: View {
-    let segments: [MentionBlockView.Segment]
-    let font: Font
-    let color: Color
-    let onMentionTapped: (String) -> Void
+// MARK: - Minimal read-only UITextView wrapper
 
-    var body: some View {
-        let fullText = segments.reduce(Text("")) { result, segment in
-            switch segment {
-            case .plain(let text):
-                return result + Text(text).font(font).foregroundStyle(color)
-            case .mention(let display, _):
-                return result + Text(display).font(font).foregroundStyle(Color.blue).underline()
-            }
+private struct JournalAttributedTextView: UIViewRepresentable {
+    let attributed: NSAttributedString
+
+    func makeUIView(context: Context) -> UITextView {
+        let tv = UITextView()
+        tv.backgroundColor = .clear
+        tv.isEditable = false
+        tv.isScrollEnabled = false
+        tv.textContainerInset = .zero
+        tv.textContainer.lineFragmentPadding = 0
+        tv.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        return tv
+    }
+
+    func updateUIView(_ uiView: UITextView, context: Context) {
+        if uiView.attributedText != attributed {
+            uiView.attributedText = attributed
+            uiView.invalidateIntrinsicContentSize()
         }
+    }
 
-        let mentionSegments = segments.compactMap { seg -> (String, String)? in
-            if case .mention(let display, let id) = seg { return (display, id) }
-            return nil
-        }
-
-        ZStack(alignment: .leading) {
-            fullText
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            if let first = mentionSegments.first {
-                Color.clear
-                    .contentShape(Rectangle())
-                    .simultaneousGesture(TapGesture().onEnded {
-                        onMentionTapped(first.1)
-                    })
-            }
-        }
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
+        let w = min(proposal.width ?? 120, 200)
+        let fitting = uiView.sizeThatFits(CGSize(width: w, height: .greatestFiniteMagnitude))
+        return CGSize(width: max(80, w), height: max(1, fitting.height))
     }
 }

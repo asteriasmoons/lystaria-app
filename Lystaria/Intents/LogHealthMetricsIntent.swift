@@ -10,7 +10,7 @@ import SwiftData
 
 struct LogHealthMetricsIntent: AppIntent {
     static var title: LocalizedStringResource = "Health Metrics"
-    static var description = IntentDescription("Log health metrics in Lystaria and save them to Apple Health.")
+    static var description = IntentDescription("Log health metrics in Lystaria and save them to Health.")
 
     static var openAppWhenRun: Bool = false
 

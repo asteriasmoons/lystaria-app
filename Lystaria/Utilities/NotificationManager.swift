@@ -589,7 +589,7 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
                     } else {
                         body = combined.isEmpty ? event.title : combined
                     }
-                    self.scheduleRecurringCalendarEvent(
+                    let scheduledFireDate = self.scheduleRecurringCalendarEvent(
                         id: id,
                         title: event.title,
                         body: body,
@@ -598,6 +598,20 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
                         recurrence: rule,
                         exceptions: event.recurrenceExceptions
                     )
+                    // Sync the computed fire date back to the linked LystariaReminder so
+                    // scheduleReminder() always has an accurate nextRunAt regardless of
+                    // whether a calendar sync has run.
+                    if let fireDate = scheduledFireDate,
+                       let rid = event.reminderServerId,
+                       let ridUUID = UUID(uuidString: rid) {
+                        let ridPredicate = #Predicate<LystariaReminder> { $0.linkedHabitId == ridUUID }
+                        let ridDescriptor = FetchDescriptor<LystariaReminder>(predicate: ridPredicate)
+                        if let linked = try? context.fetch(ridDescriptor).first,
+                           linked.nextRunAt != fireDate {
+                            linked.nextRunAt = fireDate
+                            linked.updatedAt = Date()
+                        }
+                    }
                 }
             } catch {
                 print("❌ Failed to fetch calendar events for rescheduling: \(error)")
@@ -686,6 +700,7 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
     // ─────────────────────────────────────────────
 
     /// Schedules the next occurrence of a recurring calendar event.
+    @discardableResult
     func scheduleRecurringCalendarEvent(
         id: String,
         title: String,
@@ -695,7 +710,7 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
         recurrence: RecurrenceRule,
         exceptions: [String],
         minutesBefore: Int = 0
-    ) {
+    ) -> Date? {
         cancelAllCalendarNotifications(id: id)
 
         let now               = Date()
@@ -747,7 +762,7 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
 
         guard let fireDate = fireDates.first else {
             print("⚠️ No upcoming calendar occurrences to schedule for id=\(id)")
-            return
+            return nil
         }
 
         let content = UNMutableNotificationContent()
@@ -772,10 +787,10 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
             if let error {
                 print("❌ Calendar recurring scheduling error: \(error)")
             } else {
-                print("🔔 Scheduled next calendar occurrence for id=\(id) at \(fireDate)")
-                print("📅 CALENDAR NOTIF fireDate check: \(trigger.nextTriggerDate() ?? Date.distantFuture)")
+                print("🔔 Scheduled next calendar occurrence: \(title) | fireDate=\(fireDate) | iOS confirms: \(trigger.nextTriggerDate() ?? Date.distantFuture)")
             }
         }
+        return fireDate
     }
 
     /// Schedules a single one-shot calendar event notification from the event model.
@@ -838,10 +853,7 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
         UNUserNotificationCenter.current().add(request) { error in
             if let error { print("❌ Calendar single scheduling error: \(error)") }
             else {
-                print("📅 One-time calendar event scheduled")
-                print("   • ID: \(id)")
-                print("   • Fires at: \(fireDate)")
-                print("   • iOS trigger confirms: \(trigger.nextTriggerDate() ?? Date.distantFuture)")
+                print("📅 One-time calendar event scheduled: \(title) | fireDate=\(fireDate) | iOS confirms: \(trigger.nextTriggerDate() ?? Date.distantFuture)")
             }
         }
     }
@@ -873,10 +885,24 @@ final class NotificationManager: NSObject, Combine.ObservableObject {
             results.append(fire)
         }
 
-        var cursor = max(localStartDate, from)
+        // For interval > 1 daily rules (e.g. every 28 days), we must walk from
+        // localStartDate in interval-sized steps to stay on the correct phase grid.
+        // Jumping cursor to max(localStartDate, from) loses the phase and produces
+        // wrong dates (e.g. May 9 + 28 = June 6 instead of May 25).
+        var cursor = localStartDate
 
         switch rule.freq {
         case .daily:
+            // Advance cursor to the first occurrence on or after `from` without
+            // breaking the interval grid. For interval=1 this is a no-op loop.
+            if rule.interval > 1 {
+                while cursor < from {
+                    let next = cal.date(byAdding: .day, value: rule.interval, to: cursor) ?? cursor
+                    if next > cursor { cursor = next } else { break }
+                }
+            } else {
+                cursor = max(localStartDate, from)
+            }
             while cursor <= untilHorizon {
                 let fire = cal.date(bySettingHour: baseHour, minute: baseMinute, second: 0, of: cursor) ?? cursor
                 appendIfValid(fire)

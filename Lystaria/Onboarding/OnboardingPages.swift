@@ -56,6 +56,17 @@ struct OnboardingPages {
             )
         ]
     )
+    
+    static let selfcare = OnboardingPage(
+        pageID: "onboarding_selfcare",
+        steps: [
+            OnboardingStep(
+                targetID: "heartIcon",
+                title: "Self Care Rewards",
+                message: "Redeem premium days with your accumulated self-care points"
+            )
+        ]
+    )
 
     static let journal = OnboardingPage(
         pageID: "onboarding_journal",
@@ -97,6 +108,16 @@ struct OnboardingPages {
               )
             ]
         )
+    static let notes = OnboardingPage(
+        pageID: "onboarding_notes",
+        steps: [
+            OnboardingStep(
+                targetID: "docsIcon",
+                title: "Documents",
+                message: "Create and organize beautiful documents inside Lystaria. Use documents for journaling, planning, notes, writing projects, trackers, or anything else you want to keep structured and easy to return to later."
+               ),
+        ]
+    )
     static let health = OnboardingPage(
         pageID: "onboarding_health",
         steps: [

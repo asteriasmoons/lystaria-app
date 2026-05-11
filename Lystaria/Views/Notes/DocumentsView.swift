@@ -20,6 +20,9 @@ struct DocumentsView: View {
     @State private var editingBook: DocumentBook? = nil
     @State private var selectedBook: DocumentBook? = nil
     @State private var navigateToSelectedBook = false
+    @State private var searchText = ""
+    @State private var previewEntryTarget: DocumentEntry? = nil
+    @State private var navigateToPreviewPage = false
 
     private var sortedBooks: [DocumentBook] {
         books.sorted { lhs, rhs in
@@ -30,6 +33,44 @@ struct DocumentsView: View {
         }
     }
 
+    private var trimmedSearchText: String {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var isSearching: Bool {
+        !trimmedSearchText.isEmpty
+    }
+
+    private var filteredBooks: [DocumentBook] {
+        guard isSearching else { return sortedBooks }
+
+        let query = trimmedSearchText.lowercased()
+
+        return sortedBooks.filter { book in
+            book.title.lowercased().contains(query)
+        }
+    }
+
+    private var matchingDocuments: [(book: DocumentBook, entry: DocumentEntry)] {
+        guard isSearching else { return [] }
+
+        let query = trimmedSearchText.lowercased()
+
+        return sortedBooks.flatMap { book in
+            (book.entries ?? [])
+                .filter { entry in
+                    entry.deletedAt == nil &&
+                    (
+                        entry.title.lowercased().contains(query) ||
+                        entry.blockPreviewText.lowercased().contains(query)
+                    )
+                }
+                .map { entry in
+                    (book: book, entry: entry)
+                }
+        }
+    }
+
     var body: some View {
         ZStack {
             LystariaBackground().ignoresSafeArea()
@@ -37,6 +78,14 @@ struct DocumentsView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     header
+                    DocumentSearchBar(text: $searchText, placeholder: "Search books and documents")
+                        .padding(.horizontal, LSpacing.pageHorizontal)
+                        .padding(.top, 14)
+
+                    if isSearching {
+                        matchingDocumentsSection
+                    }
+
                     bookshelf
                 }
                 .padding(.bottom, 120)
@@ -76,9 +125,23 @@ struct DocumentsView: View {
                 }
             }
         }
+        .navigationDestination(isPresented: $navigateToPreviewPage) {
+            Group {
+                if let entry = previewEntryTarget {
+                    DocumentBlockPreviewPage(entry: entry)
+                } else {
+                    Color.clear.navigationBarBackButtonHidden(true)
+                }
+            }
+        }
         .onChange(of: navigateToSelectedBook) { _, isPresented in
             if !isPresented {
                 selectedBook = nil
+            }
+        }
+        .onChange(of: navigateToPreviewPage) { _, isPresented in
+            if !isPresented {
+                previewEntryTarget = nil
             }
         }
         .toolbarBackground(.hidden, for: .navigationBar)
@@ -100,6 +163,68 @@ struct DocumentsView: View {
         }
     }
 
+    // MARK: - Matching Documents Section
+
+    private var matchingDocumentsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if !matchingDocuments.isEmpty {
+                Text("Matching Documents")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(LColors.textSecondary)
+                    .tracking(0.5)
+                    .padding(.horizontal, LSpacing.pageHorizontal)
+                    .padding(.top, 16)
+
+                VStack(spacing: 10) {
+                    ForEach(Array(matchingDocuments.prefix(6)), id: \.entry.persistentModelID) { match in
+                        Button {
+                            previewEntryTarget = match.entry
+                            navigateToPreviewPage = true
+                        } label: {
+                            HStack(spacing: 12) {
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(Color(hex: match.book.coverHex).opacity(0.85))
+                                    .frame(width: 38, height: 38)
+                                    .overlay(
+                                        Image(systemName: "doc.text")
+                                            .font(.system(size: 14, weight: .bold))
+                                            .foregroundStyle(.white)
+                                    )
+
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(match.entry.title.isEmpty ? "Untitled" : match.entry.title)
+                                        .font(.system(size: 14, weight: .bold))
+                                        .foregroundStyle(LColors.textPrimary)
+                                        .lineLimit(1)
+
+                                    Text(match.book.title)
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(LColors.textSecondary)
+                                        .lineLimit(1)
+                                }
+
+                                Spacer()
+
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(LColors.textSecondary)
+                            }
+                            .padding(12)
+                            .background(Color.white.opacity(0.08))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, LSpacing.pageHorizontal)
+            }
+        }
+    }
+
     // MARK: - Bookshelf
 
     private var bookshelf: some View {
@@ -108,9 +233,13 @@ struct DocumentsView: View {
                 EmptyState(icon: "doc.text", message: "No document books yet.\nTap + to create your first book.")
                     .padding(.top, 20)
                     .padding(.horizontal, LSpacing.pageHorizontal)
+            } else if filteredBooks.isEmpty {
+                EmptyState(icon: "magnifyingglass", message: "No matching books found.")
+                    .padding(.top, 20)
+                    .padding(.horizontal, LSpacing.pageHorizontal)
             } else {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)], spacing: 14) {
-                    ForEach(sortedBooks, id: \.persistentModelID) { book in
+                    ForEach(filteredBooks, id: \.persistentModelID) { book in
                         Button {
                             print("📘 DocumentsView: selected book title=\(book.title), id=\(book.persistentModelID), uuid=\(book.uuid), entriesRelationshipCount=\(book.entries?.count ?? -1)")
                             selectedBook = book
@@ -290,6 +419,7 @@ struct DocumentBookCard: View {
 struct DocumentBookDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var allBooks: [DocumentBook] = []
+    @State private var folders: [DocumentFolder] = []
     let book: DocumentBook
 
     @State private var entries: [DocumentEntry] = []
@@ -300,10 +430,40 @@ struct DocumentBookDetailView: View {
     @State private var editorEntryTarget: DocumentEntry? = nil
     @State private var previewEntryTarget: DocumentEntry? = nil
     @State private var visibleEntryCount: Int = 12
+    @State private var searchText = ""
+    @State private var selectedFolder: DocumentFolder? = nil
+    @State private var navigateToSelectedFolder = false
+    @State private var showFolderEditor = false
+    @State private var editingFolder: DocumentFolder? = nil
 
     init(book: DocumentBook) {
         self.book = book
         print("📗 DocumentBookDetailView init: title=\(book.title), id=\(book.persistentModelID), uuid=\(book.uuid), relationshipCount=\(book.entries?.count ?? -1)")
+    }
+
+    private var trimmedSearchText: String {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var isSearching: Bool {
+        !trimmedSearchText.isEmpty
+    }
+
+    private var visibleEntries: [DocumentEntry] {
+        entries.filter { entry in
+            entry.folder == nil
+        }
+    }
+
+    private var filteredEntries: [DocumentEntry] {
+        guard isSearching else { return visibleEntries }
+
+        let query = trimmedSearchText.lowercased()
+
+        return visibleEntries.filter { entry in
+            entry.title.lowercased().contains(query) ||
+            entry.blockPreviewText.lowercased().contains(query)
+        }
     }
 
     var body: some View {
@@ -314,7 +474,14 @@ struct DocumentBookDetailView: View {
                 ScrollView {
                     VStack(spacing: 0) {
                         header
+                        DocumentSearchBar(text: $searchText, placeholder: "Search this book")
+                            .padding(.horizontal, LSpacing.pageHorizontal)
+                            .padding(.top, 14)
                         Spacer().frame(height: 16)
+
+                        foldersSection
+                            .padding(.bottom, folders.isEmpty ? 0 : 18)
+
                         documentGrid
                     }
                     .padding(.bottom, 120)
@@ -357,6 +524,41 @@ struct DocumentBookDetailView: View {
                 }
             }
         }
+        .navigationDestination(isPresented: $navigateToSelectedFolder) {
+            Group {
+                if let selectedFolder {
+                    DocumentFolderView(book: book, folder: selectedFolder)
+                } else {
+                    Color.clear.navigationBarBackButtonHidden(true)
+                }
+            }
+        }
+        .onChange(of: navigateToSelectedFolder) { _, isPresented in
+            if !isPresented {
+                selectedFolder = nil
+                reloadFolders()
+                reloadEntries()
+            }
+        }
+        .overlay {
+            if showFolderEditor {
+                DocumentFolderEditorSheet(
+                    book: book,
+                    folder: editingFolder,
+                    onClose: {
+                        showFolderEditor = false
+                        editingFolder = nil
+                    },
+                    onSave: {
+                        reloadFolders()
+                    }
+                )
+                .preferredColorScheme(.dark)
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                .zIndex(50)
+            }
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showFolderEditor)
     }
 
     private var header: some View {
@@ -364,11 +566,29 @@ struct DocumentBookDetailView: View {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     GradientTitle(text: book.title, font: .system(size: 20, weight: .bold))
-                    Text(entries.count == 1 ? "1 document" : "\(entries.count) documents")
+                    Text(headerSubtitle)
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(LColors.textSecondary)
                 }
+
                 Spacer()
+
+                Button {
+                    editingFolder = nil
+                    showFolderEditor = true
+                } label: {
+                    Image("wavyplus")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 17, height: 17)
+                        .foregroundStyle(.white)
+                        .frame(width: 38, height: 38)
+                        .background(Color.white.opacity(0.10))
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(Color.white.opacity(0.14), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
             }
             .padding(.horizontal, LSpacing.pageHorizontal)
             .padding(.vertical, 14)
@@ -377,18 +597,81 @@ struct DocumentBookDetailView: View {
         }
     }
 
+    private var headerSubtitle: String {
+        let folderText = folders.count == 1 ? "1 folder" : "\(folders.count) folders"
+        let documentText = visibleEntries.count == 1 ? "1 unfiled document" : "\(visibleEntries.count) unfiled documents"
+        return "\(folderText) • \(documentText)"
+    }
+
+    private var foldersSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if !folders.isEmpty {
+                HStack {
+                    Text("Folders")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+
+                    Spacer()
+                }
+                .padding(.horizontal, LSpacing.pageHorizontal)
+
+                LazyVGrid(
+                    columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)],
+                    spacing: 14
+                ) {
+                    ForEach(folders, id: \.persistentModelID) { folder in
+                        Button {
+                            selectedFolder = folder
+                            searchText = ""
+                            visibleEntryCount = 12
+                            navigateToSelectedFolder = true
+                        } label: {
+                            DocumentFolderCard(
+                                folder: folder,
+                                bookCoverHex: book.coverHex,
+                                documentCount: folderDocumentCount(folder)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button("Edit Folder") {
+                                editingFolder = folder
+                                showFolderEditor = true
+                            }
+
+                            Button(role: .destructive) {
+                                deleteFolder(folder)
+                            } label: {
+                                Text("Delete Folder")
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, LSpacing.pageHorizontal)
+            }
+        }
+    }
+
     @ViewBuilder
     private var documentGrid: some View {
-        if entries.isEmpty {
-            EmptyState(icon: "doc.text", message: "No documents yet.\nTap + to create one.")
+        if entries.isEmpty && folders.isEmpty {
+            EmptyState(icon: "doc.text", message: "No documents or folders yet.\nTap the folder + to create a folder or the bottom + to create a document.")
                 .padding(.top, 20)
                 .padding(.horizontal, LSpacing.pageHorizontal)
+        } else if filteredEntries.isEmpty {
+            EmptyState(
+                icon: isSearching ? "magnifyingglass" : "doc.text",
+                message: isSearching ? "No matching documents found." : "No unfiled documents yet."
+            )
+            .padding(.top, 20)
+            .padding(.horizontal, LSpacing.pageHorizontal)
         } else {
             LazyVGrid(
                 columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)],
                 spacing: 14
             ) {
-                ForEach(Array(entries.prefix(visibleEntryCount)), id: \.persistentModelID) { entry in
+                ForEach(Array(filteredEntries.prefix(visibleEntryCount)), id: \.persistentModelID) { entry in
                     DocumentPageCard(entry: entry, bookCoverHex: book.coverHex)
                         .onAppear {
                             print("📃 DocumentPageCard appeared: title=\(entry.title), id=\(entry.persistentModelID), blockPreviewLength=\(entry.blockPreviewText.count), updatedAt=\(entry.updatedAt)")
@@ -420,6 +703,24 @@ struct DocumentBookDetailView: View {
                                 }
                             }
 
+                            if !folders.isEmpty {
+                                Menu("Move To Folder") {
+                                    if entry.folder != nil {
+                                        Button("Remove From Folder") {
+                                            moveEntryToRoot(entry)
+                                        }
+                                    }
+
+                                    ForEach(folders, id: \.persistentModelID) { folder in
+                                        Button {
+                                            moveEntry(entry, to: folder)
+                                        } label: {
+                                            Label(folder.title, systemImage: "folder.fill")
+                                        }
+                                    }
+                                }
+                            }
+
                             Button(role: .destructive) {
                                 entry.deletedAt = Date()
                                 entry.updatedAt = Date()
@@ -433,7 +734,7 @@ struct DocumentBookDetailView: View {
             }
             .padding(.horizontal, LSpacing.pageHorizontal)
 
-            if entries.count > visibleEntryCount {
+            if filteredEntries.count > visibleEntryCount {
                 LoadMoreButton { visibleEntryCount += 12 }
                     .padding(.horizontal, LSpacing.pageHorizontal)
                     .padding(.top, 4)
@@ -443,11 +744,34 @@ struct DocumentBookDetailView: View {
 
     private func moveEntry(_ entry: DocumentEntry, to targetBook: DocumentBook) {
         entry.book = targetBook
+        entry.folder = nil
         entry.updatedAt = Date()
 
         try? modelContext.save()
 
         reloadEntries()
+        reloadFolders()
+    }
+
+    private func moveEntry(_ entry: DocumentEntry, to folder: DocumentFolder) {
+        entry.book = book
+        entry.folder = folder
+        entry.updatedAt = Date()
+
+        try? modelContext.save()
+
+        reloadEntries()
+        reloadFolders()
+    }
+
+    private func moveEntryToRoot(_ entry: DocumentEntry) {
+        entry.folder = nil
+        entry.updatedAt = Date()
+
+        try? modelContext.save()
+
+        reloadEntries()
+        reloadFolders()
     }
 
     private func loadEntriesIfNeeded() {
@@ -456,6 +780,7 @@ struct DocumentBookDetailView: View {
         hasLoadedEntries = true
 
         loadBooks()
+        reloadFolders()
         reloadEntries()
     }
 
@@ -477,6 +802,50 @@ struct DocumentBookDetailView: View {
         }
     }
 
+    private func reloadFolders() {
+        let targetBookID = book.persistentModelID
+
+        var descriptor = FetchDescriptor<DocumentFolder>(
+            predicate: #Predicate<DocumentFolder> { folder in
+                folder.deletedAt == nil
+            },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = 200
+
+        do {
+            let fetchedFolders = try modelContext.fetch(descriptor)
+            folders = fetchedFolders.filter { folder in
+                folder.book?.persistentModelID == targetBookID
+            }
+        } catch {
+            folders = []
+            print("❌ Failed to load document folders: \(error.localizedDescription)")
+        }
+    }
+
+    private func folderDocumentCount(_ folder: DocumentFolder) -> Int {
+        entries.filter { entry in
+            entry.deletedAt == nil &&
+            entry.folder?.persistentModelID == folder.persistentModelID
+        }.count
+    }
+
+    private func deleteFolder(_ folder: DocumentFolder) {
+        for entry in entries where entry.folder?.persistentModelID == folder.persistentModelID {
+            entry.folder = nil
+            entry.updatedAt = Date()
+        }
+
+        folder.deletedAt = Date()
+        folder.updatedAt = Date()
+
+        try? modelContext.save()
+        selectedFolder = nil
+        reloadFolders()
+        reloadEntries()
+    }
+
     private func reloadEntries() {
         let targetBookID = book.persistentModelID
         print("📚 DocumentBookDetailView reloadEntries started: title=\(book.title), id=\(targetBookID)")
@@ -496,7 +865,7 @@ struct DocumentBookDetailView: View {
             entries = fetchedEntries.filter { entry in
                 entry.book?.persistentModelID == targetBookID
             }
-
+            visibleEntryCount = 12
             print("📚 DocumentBookDetailView filtered entries count=\(entries.count) for title=\(book.title)")
         } catch {
             entries = []
@@ -845,6 +1214,445 @@ struct DocumentBookEditorSheet: View {
     }
 }
 
+// MARK: - Document Search Bar
+
+private struct DocumentSearchBar: View {
+    @Binding var text: String
+    let placeholder: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(LColors.textSecondary)
+
+            TextField(placeholder, text: $text)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(LColors.textPrimary)
+
+            if !text.isEmpty {
+                Button {
+                    text = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(Color.white.opacity(0.08))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+}
+
 private extension String {
     var docTrimmed: String { trimmingCharacters(in: .whitespacesAndNewlines) }
+}
+
+// MARK: - Document Folder Card
+
+struct DocumentFolderCard: View {
+    let folder: DocumentFolder
+    let bookCoverHex: String
+    let documentCount: Int
+
+    private var bookColor: Color { Color(hex: bookCoverHex) }
+    private var iconItem: BookmarkIconItem { DocumentFolderIconHelpers.item(from: folder.iconName) }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            folderGraphic
+                .frame(height: 124)
+
+            VStack(spacing: 3) {
+                Text(folder.title.isEmpty ? "Untitled Folder" : folder.title)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(LColors.textPrimary)
+                    .lineLimit(1)
+
+                Text(documentCount == 1 ? "1 document" : "\(documentCount) documents")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(LColors.textSecondary)
+            }
+        }
+    }
+
+    private var folderGraphic: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+
+            let tabW: CGFloat = w * 0.44
+            let tabH: CGFloat = h * 0.155
+            let bodyY: CGFloat = tabH * 0.75
+            let bodyH: CGFloat = h - bodyY
+            let cornerR: CGFloat = 14
+
+            let backShape = Path { p in
+                p.move(to: CGPoint(x: cornerR, y: h))
+                p.addQuadCurve(to: CGPoint(x: 0, y: h - cornerR), control: CGPoint(x: 0, y: h))
+                p.addLine(to: CGPoint(x: 0, y: cornerR))
+                p.addQuadCurve(to: CGPoint(x: cornerR, y: 0), control: CGPoint(x: 0, y: 0))
+                p.addLine(to: CGPoint(x: w - cornerR, y: 0))
+                p.addQuadCurve(to: CGPoint(x: w, y: cornerR), control: CGPoint(x: w, y: 0))
+                p.addLine(to: CGPoint(x: w, y: h - cornerR))
+                p.addQuadCurve(to: CGPoint(x: w - cornerR, y: h), control: CGPoint(x: w, y: h))
+                p.closeSubpath()
+            }
+
+            // Front panel shape — flat top, rounded bottom
+            let frontY: CGFloat = bodyY + tabH * 1.1
+            let frontH: CGFloat = h - frontY
+            let frontShape = Path { p in
+                p.move(to: CGPoint(x: 0, y: frontY))
+                p.addLine(to: CGPoint(x: w, y: frontY))
+                p.addLine(to: CGPoint(x: w, y: h - cornerR))
+                p.addQuadCurve(to: CGPoint(x: w - cornerR, y: h), control: CGPoint(x: w, y: h))
+                p.addLine(to: CGPoint(x: cornerR, y: h))
+                p.addQuadCurve(to: CGPoint(x: 0, y: h - cornerR), control: CGPoint(x: 0, y: h))
+                p.closeSubpath()
+            }
+
+            ZStack {
+                // Drop shadow
+                backShape
+                    .fill(Color.black.opacity(0.28))
+                    .blur(radius: 12)
+                    .offset(x: 5, y: 10)
+
+                // Back panel — slightly darker/deeper
+                backShape
+                    .fill(LinearGradient(
+                        colors: [bookColor.darker(by: 0.14), bookColor.darker(by: 0.22)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ))
+
+                // Back panel inner highlight
+                backShape
+                    .fill(LinearGradient(
+                        colors: [Color.white.opacity(0.18), Color.clear],
+                        startPoint: .topLeading,
+                        endPoint: .center
+                    ))
+
+                // Seam line where front panel meets back
+                Path { p in
+                    p.move(to: CGPoint(x: 0, y: frontY))
+                    p.addLine(to: CGPoint(x: w, y: frontY))
+                }
+                .stroke(Color.black.opacity(0.20), lineWidth: 1)
+
+                // Front panel
+                frontShape
+                    .fill(LinearGradient(
+                        colors: [bookColor.lighter(by: 0.14), bookColor.darker(by: 0.04)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ))
+
+                // Front panel sheen
+                frontShape
+                    .fill(LinearGradient(
+                        colors: [Color.white.opacity(0.22), Color.clear],
+                        startPoint: .topLeading,
+                        endPoint: .center
+                    ))
+
+                // Front panel top highlight edge
+                Path { p in
+                    p.move(to: CGPoint(x: 0, y: frontY + 0.5))
+                    p.addLine(to: CGPoint(x: w, y: frontY + 0.5))
+                }
+                .stroke(Color.white.opacity(0.30), lineWidth: 1)
+
+                // Content
+                VStack(spacing: 9) {
+                    DocumentFolderIconView(item: iconItem, size: 30, color: .white)
+                        .shadow(color: Color.black.opacity(0.28), radius: 4, x: 0, y: 2)
+
+                    RoundedRectangle(cornerRadius: 999)
+                        .fill(Color.white.opacity(0.22))
+                        .frame(width: 40, height: 3)
+                }
+                .frame(width: w, height: frontH)
+                .offset(y: (h - frontH) / 2 + frontH * 0.08)
+
+                // Outer border
+                backShape
+                    .stroke(Color.white.opacity(0.16), lineWidth: 1)
+
+                // Bottom depth
+                RoundedRectangle(cornerRadius: 999)
+                    .fill(Color.black.opacity(0.16))
+                    .frame(width: w * 0.72, height: 8)
+                    .blur(radius: 7)
+                    .offset(y: h * 0.50)
+            }
+            .frame(width: w, height: h)
+        }
+    }
+}
+
+private extension Color {
+    func lighter(by amount: Double) -> Color {
+        adjustBrightness(by: abs(amount))
+    }
+
+    func darker(by amount: Double) -> Color {
+        adjustBrightness(by: -abs(amount))
+    }
+
+    private func adjustBrightness(by amount: Double) -> Color {
+#if canImport(UIKit)
+        let uiColor = UIColor(self)
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+
+        guard uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else {
+            return self
+        }
+
+        return Color(
+            red: min(max(Double(red) + amount, 0), 1),
+            green: min(max(Double(green) + amount, 0), 1),
+            blue: min(max(Double(blue) + amount, 0), 1),
+            opacity: Double(alpha)
+        )
+#else
+        return self
+#endif
+    }
+}
+
+// MARK: - Document Folder Icon Helpers
+
+private enum DocumentFolderIconHelpers {
+    static let fallback = BookmarkIconItem(name: "folder.fill", source: .system)
+
+    static func storageValue(for item: BookmarkIconItem) -> String {
+        "\(item.source.rawValue):\(item.name)"
+    }
+
+    static func item(from storage: String) -> BookmarkIconItem {
+        let trimmed = storage.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return fallback }
+
+        if let match = BookmarkCombinedIconLibrary.all.first(where: { storageValue(for: $0) == trimmed }) {
+            return match
+        }
+
+        if let match = BookmarkCombinedIconLibrary.all.first(where: { $0.name == trimmed }) {
+            return match
+        }
+
+        if trimmed.hasPrefix("asset:") {
+            let name = String(trimmed.dropFirst("asset:".count))
+            return BookmarkIconItem(name: name, source: .asset)
+        }
+
+        if trimmed.hasPrefix("system:") {
+            let name = String(trimmed.dropFirst("system:".count))
+            return BookmarkIconItem(name: name, source: .system)
+        }
+
+        return fallback
+    }
+}
+
+private struct DocumentFolderIconView: View {
+    let item: BookmarkIconItem
+    let size: CGFloat
+    let color: Color
+
+    var body: some View {
+        Group {
+            switch item.source {
+            case .system:
+                Image(systemName: item.name)
+                    .font(.system(size: size, weight: .bold))
+            case .asset:
+                Image(item.name)
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: size, height: size)
+            }
+        }
+        .foregroundStyle(color)
+    }
+}
+
+// MARK: - Document Folder Editor Sheet
+
+private struct DocumentFolderEditorSheet: View {
+    @Environment(\.modelContext) private var modelContext
+
+    let book: DocumentBook
+    let folder: DocumentFolder?
+    let onClose: () -> Void
+    let onSave: () -> Void
+
+    @State private var title = ""
+    @State private var selectedIcon = DocumentFolderIconHelpers.fallback
+    @State private var iconSearchText = ""
+    @State private var isIconScrolling = false
+
+    private var filteredIcons: [BookmarkIconItem] {
+        let query = iconSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return BookmarkCombinedIconLibrary.all }
+
+        return BookmarkCombinedIconLibrary.all.filter { item in
+            item.name.lowercased().contains(query) ||
+            item.source.rawValue.lowercased().contains(query)
+        }
+    }
+
+    var body: some View {
+        LystariaOverlayPopup(
+            onClose: onClose,
+            width: 680,
+            heightRatio: 0.82,
+            header: {
+                HStack {
+                    GradientTitle(text: folder == nil ? "New Folder" : "Edit Folder", font: .title2.bold())
+                    Spacer()
+                    Button { onClose() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(LColors.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            },
+            content: {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("TITLE")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+
+                    LystariaTextField(placeholder: "Folder title", text: $title)
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("ICON")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LColors.textSecondary)
+                        .tracking(0.5)
+
+                    HStack(spacing: 12) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(Color(hex: book.coverHex).opacity(0.75))
+                                .frame(width: 58, height: 58)
+                                .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white.opacity(0.16), lineWidth: 1))
+
+                            DocumentFolderIconView(item: selectedIcon, size: 28, color: .white)
+                        }
+
+                        DocumentSearchBar(text: $iconSearchText, placeholder: "Search icons")
+                    }
+
+                    ScrollView {
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 5), spacing: 10) {
+                            ForEach(filteredIcons) { icon in
+                                Button {
+                                    guard !isIconScrolling else { return }
+                                    selectedIcon = icon
+                                } label: {
+                                    ZStack {
+                                        RoundedRectangle(cornerRadius: 14)
+                                            .fill(selectedIcon.id == icon.id ? AnyShapeStyle(LGradients.blue) : AnyShapeStyle(Color.white.opacity(0.08)))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 14)
+                                                    .stroke(selectedIcon.id == icon.id ? Color.white.opacity(0.28) : Color.white.opacity(0.10), lineWidth: 1)
+                                            )
+
+                                        DocumentFolderIconView(item: icon, size: 23, color: .white)
+                                    }
+                                    .frame(height: 54)
+                                    .contentShape(RoundedRectangle(cornerRadius: 14))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                    .frame(maxHeight: 310)
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 8)
+                            .onChanged { _ in
+                                isIconScrolling = true
+                            }
+                            .onEnded { _ in
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) {
+                                    isIconScrolling = false
+                                }
+                            }
+                    )
+                }
+            },
+            footer: {
+                Button { saveFolder() } label: {
+                    Text(folder == nil ? "Create Folder" : "Save Changes")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(title.docTrimmed.isEmpty ? AnyShapeStyle(Color.gray.opacity(0.3)) : AnyShapeStyle(LGradients.blue))
+                        .clipShape(RoundedRectangle(cornerRadius: LSpacing.buttonRadius))
+                        .shadow(color: title.docTrimmed.isEmpty ? .clear : LColors.accent.opacity(0.3), radius: 12, y: 6)
+                }
+                .buttonStyle(.plain)
+                .disabled(title.docTrimmed.isEmpty)
+            }
+        )
+        .onAppear {
+            if let folder {
+                title = folder.title
+                selectedIcon = DocumentFolderIconHelpers.item(from: folder.iconName)
+            } else {
+                title = ""
+                selectedIcon = DocumentFolderIconHelpers.fallback
+            }
+        }
+    }
+
+    private func saveFolder() {
+        let cleanTitle = title.docTrimmed
+        guard !cleanTitle.isEmpty else { return }
+
+        if let folder {
+            folder.title = cleanTitle
+            folder.iconName = DocumentFolderIconHelpers.storageValue(for: selectedIcon)
+            folder.colorHex = book.coverHex
+            folder.book = book
+            folder.updatedAt = Date()
+        } else {
+            let newFolder = DocumentFolder(
+                title: cleanTitle,
+                iconName: DocumentFolderIconHelpers.storageValue(for: selectedIcon),
+                colorHex: book.coverHex
+            )
+            newFolder.book = book
+            newFolder.updatedAt = Date()
+            modelContext.insert(newFolder)
+        }
+
+        try? modelContext.save()
+        onSave()
+        onClose()
+    }
 }

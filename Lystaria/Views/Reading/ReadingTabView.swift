@@ -752,178 +752,185 @@ struct ReadingTabView: View {
                 headerSection
                 topToggleSection
 
-                VStack(spacing: 12) {
-                    GlassCard {
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack(spacing: 8) {
-                                Image("booksfill")
-                                    .renderingMode(.template)
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 20, height: 20)
-                                    .foregroundStyle(.white)
-                                GradientTitle(text: "Streak", font: .system(size: 14, weight: .bold))
-                                Spacer()
-                            }
+                GlassCard {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 8) {
+                            Image("startrophy")
+                                .renderingMode(.template)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 20, height: 20)
+                                .foregroundStyle(.white)
 
-                            HStack(spacing: 8) {
-                                VStack(spacing: 2) {
-                                    Text("NOW")
-                                        .font(.system(size: 7, weight: .bold))
-                                        .foregroundStyle(LColors.textSecondary)
-                                        .tracking(0.6)
-                                    Text("\(streakDays)")
-                                        .font(.system(size: 16, weight: .black))
-                                        .foregroundStyle(LColors.textPrimary)
-                                }
-                                .frame(maxWidth: .infinity, minHeight: 38)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 6)
-                                .background(Color.white.opacity(0.07))
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
-                                .overlay(RoundedRectangle(cornerRadius: 10).stroke(LColors.glassBorder, lineWidth: 1))
+                            GradientTitle(text: "Points & Streaks", font: .system(size: 14, weight: .bold))
 
-                                VStack(spacing: 2) {
-                                    Text("BEST")
-                                        .font(.system(size: 7, weight: .bold))
-                                        .foregroundStyle(LColors.textSecondary)
-                                        .tracking(0.6)
-                                    Text("\(bestStreakDays)")
-                                        .font(.system(size: 16, weight: .black))
-                                        .foregroundStyle(LColors.textPrimary)
-                                }
-                                .frame(maxWidth: .infinity, minHeight: 38)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 6)
-                                .background(Color.white.opacity(0.07))
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
-                                .overlay(RoundedRectangle(cornerRadius: 10).stroke(LColors.glassBorder, lineWidth: 1))
+                            Spacer()
+                        }
+
+                        HStack(spacing: 8) {
+                            VStack(spacing: 2) {
+                                Text("PTS")
+                                    .font(.system(size: 7, weight: .bold))
+                                    .foregroundStyle(LColors.textSecondary)
+                                    .tracking(0.6)
+
+                                Text("\(totalReadingPoints)")
+                                    .font(.system(size: 16, weight: .black))
+                                    .foregroundStyle(LColors.textPrimary)
                             }
+                            .frame(maxWidth: .infinity, minHeight: 38)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
+                            .background(Color.white.opacity(0.07))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+
+                            VStack(spacing: 2) {
+                                Text("MINS")
+                                    .font(.system(size: 7, weight: .bold))
+                                    .foregroundStyle(LColors.textSecondary)
+                                    .tracking(0.6)
+
+                                Text("\(totalReadingPointsMinutes)")
+                                    .font(.system(size: 16, weight: .black))
+                                    .foregroundStyle(LColors.textPrimary)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 38)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
+                            .background(Color.white.opacity(0.07))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                        }
+
+                        HStack(spacing: 8) {
+                            VStack(spacing: 2) {
+                                Text("NOW")
+                                    .font(.system(size: 7, weight: .bold))
+                                    .foregroundStyle(LColors.textSecondary)
+                                    .tracking(0.6)
+
+                                Text("\(streakDays)")
+                                    .font(.system(size: 16, weight: .black))
+                                    .foregroundStyle(LColors.textPrimary)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 38)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
+                            .background(Color.white.opacity(0.07))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+
+                            VStack(spacing: 2) {
+                                Text("BEST")
+                                    .font(.system(size: 7, weight: .bold))
+                                    .foregroundStyle(LColors.textSecondary)
+                                    .tracking(0.6)
+
+                                Text("\(bestStreakDays)")
+                                    .font(.system(size: 16, weight: .black))
+                                    .foregroundStyle(LColors.textPrimary)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 38)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
+                            .background(Color.white.opacity(0.07))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+                        }
+
+                        HStack(spacing: 6) {
+                            Text("\(totalReadingPointsSessions) sessions")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(LColors.textSecondary)
+                                .lineLimit(1)
+
+                            Text("•")
+                                .font(.system(size: 10, weight: .black))
+                                .foregroundStyle(LColors.textSecondary.opacity(0.7))
 
                             Text(readingStreakStatusText)
                                 .font(.system(size: 10, weight: .semibold))
                                 .foregroundStyle(LColors.textSecondary)
                                 .lineLimit(1)
-
-                            HStack(spacing: 8) {
-                                Button {
-                                    do {
-                                        guard let currentUserId else {
-                                            print("[ReadingTabView] No signed-in Apple user ID available")
-                                            return
-                                        }
-                                        let didCheckIn = try ReadingCheckInWriter.checkInToday(
-                                            modelContext: modelContext,
-                                            userId: currentUserId,
-                                        )
-                                        if didCheckIn {
-                                            syncBestReadingStreakIfNeeded()
-                                            print("[ReadingTabView] Reading check-in complete")
-                                        } else {
-                                            print("[ReadingTabView] Check-in ignored (already checked in today)")
-                                        }
-                                    } catch {
-                                        print("[ReadingTabView] Failed to check in: \(error)")
-                                    }
-                                } label: {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: alreadyCheckedInToday ? "checkmark.circle" : "checkmark.circle.fill")
-                                            .font(.system(size: 11))
-                                        Text(alreadyCheckedInToday ? "Checked In" : "Check In")
-                                            .font(.system(size: 11, weight: .semibold))
-                                    }
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 9)
-                                    .padding(.vertical, 8)
-                                    .fixedSize(horizontal: true, vertical: false)
-                                    .background(alreadyCheckedInToday ? Color.white.opacity(0.10) : LColors.accent)
-                                    .clipShape(Capsule())
-                                    .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
-                                }
-                                .buttonStyle(.plain)
-                                .disabled(alreadyCheckedInToday)
-
-                                Button {
-                                    if let record = currentStats {
-                                        record.streakDays = 0
-                                        record.lastCheckInDate = nil
-                                        record.updatedAt = Date()
-                                        try? modelContext.save()
-                                        print("[ReadingTabView] Reset: streak is now 0")
-                                    }
-                                } label: {
-                                    Image(systemName: "arrow.counterclockwise")
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(LColors.textSecondary)
-                                        .frame(width: 34, height: 34)
-                                        .background(Color.white.opacity(0.08))
-                                        .clipShape(Circle())
-                                        .overlay(Circle().stroke(LColors.glassBorder, lineWidth: 1))
-                                }
-                                .buttonStyle(.plain)
-                            }
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    }
-                    .frame(maxWidth: .infinity)
 
-                    // ── Mini Points Card ──────────────────────────────────
-                    GlassCard {
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack(spacing: 8) {
-                                Image("startrophy")
-                                    .renderingMode(.template)
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 20, height: 20)
-                                    .foregroundStyle(.white)
-                                GradientTitle(text: "Points", font: .system(size: 14, weight: .bold))
-                                Spacer()
-                            }
+                        HStack(spacing: 8) {
+                            Button {
+                                do {
+                                    guard let currentUserId else {
+                                        print("[ReadingTabView] No signed-in Apple user ID available")
+                                        return
+                                    }
 
-                            HStack(spacing: 8) {
-                                VStack(spacing: 2) {
-                                    Text("PTS")
-                                        .font(.system(size: 7, weight: .bold))
-                                        .foregroundStyle(LColors.textSecondary)
-                                        .tracking(0.6)
-                                    Text("\(totalReadingPoints)")
-                                        .font(.system(size: 16, weight: .black))
-                                        .foregroundStyle(LColors.textPrimary)
+                                    let didCheckIn = try ReadingCheckInWriter.checkInToday(
+                                        modelContext: modelContext,
+                                        userId: currentUserId,
+                                    )
+
+                                    if didCheckIn {
+                                        syncBestReadingStreakIfNeeded()
+                                        print("[ReadingTabView] Reading check-in complete")
+                                    } else {
+                                        print("[ReadingTabView] Check-in ignored (already checked in today)")
+                                    }
+                                } catch {
+                                    print("[ReadingTabView] Failed to check in: \(error)")
                                 }
-                                .frame(maxWidth: .infinity, minHeight: 38)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 6)
-                                .background(Color.white.opacity(0.07))
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
-                                .overlay(RoundedRectangle(cornerRadius: 10).stroke(LColors.glassBorder, lineWidth: 1))
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: alreadyCheckedInToday ? "checkmark.circle" : "checkmark.circle.fill")
+                                        .font(.system(size: 11))
 
-                                VStack(spacing: 2) {
-                                    Text("MINS")
-                                        .font(.system(size: 7, weight: .bold))
-                                        .foregroundStyle(LColors.textSecondary)
-                                        .tracking(0.6)
-                                    Text("\(totalReadingPointsMinutes)")
-                                        .font(.system(size: 16, weight: .black))
-                                        .foregroundStyle(LColors.textPrimary)
+                                    Text(alreadyCheckedInToday ? "Checked In" : "Check In")
+                                        .font(.system(size: 11, weight: .semibold))
                                 }
-                                .frame(maxWidth: .infinity, minHeight: 38)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 6)
-                                .background(Color.white.opacity(0.07))
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
-                                .overlay(RoundedRectangle(cornerRadius: 10).stroke(LColors.glassBorder, lineWidth: 1))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 8)
+                                .fixedSize(horizontal: true, vertical: false)
+                                .background(alreadyCheckedInToday ? Color.white.opacity(0.10) : LColors.accent)
+                                .clipShape(Capsule())
+                                .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
                             }
+                            .buttonStyle(.plain)
+                            .disabled(alreadyCheckedInToday)
 
-                            Text("\(totalReadingPointsSessions) sessions")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(LColors.textSecondary)
-                                .lineLimit(1)
+                            Button {
+                                if let record = currentStats {
+                                    record.streakDays = 0
+                                    record.lastCheckInDate = nil
+                                    record.updatedAt = Date()
+                                    try? modelContext.save()
+                                    print("[ReadingTabView] Reset: streak is now 0")
+                                }
+                            } label: {
+                                Image(systemName: "arrow.counterclockwise")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(LColors.textSecondary)
+                                    .frame(width: 34, height: 34)
+                                    .background(Color.white.opacity(0.08))
+                                    .clipShape(Circle())
+                                    .overlay(Circle().stroke(LColors.glassBorder, lineWidth: 1))
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     }
-                    .frame(maxWidth: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
+                .frame(maxWidth: .infinity)
 
                 GlassCard {
                     VStack(alignment: .leading, spacing: 12) {

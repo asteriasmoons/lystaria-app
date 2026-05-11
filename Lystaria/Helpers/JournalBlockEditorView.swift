@@ -9,17 +9,40 @@ import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
 
+// MARK: - Notification Names
+
+extension Notification.Name {
+    static let journalBlockRequestFocus = Notification.Name("JournalBlockRequestFocus")
+    static let journalBlockDidFocus = Notification.Name("JournalBlockDidFocus")
+    static let journalBlockRequestMentionPicker = Notification.Name("JournalBlockRequestMentionPicker")
+    static let journalBlockRequestFocusNextParagraph = Notification.Name("JournalBlockRequestFocusNextParagraph")
+}
+
 struct JournalBlockEditorView: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var entry: JournalEntry
+    @Binding var focusedBlockID: UUID?
     @State private var isMutatingBlocks = false
     @State private var draggingBlock: JournalBlock? = nil
     @State private var dragOverIndex: Int? = nil
+    @State private var selectedBlockIDs: Set<UUID> = []
+    @State private var isKeyboardVisible: Bool = false
+
+    private var resolvedJournalTextColor: UIColor {
+        let hex = entry.textColorHex.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !hex.isEmpty,
+              let r = UInt8(hex.prefix(2), radix: 16),
+              let g = UInt8(hex.dropFirst(2).prefix(2), radix: 16),
+              let b = UInt8(hex.dropFirst(4).prefix(2), radix: 16) else {
+            return UIColor(LColors.textPrimary)
+        }
+        return UIColor(red: CGFloat(r) / 255, green: CGFloat(g) / 255, blue: CGFloat(b) / 255, alpha: 1)
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                // Drop zone before first block
+                // Drop zone before first block — only visible while dragging
                 if draggingBlock != nil {
                     BlockDropZone(index: 0, dragOverIndex: $dragOverIndex)
                         .onDrop(of: [.plainText], delegate: IndexedDropDelegate(
@@ -31,106 +54,250 @@ struct JournalBlockEditorView: View {
                         ))
                 }
 
-                ForEach(Array(visibleBlocks.enumerated()), id: \.element.id) { i, block in
-                    JournalBlockRow(
-                        block: block,
-                        onAddBelow: { b, type, initialText in insertBlockBelow(b, type, initialText) },
-                        onDelete: deleteBlock,
-                        onMoveUp: moveBlockUp,
-                        onMoveDown: moveBlockDown,
-                        onTransform: transformBlock
-                    )
-                    .opacity(draggingBlock?.id == block.id ? 0.4 : 1)
-                    .contextMenu {
-                        Button(role: .destructive) {
-                            deleteBlock(block)
-                        } label: {
-                            Label("Delete Block", systemImage: "trash")
+                // Page card
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(visibleBlocks.enumerated()), id: \.element.id) { i, block in
+                        JournalBlockRow(
+                            block: block,
+                            onAddBelow: { b, type, initialText in insertBlockBelow(b, type, initialText) },
+                            onDelete: deleteBlock,
+                            onMoveUp: moveBlockUp,
+                            onMoveDown: moveBlockDown,
+                            onTransform: transformBlock,
+                            isSelectionMode: isSelectionMode,
+                            isSelectedForBatchAction: selectedBlockIDs.contains(block.id),
+                            selectedBlockCount: selectedBlockIDs.count,
+                            onEnterSelectionMode: enterSelectionMode,
+                            onToggleBatchSelection: toggleBlockSelection,
+                            onClearBatchSelection: clearBlockSelection,
+                            onDeleteSelectedBlocks: deleteSelectedBlocks,
+                            onIndentSelectedBlocksIn: indentSelectedBlocksIn,
+                            onIndentSelectedBlocksOut: indentSelectedBlocksOut,
+                            journalTextColor: resolvedJournalTextColor
+                        )
+                        .opacity(draggingBlock?.id == block.id ? 0.4 : 1)
+                        .contextMenu {
+                            Button(role: .destructive) { deleteBlock(block) } label: {
+                                Label("Delete Block", systemImage: "trash")
+                            }
+                            Button { moveBlockUp(block) } label: {
+                                Label("Move Up", systemImage: "arrow.up")
+                            }
+                            Button { moveBlockDown(block) } label: {
+                                Label("Move Down", systemImage: "arrow.down")
+                            }
                         }
-
-                        Button {
-                            moveBlockUp(block)
-                        } label: {
-                            Label("Move Up", systemImage: "arrow.up")
+                        .onDrag {
+                            draggingBlock = block
+                            dragOverIndex = nil
+                            return NSItemProvider(object: block.id.uuidString as NSString)
                         }
+                        .padding(.vertical, isSelectionMode ? 3 : 6)
 
-                        Button {
-                            moveBlockDown(block)
-                        } label: {
-                            Label("Move Down", systemImage: "arrow.down")
+                        if draggingBlock != nil {
+                            BlockDropZone(index: i + 1, dragOverIndex: $dragOverIndex)
+                                .onDrop(of: [.plainText], delegate: IndexedDropDelegate(
+                                    index: i + 1,
+                                    draggingBlock: $draggingBlock,
+                                    dragOverIndex: $dragOverIndex,
+                                    visibleBlocks: visibleBlocks,
+                                    onMove: reorderBlockToIndex
+                                ))
                         }
-                    }
-                    .onDrag {
-                        draggingBlock = block
-                        dragOverIndex = nil
-                        return NSItemProvider(object: block.id.uuidString as NSString)
-                    }
-                    .padding(.vertical, 6)
-
-                    // Drop zone after each block
-                    if draggingBlock != nil {
-                        BlockDropZone(index: i + 1, dragOverIndex: $dragOverIndex)
-                            .onDrop(of: [.plainText], delegate: IndexedDropDelegate(
-                                index: i + 1,
-                                draggingBlock: $draggingBlock,
-                                dragOverIndex: $dragOverIndex,
-                                visibleBlocks: visibleBlocks,
-                                onMove: reorderBlockToIndex
-                            ))
                     }
                 }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 28)
+                .background(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(Color.black.opacity(0.34))
+                        .background(
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .fill(.ultraThinMaterial)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .stroke(Color.white.opacity(0.16), lineWidth: 1)
+                        )
+                        .overlay(
+                            PageSheetTapOverlay {
+                                guard !isSelectionMode else { return }
+                                if let last = visibleBlocks.last {
+                                    if last.type == .paragraph && last.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                        let id = last.id
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                            NotificationCenter.default.post(name: .journalBlockRequestFocus, object: id)
+                                        }
+                                    } else {
+                                        insertBlockBelow(last, .paragraph, "")
+                                    }
+                                }
+                            }
+                            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        )
+                )
+                .shadow(color: Color.black.opacity(0.25), radius: 12, x: 0, y: 4)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
             }
-            .padding(.horizontal)
-            .padding(.top)
             .padding(.bottom, 140)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             bottomAddBlockBar
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            isKeyboardVisible = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            isKeyboardVisible = false
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .journalBlockDidFocus)) { note in
+            if let id = note.object as? UUID {
+                focusedBlockID = id
+            }
+        }
     }
 
-    /// Mirrors the same logic as JournalBlockDisplayView.visibleBlocks —
-    /// hides child blocks whose toggle parent is collapsed.
+    // MARK: - Visible Blocks
+
     private var visibleBlocks: [JournalBlock] {
         var hiddenParentIDs = Set<UUID>()
         var result: [JournalBlock] = []
-
         for block in entry.sortedBlocks {
             if let parentID = block.parentBlockID, hiddenParentIDs.contains(parentID) {
-                // This block is hidden inside a collapsed toggle.
-                // If it's itself a toggle, also hide its children.
-                if block.isToggleBlock {
-                    hiddenParentIDs.insert(block.id)
-                }
+                if block.isToggleBlock || block.type.isToggleHeading { hiddenParentIDs.insert(block.id) }
                 continue
             }
-
             result.append(block)
-
-            if block.isToggleBlock && !block.isExpanded {
+            if (block.isToggleBlock || block.type.isToggleHeading) && !block.isExpanded {
                 hiddenParentIDs.insert(block.id)
             }
         }
-
         return result
     }
+
+    // MARK: - Bottom Bar
 
     private var bottomAddBlockBar: some View {
         HStack {
             Spacer(minLength: 0)
-            addBlockMenu
+            if isSelectionMode {
+                batchSelectionBar
+            } else if isKeyboardVisible {
+                keyboardBar
+            } else {
+                addBlockMenu
+            }
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
     }
 
+    private var keyboardBar: some View {
+        HStack(spacing: 10) {
+            Menu {
+                ForEach(JournalBlockType.allCases, id: \.self) { type in
+                    Button(labelForType(type)) { appendBlock(type: type) }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "plus")
+                    Text("Add Block")
+                }
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(LGradients.blue)
+                .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+
+            Spacer(minLength: 0)
+
+            Button {
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            } label: {
+                Text("Done")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 10)
+                    .background(LGradients.blue)
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color.black.opacity(0.36))
+        .clipShape(Capsule())
+        .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
+    }
+
+    private var isSelectionMode: Bool { !selectedBlockIDs.isEmpty }
+
+    private var batchSelectionBar: some View {
+        HStack(spacing: 10) {
+            Button { clearBlockSelection() } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 34, height: 34)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+
+            Text("\(selectedBlockIDs.count) Selected")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
+
+            Button { indentSelectedBlocksOut() } label: {
+                Image(systemName: "decrease.indent")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 34, height: 34)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+
+            Button { indentSelectedBlocksIn() } label: {
+                Image(systemName: "increase.indent")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 34, height: 34)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+
+            Button(role: .destructive) { deleteSelectedBlocks() } label: {
+                Image(systemName: "trash")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 34, height: 34)
+                    .background(Color.red.opacity(0.26))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color.black.opacity(0.36))
+        .clipShape(Capsule())
+        .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
+    }
+
     private var addBlockMenu: some View {
         Menu {
             ForEach(JournalBlockType.allCases, id: \.self) { type in
-                Button(labelForType(type)) {
-                    appendBlock(type: type)
-                }
+                Button(labelForType(type)) { appendBlock(type: type) }
             }
         } label: {
             HStack(spacing: 8) {
@@ -145,35 +312,98 @@ struct JournalBlockEditorView: View {
             .frame(minWidth: 180)
             .background(Color.white.opacity(0.06))
             .clipShape(Capsule())
-            .overlay(
-                Capsule().stroke(LGradients.blue, lineWidth: 1)
-            )
+            .overlay(Capsule().stroke(LGradients.blue, lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
 
+    // MARK: - Selection Mode
+
+    private func enterSelectionMode(_ block: JournalBlock) {
+        selectedBlockIDs = [block.id]
+    }
+
+    private func toggleBlockSelection(_ block: JournalBlock) {
+        if selectedBlockIDs.contains(block.id) {
+            selectedBlockIDs.remove(block.id)
+        } else {
+            selectedBlockIDs.insert(block.id)
+        }
+    }
+
+    private func clearBlockSelection() { selectedBlockIDs.removeAll() }
+
+    private func selectedBlocksInOrder() -> [JournalBlock] {
+        entry.sortedBlocks.filter { selectedBlockIDs.contains($0.id) }
+    }
+
+    private func deleteSelectedBlocks() {
+        let blocks = selectedBlocksInOrder()
+        guard !blocks.isEmpty else { return }
+        clearBlockSelection()
+        for block in blocks { deleteBlock(block) }
+    }
+
+    private func indentSelectedBlocksIn() {
+        let blocks = selectedBlocksInOrder()
+        guard !blocks.isEmpty else { return }
+        for block in blocks where canIndentBatchBlock(block) {
+            block.indentLevel = min(5, block.indentLevel + 1)
+            block.touch()
+        }
+        save()
+    }
+
+    private func indentSelectedBlocksOut() {
+        let blocks = selectedBlocksInOrder()
+        guard !blocks.isEmpty else { return }
+        for block in blocks where canIndentBatchBlock(block) {
+            block.indentLevel = max(0, block.indentLevel - 1)
+            block.touch()
+        }
+        save()
+    }
+
+    private func canIndentBatchBlock(_ block: JournalBlock) -> Bool {
+        switch block.type {
+        case .paragraph, .heading1, .heading2, .heading3, .heading4, .heading5, .heading6,
+             .toggleHeading1, .toggleHeading2, .toggleHeading3, .toggleHeading4, .toggleHeading5, .toggleHeading6,
+             .toggle, .bulletedList, .numberedList, .checklist, .blockquote, .callout:
+            return true
+        case .divider, .code, .image, .table:
+            return false
+        }
+    }
+
+    // MARK: - Block Mutations
+
     private func appendBlock(type: JournalBlockType) {
         guard !isMutatingBlocks else { return }
+        clearBlockSelection()
+
+        if let focusedID = focusedBlockID,
+           let focusedBlock = entry.sortedBlocks.first(where: { $0.id == focusedID }) {
+            insertBlockBelow(focusedBlock, type, "")
+            return
+        }
+
         isMutatingBlocks = true
         defer { isMutatingBlocks = false }
 
         let newBlock = JournalBlock(
             type: type,
-            text: "",
+            text: type == .table ? JournalTableData().toJSON() : "",
             sortOrder: entry.sortedBlocks.count,
             parentBlockID: nil,
-            listGroupID: type == .bulletedList || type == .numberedList ? UUID() : nil,
-            isExpanded: type == .toggle,
+            listGroupID: type == .bulletedList || type == .numberedList || type == .checklist ? UUID() : nil,
+            isExpanded: type == .toggle || type.isToggleHeading,
             indentLevel: 0,
             calloutEmoji: type == .callout ? defaultCalloutIconID : "",
             languageHint: type == .divider ? DividerStyle.line.rawValue : ""
         )
-        // Image blocks start with no data — the user picks from Photos in the row UI
         newBlock.entry = entry
         newBlock.touch()
-        if entry.blocks == nil {
-            entry.blocks = []
-        }
+        if entry.blocks == nil { entry.blocks = [] }
         entry.blocks?.append(newBlock)
         entry.ensureStarterBlock()
         entry.normalizeBlockSortOrders()
@@ -182,62 +412,50 @@ struct JournalBlockEditorView: View {
 
     private func insertBlockBelow(_ block: JournalBlock, _ type: JournalBlockType, _ initialText: String = "") {
         guard !isMutatingBlocks else { return }
+        clearBlockSelection()
         isMutatingBlocks = true
         defer { isMutatingBlocks = false }
 
         let sorted = entry.sortedBlocks
         guard sorted.contains(where: { $0.id == block.id }) else { return }
 
-        // Capture the current block's sortOrder before any mutations
         let insertAfterOrder = block.sortOrder
 
-        // Image blocks inserted inline just get an empty block; user picks photo in row UI
-        let shouldContinueSameList = block.type == type && block.isListBlock && type == .bulletedList || block.type == type && block.isListBlock && type == .numberedList
+        let shouldContinueSameList = (block.type == type && block.isListBlock && type == .bulletedList)
+            || (block.type == type && block.isListBlock && type == .numberedList)
+            || (block.type == type && block.isListBlock && type == .checklist)
+
         let inheritedListGroupID: UUID? = {
-            if shouldContinueSameList {
-                return block.listGroupID
-            }
-            if type == .bulletedList || type == .numberedList {
-                return UUID()
-            }
+            if shouldContinueSameList { return block.listGroupID }
+            if type == .bulletedList || type == .numberedList || type == .checklist { return UUID() }
             return nil
         }()
 
         let inheritedParentBlockID: UUID? = {
-            if block.isToggleBlock {
-                // Pressing return on the toggle header → child goes inside the toggle
-                return block.id
-            }
-            // Pressing return on a child block → new block stays in the same toggle
+            if block.isToggleBlock || block.type.isToggleHeading { return block.id }
             return block.parentBlockID
         }()
 
-        let inheritedIndentLevel: Int = {
-            if block.isToggleBlock {
-                return block.indentLevel + 1
-            }
-            return block.indentLevel
-        }()
+        let inheritedIndentLevel: Int = (block.isToggleBlock || block.type.isToggleHeading)
+            ? block.indentLevel + 1
+            : block.indentLevel
 
         let newBlock = JournalBlock(
             type: type,
-            text: initialText,
+            text: type == .table ? (initialText.isEmpty ? JournalTableData().toJSON() : initialText) : initialText,
             sortOrder: insertAfterOrder + 1,
             parentBlockID: inheritedParentBlockID,
             listGroupID: inheritedListGroupID,
-            isExpanded: type == .toggle,
+            isExpanded: type == .toggle || type.isToggleHeading,
             indentLevel: inheritedIndentLevel,
             calloutEmoji: type == .callout ? defaultCalloutIconID : "",
             languageHint: type == .divider ? DividerStyle.line.rawValue : ""
         )
         newBlock.entry = entry
         newBlock.touch()
-        if entry.blocks == nil {
-            entry.blocks = []
-        }
+        if entry.blocks == nil { entry.blocks = [] }
         entry.blocks?.append(newBlock)
 
-        // Shift all blocks that came after the insertion point
         for laterBlock in (entry.blocks ?? []) where laterBlock.id != newBlock.id && laterBlock.sortOrder > insertAfterOrder {
             laterBlock.sortOrder += 1
             laterBlock.touch()
@@ -249,10 +467,7 @@ struct JournalBlockEditorView: View {
 
         let newBlockID = newBlock.id
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            NotificationCenter.default.post(
-                name: .journalBlockRequestFocus,
-                object: newBlockID
-            )
+            NotificationCenter.default.post(name: .journalBlockRequestFocus, object: newBlockID)
         }
     }
 
@@ -262,23 +477,18 @@ struct JournalBlockEditorView: View {
         defer { isMutatingBlocks = false }
 
         let blockID = block.id
+        selectedBlockIDs.remove(blockID)
         let blockSortOrder = block.sortOrder
 
-        for inlineStyle in (block.inlineStyles ?? []) {
-            modelContext.delete(inlineStyle)
-        }
+        for inlineStyle in (block.inlineStyles ?? []) { modelContext.delete(inlineStyle) }
 
         if let index = entry.blocks?.firstIndex(where: { $0.id == blockID }) {
             entry.blocks?.remove(at: index)
         }
-
         modelContext.delete(block)
 
-        // If the entry is now empty, insert a starter paragraph.
         if entry.blocks?.isEmpty != false {
-            if entry.blocks == nil {
-                entry.blocks = []
-            }
+            if entry.blocks == nil { entry.blocks = [] }
             let replacement = JournalBlock(type: .paragraph, text: "", sortOrder: 0)
             replacement.entry = entry
             replacement.touch()
@@ -288,17 +498,12 @@ struct JournalBlockEditorView: View {
         entry.normalizeBlockSortOrders()
         save()
 
-        // Focus the block that now occupies the deleted block's position,
-        // or the one just before it — this is the "exit list" landing spot.
         let sorted = entry.sortedBlocks
         let focusTarget = sorted.first(where: { $0.sortOrder >= blockSortOrder }) ?? sorted.last
         if let target = focusTarget {
             let targetID = target.id
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                NotificationCenter.default.post(
-                    name: .journalBlockRequestFocus,
-                    object: targetID
-                )
+                NotificationCenter.default.post(name: .journalBlockRequestFocus, object: targetID)
             }
         }
     }
@@ -315,9 +520,7 @@ struct JournalBlockEditorView: View {
         let currentOrder = block.sortOrder
         block.sortOrder = above.sortOrder
         above.sortOrder = currentOrder
-
-        block.touch()
-        above.touch()
+        block.touch(); above.touch()
         entry.normalizeBlockSortOrders()
         save()
     }
@@ -334,9 +537,7 @@ struct JournalBlockEditorView: View {
         let currentOrder = block.sortOrder
         block.sortOrder = below.sortOrder
         below.sortOrder = currentOrder
-
-        block.touch()
-        below.touch()
+        block.touch(); below.touch()
         entry.normalizeBlockSortOrders()
         save()
     }
@@ -348,64 +549,64 @@ struct JournalBlockEditorView: View {
 
         block.type = type
 
-        if type == .bulletedList || type == .numberedList {
-            if block.listGroupID == nil {
-                block.listGroupID = UUID()
-            }
+        if type == .bulletedList || type == .numberedList || type == .checklist {
+            if block.listGroupID == nil { block.listGroupID = UUID() }
         } else {
             block.listGroupID = nil
         }
 
-        if type == .toggle {
-            block.isExpanded = true
-        } else if !block.isToggleBlock {
-            block.parentBlockID = nil
-        }
+        if type == .toggle || type.isToggleHeading { block.isExpanded = true }
+        else if !block.isToggleBlock { block.parentBlockID = nil }
+
+        let wasToggleChild = block.parentBlockID != nil
 
         switch type {
         case .callout:
-            block.parentBlockID = nil
-            block.indentLevel = 0
-            if block.calloutEmoji.isEmpty {
-                block.calloutEmoji = defaultCalloutIconID
-            }
+            if !wasToggleChild { block.parentBlockID = nil }
+            block.indentLevel = wasToggleChild ? block.indentLevel : 0
+            if block.calloutEmoji.isEmpty { block.calloutEmoji = defaultCalloutIconID }
         case .divider:
-            block.parentBlockID = nil
-            block.indentLevel = 0
-            block.text = ""
-            block.languageHint = DividerStyle.line.rawValue
-            for inlineStyle in (block.inlineStyles ?? []) {
-                modelContext.delete(inlineStyle)
-            }
+            if !wasToggleChild { block.parentBlockID = nil }
+            block.indentLevel = wasToggleChild ? block.indentLevel : 0
+            block.text = ""; block.languageHint = DividerStyle.line.rawValue
+            for s in (block.inlineStyles ?? []) { modelContext.delete(s) }
             block.inlineStyles = []
         case .code:
-            block.parentBlockID = nil
-            block.indentLevel = 0
-            for inlineStyle in (block.inlineStyles ?? []) {
-                modelContext.delete(inlineStyle)
-            }
+            if !wasToggleChild { block.parentBlockID = nil }
+            block.indentLevel = wasToggleChild ? block.indentLevel : 0
+            for s in (block.inlineStyles ?? []) { modelContext.delete(s) }
             block.inlineStyles = []
         case .image:
-            block.parentBlockID = nil
-            block.indentLevel = 0
+            if !wasToggleChild { block.parentBlockID = nil }
+            block.indentLevel = wasToggleChild ? block.indentLevel : 0
             block.text = ""
-            for inlineStyle in (block.inlineStyles ?? []) {
-                modelContext.delete(inlineStyle)
-            }
+            for s in (block.inlineStyles ?? []) { modelContext.delete(s) }
             block.inlineStyles = []
-        case .paragraph, .heading1, .heading2, .heading3, .heading4, .blockquote:
-            block.parentBlockID = nil
-            block.indentLevel = 0
+        case .paragraph, .heading1, .heading2, .heading3, .heading4, .heading5, .heading6, .blockquote:
+            if !wasToggleChild { block.parentBlockID = nil }
+            block.indentLevel = wasToggleChild ? block.indentLevel : 0
             block.languageHint = ""
-        case .toggle:
-            block.parentBlockID = nil
-            block.indentLevel = 0
-            block.languageHint = ""
-            block.isExpanded = true
+        case .toggle, .toggleHeading1, .toggleHeading2, .toggleHeading3,
+             .toggleHeading4, .toggleHeading5, .toggleHeading6:
+            if !wasToggleChild { block.parentBlockID = nil }
+            block.indentLevel = wasToggleChild ? block.indentLevel : 0
+            block.languageHint = ""; block.isExpanded = true
         case .bulletedList, .numberedList:
-            block.parentBlockID = nil
-            block.indentLevel = 0
+            if !wasToggleChild { block.parentBlockID = nil }
+            block.indentLevel = wasToggleChild ? block.indentLevel : 0
             block.languageHint = ""
+        case .checklist:
+            if !wasToggleChild { block.parentBlockID = nil }
+            block.indentLevel = wasToggleChild ? block.indentLevel : 0
+            if block.languageHint != "checked" && block.languageHint != "xmark" {
+                block.languageHint = ""
+            }
+        case .table:
+            if !wasToggleChild { block.parentBlockID = nil }
+            block.indentLevel = 0
+            block.text = JournalTableData().toJSON()
+            for s in (block.inlineStyles ?? []) { modelContext.delete(s) }
+            block.inlineStyles = []
         }
 
         block.touch()
@@ -413,25 +614,33 @@ struct JournalBlockEditorView: View {
         save()
     }
 
-    private var defaultCalloutIconID: String {
-        "asset:sparkle"
-    }
+    private var defaultCalloutIconID: String { "asset:sparkle" }
 
     private func labelForType(_ type: JournalBlockType) -> String {
         switch type {
-        case .paragraph: return "Paragraph"
-        case .heading1: return "Heading 1"
-        case .heading2: return "Heading 2"
-        case .heading3: return "Heading 3"
-        case .heading4: return "Heading 4"
-        case .toggle: return "Toggle"
-        case .bulletedList: return "Bulleted List"
-        case .numberedList: return "Numbered List"
-        case .blockquote: return "Blockquote"
-        case .callout: return "Callout"
-        case .divider: return "Divider"
-        case .code: return "Code Block"
-        case .image: return "Image"
+        case .paragraph:     return "Paragraph"
+        case .heading1:      return "Heading 1"
+        case .heading2:      return "Heading 2"
+        case .heading3:      return "Heading 3"
+        case .heading4:      return "Heading 4"
+        case .heading5:      return "Heading 5"
+        case .heading6:      return "Heading 6"
+        case .toggleHeading1: return "Toggle H1"
+        case .toggleHeading2: return "Toggle H2"
+        case .toggleHeading3: return "Toggle H3"
+        case .toggleHeading4: return "Toggle H4"
+        case .toggleHeading5: return "Toggle H5"
+        case .toggleHeading6: return "Toggle H6"
+        case .toggle:        return "Toggle"
+        case .bulletedList:  return "Bulleted List"
+        case .numberedList:  return "Numbered List"
+        case .checklist:     return "Checklist"
+        case .blockquote:    return "Blockquote"
+        case .callout:       return "Callout"
+        case .divider:       return "Divider"
+        case .code:          return "Code Block"
+        case .image:         return "Image"
+        case .table:         return "Table"
         }
     }
 
@@ -444,8 +653,8 @@ struct JournalBlockEditorView: View {
         guard let fromIndex = sorted.firstIndex(where: { $0.id == source.id }) else { return }
 
         var reordered = sorted
-        let clampedTo = min(toIndex, reordered.count)
-        reordered.move(fromOffsets: IndexSet(integer: fromIndex), toOffset: clampedTo > fromIndex ? clampedTo : clampedTo)
+        let destination = toIndex > fromIndex ? toIndex + 1 : toIndex
+        reordered.move(fromOffsets: IndexSet(integer: fromIndex), toOffset: destination)
 
         for (i, block) in reordered.enumerated() {
             block.sortOrder = i
@@ -457,34 +666,34 @@ struct JournalBlockEditorView: View {
     }
 
     private func save() {
-        do {
-            try modelContext.save()
-        } catch {
-            print("Failed to save journal blocks: \(error)")
-        }
+        do { try modelContext.save() } catch { print("Failed to save journal blocks: \(error)") }
     }
 }
+
+// MARK: - Drop Zone
 
 struct BlockDropZone: View {
     let index: Int
     @Binding var dragOverIndex: Int?
 
+    private var isActive: Bool { dragOverIndex == index }
+
     var body: some View {
         ZStack {
-            if dragOverIndex == index {
+            if isActive {
                 Capsule()
                     .fill(LGradients.blue)
                     .frame(height: 3)
                     .padding(.horizontal, 8)
-            } else {
-                Color.clear.frame(height: 16)
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 16)
+        .frame(height: isActive ? 16 : 0)
         .contentShape(Rectangle())
     }
 }
+
+// MARK: - Indexed Drop Delegate
 
 struct IndexedDropDelegate: DropDelegate {
     let index: Int
@@ -493,30 +702,13 @@ struct IndexedDropDelegate: DropDelegate {
     let visibleBlocks: [JournalBlock]
     let onMove: (JournalBlock, Int) -> Void
 
-    func dropEntered(info: DropInfo) {
-        dragOverIndex = index
-    }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        dragOverIndex = index
-        return DropProposal(operation: .move)
-    }
-
-    func dropExited(info: DropInfo) {
-        if dragOverIndex == index {
-            dragOverIndex = nil
-        }
-    }
-
+    func dropEntered(info: DropInfo) { dragOverIndex = index }
+    func dropUpdated(info: DropInfo) -> DropProposal? { dragOverIndex = index; return DropProposal(operation: .move) }
+    func dropExited(info: DropInfo) { if dragOverIndex == index { dragOverIndex = nil } }
     func performDrop(info: DropInfo) -> Bool {
-        guard let source = draggingBlock else {
-            draggingBlock = nil
-            dragOverIndex = nil
-            return false
-        }
+        guard let source = draggingBlock else { draggingBlock = nil; dragOverIndex = nil; return false }
         onMove(source, index)
-        draggingBlock = nil
-        dragOverIndex = nil
+        draggingBlock = nil; dragOverIndex = nil
         return true
     }
 }

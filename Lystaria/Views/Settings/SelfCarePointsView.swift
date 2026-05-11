@@ -34,6 +34,8 @@ struct SelfCarePointsView: View {
     private var allEntries: [SelfCarePointEntry]
 
     @State private var activeUserId: String? = nil
+    /// Onboarding for hidden header icons
+    @StateObject private var onboarding = OnboardingManager()
 
     private var currentProfile: SelfCarePointsProfile? {
         if let userId = activeUserId {
@@ -283,6 +285,8 @@ struct SelfCarePointsView: View {
                 .zIndex(10)
             }
 
+            
+
             historyDetailPopup
 
             if showDeleteEntryConfirmation, let selectedEntry = selectedEntryForAdminAction {
@@ -399,18 +403,61 @@ struct SelfCarePointsView: View {
                 .zIndex(11)
             }
         }
+        .environmentObject(onboarding)
+        .onAppear {
+            onboarding.start(page: OnboardingPages.selfcare)
+        }
+        .overlayPreferenceValue(OnboardingTargetKey.self) { anchors in
+            ZStack {
+                OnboardingOverlay(anchors: anchors)
+                    .environmentObject(onboarding)
+            }
+            .task(id: anchors.count) {
+                guard anchors.count > 0 else { return }
+                await MainActor.run {
+                    onboarding.start(page: OnboardingPages.selfcare)
+                }
+            }
+            .onChange(of: anchors.count) { _, newCount in
+                guard newCount > 0 else { return }
+                DispatchQueue.main.async {
+                    onboarding.start(page: OnboardingPages.selfcare)
+                }
+            }
+        }
     }
 
     // MARK: - Header
 
     private var headerSection: some View {
         VStack(spacing: 0) {
-            HStack {
-                Spacer()
-
+            HStack(spacing: 12) {
                 GradientTitle(text: "Self Care Points", size: 28)
 
                 Spacer()
+
+                NavigationLink {
+                    SelfCareRewardsView()
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(LColors.glassSurface2)
+                            .overlay(
+                                Circle().stroke(LColors.glassBorder, lineWidth: 1)
+                            )
+
+                        Image("trophyfill")
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 20, height: 20)
+                            .foregroundStyle(LColors.textPrimary)
+                    }
+                    .frame(width: 40, height: 40)
+                    .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .onboardingTarget("heartIcon")
             }
 
             Rectangle()

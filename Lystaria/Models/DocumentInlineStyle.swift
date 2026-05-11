@@ -15,6 +15,7 @@ enum DocumentInlineStyleType: String, Codable, CaseIterable {
     case strikethrough
     case link
     case inlineCode
+    case highlight
 }
 
 @Model

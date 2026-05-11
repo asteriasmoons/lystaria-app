@@ -1076,13 +1076,29 @@ struct HabitCard: View {
             habit.skips = (habit.skips ?? []).filter { $0.persistentModelID != existingSkip.persistentModelID }
             habit.updatedAt = Date()
 
-            // Clear lastSkippedAt on any linked reminder that was skipped today
+            // Remove the most-recent skip timestamp from each linked reminder rather than
+            // wiping the whole array — other same-day occurrences must stay intact.
             for r in linkedHabitReminders {
-                if let s = r.lastSkippedAt, Calendar.current.isDateInToday(s) {
-                    r.lastSkippedAt = nil
-                    r.skippedTimestampsStorage = "[]"
-                    r.updatedAt = Date()
+                guard let s = r.lastSkippedAt, Calendar.current.isDateInToday(s) else { continue }
+                r.lastSkippedAt = nil
+
+                // Decode, drop the one timestamp closest to `s`, re-encode.
+                let raw = r.skippedTimestampsStorage.trimmingCharacters(in: .whitespacesAndNewlines)
+                var timestamps: [Double] = []
+                if !raw.isEmpty, raw != "[]", let data = raw.data(using: .utf8) {
+                    timestamps = (try? JSONDecoder().decode([Double].self, from: data)) ?? []
                 }
+                // Remove the single timestamp closest to lastSkippedAt.
+                if let idx = timestamps.enumerated().min(by: {
+                    abs($0.element - s.timeIntervalSince1970) < abs($1.element - s.timeIntervalSince1970)
+                })?.offset {
+                    timestamps.remove(at: idx)
+                }
+                if let encoded = try? JSONEncoder().encode(timestamps),
+                   let str = String(data: encoded, encoding: .utf8) {
+                    r.skippedTimestampsStorage = str
+                }
+                r.updatedAt = Date()
             }
             return
         }
@@ -1092,6 +1108,8 @@ struct HabitCard: View {
             return
         }
 
+        let now = Date()
+
         let skip = HabitSkip(habit: habit, dayStart: todayStart)
         modelContext.insert(skip)
         if habit.skips == nil {
@@ -1099,32 +1117,85 @@ struct HabitCard: View {
         } else {
             habit.skips?.append(skip)
         }
-        habit.updatedAt = Date()
+        habit.updatedAt = now
 
-        // Advance any due linked reminder to its next occurrence.
-        acknowledgeOneDueHabitReminder()
+        // Advance ALL linked scheduled recurring reminders through the shared occurrence
+        // advancement path, then write skip history on each one. This mirrors exactly what
+        // RemindersView.markSkipped does so the two systems can never drift.
+        advanceLinkedRemindersForHabitOccurrence(occurredAt: now, status: .skipped)
 
-        // Record the skip on the linked reminder so RemindersView counts it
-        // in Total Today and Skipped Today, and log a history entry.
-        let now = Date()
+        try? modelContext.save()
+    }
+
+    // MARK: - Shared occurrence advancement (complete + skip)
+
+    /// Advances every linked scheduled reminder past the current occurrence, writes
+    /// history, updates timestamps storage, cancels the old notification, and schedules
+    /// the next one. `status` controls whether the history entry is .completed or .skipped.
+    private func advanceLinkedRemindersForHabitOccurrence(occurredAt: Date, status: ReminderHistoryEventKind) {
+        guard habit.reminderEnabled else { return }
+
         for r in linkedHabitReminders {
-            r.lastSkippedAt = now
+            guard r.status == .scheduled else { continue }
 
-            // Append to skippedTimestampsStorage
-            let raw = r.skippedTimestampsStorage.trimmingCharacters(in: .whitespacesAndNewlines)
-            var timestamps: [Double] = []
-            if !raw.isEmpty, raw != "[]", let data = raw.data(using: .utf8) {
-                timestamps = (try? JSONDecoder().decode([Double].self, from: data)) ?? []
-            }
-            timestamps = timestamps.filter { Calendar.current.isDateInToday(Date(timeIntervalSince1970: $0)) }
-            timestamps.append(now.timeIntervalSince1970)
-            if let encoded = try? JSONEncoder().encode(timestamps),
-               let str = String(data: encoded, encoding: .utf8) {
-                r.skippedTimestampsStorage = str
-            }
-            r.updatedAt = now
+            let skippedOccurrenceDate = r.nextRunAt
 
-            // Write permanent history entry
+            if r.isRecurring {
+                // Anchor advancement from max(now, scheduledOccurrence) — matches RemindersView.markSkipped exactly.
+                let base = max(occurredAt, r.nextRunAt)
+
+                let intervalWindowStart: String? = {
+                    guard r.linkedKind == .habit else { return nil }
+                    return habit.reminderIntervalWindowStart.isEmpty ? nil : habit.reminderIntervalWindowStart
+                }()
+                let intervalWindowEnd: String? = {
+                    guard r.linkedKind == .habit else { return nil }
+                    return habit.reminderIntervalWindowEnd.isEmpty ? nil : habit.reminderIntervalWindowEnd
+                }()
+
+                if r.schedule?.kind == .interval, let intervalMinutes = r.schedule?.intervalMinutes {
+                    let windowStart = intervalWindowStart ?? "00:00"
+                    let windowEnd   = intervalWindowEnd   ?? "23:59"
+                    r.nextRunAt = nextAnchoredIntervalRunForHabit(
+                        afterCompletedOccurrence: skippedOccurrenceDate,
+                        now: occurredAt,
+                        intervalMinutes: max(1, intervalMinutes),
+                        windowStart: windowStart,
+                        windowEnd: windowEnd
+                    )
+                } else {
+                    r.nextRunAt = ReminderCompute.nextRun(
+                        after: base.addingTimeInterval(91),
+                        reminder: r,
+                        intervalWindowStart: intervalWindowStart,
+                        intervalWindowEnd: intervalWindowEnd
+                    )
+                }
+                r.acknowledgedAt = nil
+            } else {
+                // One-time reminder: mark acknowledged and retire it.
+                r.acknowledgedAt = occurredAt
+                r.status = .sent
+            }
+
+            // Write timestamps storage entry (shared between skip and complete paths).
+            if status == .skipped {
+                r.lastSkippedAt = occurredAt
+                var timestamps: [Double] = []
+                let raw = r.skippedTimestampsStorage.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !raw.isEmpty, raw != "[]", let data = raw.data(using: .utf8) {
+                    timestamps = (try? JSONDecoder().decode([Double].self, from: data)) ?? []
+                }
+                timestamps.append(occurredAt.timeIntervalSince1970)
+                if let encoded = try? JSONEncoder().encode(timestamps),
+                   let str = String(data: encoded, encoding: .utf8) {
+                    r.skippedTimestampsStorage = str
+                }
+            }
+
+            r.updatedAt = occurredAt
+
+            // Write permanent reminder history entry.
             let entry = ReminderHistoryEntry(
                 reminderPersistentId: String(describing: r.persistentModelID),
                 reminderTitle: r.title,
@@ -1132,13 +1203,72 @@ struct HabitCard: View {
                 reminderScheduleKindRaw: r.schedule?.kind.rawValue ?? "once",
                 reminderTypeRaw: r.reminderTypeRaw,
                 linkedKindRaw: r.linkedKindRaw,
-                occurredAt: now,
-                kind: .skipped
+                occurredAt: occurredAt,
+                kind: status
             )
             modelContext.insert(entry)
+
+            // Cancel old notification and schedule the next occurrence.
+            NotificationManager.shared.cancelReminder(r)
+            if r.isRecurring {
+                NotificationManager.shared.scheduleReminder(r)
+            }
+        }
+    }
+
+    /// Mirrors RemindersView.nextAnchoredIntervalRun: advances from the completed
+    /// occurrence, staying on the interval grid within the window.
+    private func nextAnchoredIntervalRunForHabit(
+        afterCompletedOccurrence completedOccurrenceDate: Date,
+        now: Date,
+        intervalMinutes: Int,
+        windowStart: String,
+        windowEnd: String
+    ) -> Date {
+        let cal = ReminderCompute.tzCalendar
+        let safeInterval = max(1, intervalMinutes)
+
+        guard let (startH, startM) = ReminderCompute.parseHHMM(windowStart),
+              let (endH, endM) = ReminderCompute.parseHHMM(windowEnd) else {
+            return ReminderCompute.nextRunInterval(
+                after: completedOccurrenceDate,
+                intervalMinutes: safeInterval,
+                windowStart: windowStart,
+                windowEnd: windowEnd
+            )
         }
 
-        try? modelContext.save()
+        let startTotal = startH * 60 + startM
+        let endTotal   = endH   * 60 + endM
+        guard endTotal >= startTotal else {
+            return ReminderCompute.nextRunInterval(
+                after: completedOccurrenceDate,
+                intervalMinutes: safeInterval,
+                windowStart: windowStart,
+                windowEnd: windowEnd
+            )
+        }
+
+        let threshold = max(now, completedOccurrenceDate)
+
+        for dayOffset in 0...7 {
+            guard let day = cal.date(byAdding: .day, value: dayOffset, to: cal.startOfDay(for: threshold)) else {
+                continue
+            }
+            var cursor = startTotal
+            while cursor <= endTotal {
+                let candidate = ReminderCompute.merge(day: day, hour: cursor / 60, minute: cursor % 60, in: cal.timeZone)
+                if candidate > threshold { return candidate }
+                cursor += safeInterval
+            }
+        }
+
+        return ReminderCompute.nextRunInterval(
+            after: completedOccurrenceDate,
+            intervalMinutes: safeInterval,
+            windowStart: windowStart,
+            windowEnd: windowEnd
+        )
     }
 
     private func acknowledgeOneDueHabitReminder() {
@@ -1166,15 +1296,8 @@ struct HabitCard: View {
 
         guard let r = candidates.first else { return }
 
-        // We are about to advance `nextRunAt` to the next occurrence.
-        // IMPORTANT: we do NOT want the reminder to stay visually “done” on the Reminders page
-        // for the *next* occurrence, so we clear `acknowledgedAt` after advancing.
         r.updatedAt = now
 
-        // Interval-based habit reminders must respect their interval AND their allowed window.
-        // If the user logs early, advance from the scheduled occurrence that was just satisfied,
-        // not from the current clock time. This prevents a later same-day notification from firing
-        // after the habit was already completed, while keeping every-X-hours/minutes schedules intact.
         if habit.reminderKind == .everyXHours || habit.reminderKind == .everyXMinutes {
             let intervalMins: Int
             if habit.reminderKind == .everyXHours {
@@ -1209,7 +1332,6 @@ struct HabitCard: View {
 
         let selectedDays = habit.reminderKind == .weekly ? habit.reminderDaysOfWeek : nil
 
-        // Prefer the reminder's own stored time string.
         let timeStr: String? = {
             if let t = r.schedule?.timeOfDay, !t.isEmpty { return t }
             if let arr = r.schedule?.timesOfDay, let first = arr.first, !first.isEmpty { return first }
@@ -1217,18 +1339,16 @@ struct HabitCard: View {
         }()
 
         guard let hhmm = timeStr else {
-            // If we can't determine a time, fall back to rescheduling with the existing nextRunAt.
             NotificationManager.shared.cancelReminder(r)
             NotificationManager.shared.scheduleReminder(r)
             return
         }
 
-        // Daily and weekly habit reminders advance based on their own schedule type.
-        // Use the completed occurrence as the anchor, then move past it by a small amount
-        // so firstRun calculates the next valid scheduled day/time.
+        // Anchor from max(now, nextRunAt) — matches RemindersView.markSkipped.
+        let anchor = max(now, r.nextRunAt)
         let next = ReminderCompute.firstRun(
             kind: scheduleKind,
-            startDay: r.nextRunAt.addingTimeInterval(91),
+            startDay: anchor.addingTimeInterval(91),
             timesOfDay: [hhmm],
             daysOfWeek: selectedDays,
             intervalMinutes: nil,
@@ -1241,9 +1361,6 @@ struct HabitCard: View {
         r.nextRunAt = next
         r.acknowledgedAt = nil
 
-        // If there is ANOTHER linked habit reminder still coming later today,
-        // clear today's progress so the card/progress bar resets for that next
-        // same-day occurrence.
         let hasAnotherReminderLaterToday = linkedHabitReminders.contains { other in
             guard other.persistentModelID != r.persistentModelID else { return false }
             return other.status == .scheduled
@@ -2026,7 +2143,7 @@ struct NewHabitSheet: View {
                             }
                             
                             HStack(spacing: 8) {
-                                ForEach([HabitReminderKind.daily, HabitReminderKind.weekly, HabitReminderKind.everyXHours, HabitReminderKind.everyXMinutes], id: \..self) { k in
+                                ForEach([HabitReminderKind.daily, HabitReminderKind.weekly, HabitReminderKind.everyXHours, HabitReminderKind.everyXMinutes], id: \.self) { k in
                                     let on = reminderKind == k
                                     Button {
                                         reminderKind = k

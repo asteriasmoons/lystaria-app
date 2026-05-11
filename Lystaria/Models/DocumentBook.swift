@@ -24,6 +24,9 @@ final class DocumentBook {
     @Relationship(deleteRule: .nullify, inverse: \DocumentEntry.book)
     var entries: [DocumentEntry]?
 
+    @Relationship(deleteRule: .cascade, inverse: \DocumentFolder.book)
+    var folders: [DocumentFolder]?
+
     init(
         title: String,
         coverHex: String = "#6A5CFF",
@@ -36,5 +39,6 @@ final class DocumentBook {
         self.createdAt = Date()
         self.updatedAt = Date()
         self.entries = nil
+        self.folders = nil
     }
 }

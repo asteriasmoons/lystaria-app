@@ -16,6 +16,9 @@ struct DocumentBlockEditorView: View {
     @State private var draggingBlock: DocumentBlock? = nil
     @State private var dragOverIndex: Int? = nil
     @State private var selectedBlockIDs: Set<UUID> = []
+    @State private var focusedBlockID: UUID? = nil
+    @State private var isKeyboardVisible: Bool = false
+    @State private var showInlinePropertyDefinitionSheet = false
 
     // Split visible blocks into page segments at .pageBreak dividers
     // Each entry: (page blocks, optional page break block that follows it)
@@ -37,8 +40,11 @@ struct DocumentBlockEditorView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
+        ZStack(alignment: .topTrailing) {
+            DocumentEntryBackground(entry: entry)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
                 let pages = blockPages
 
                 // Drop zone before everything
@@ -73,7 +79,8 @@ struct DocumentBlockEditorView: View {
                                 onClearBatchSelection: clearBlockSelection,
                                 onDeleteSelectedBlocks: deleteSelectedBlocks,
                                 onIndentSelectedBlocksIn: indentSelectedBlocksIn,
-                                onIndentSelectedBlocksOut: indentSelectedBlocksOut
+                                onIndentSelectedBlocksOut: indentSelectedBlocksOut,
+                                documentTextColor: resolvedDocumentTextColor
                             )
                             .opacity(draggingBlock?.id == block.id ? 0.4 : 1)
                             .onDrag {
@@ -100,10 +107,14 @@ struct DocumentBlockEditorView: View {
                     .padding(.vertical, 28)
                     .background(
                         RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .fill(Color.white.opacity(0.07))
+                            .fill(Color.black.opacity(0.34))
+                            .background(
+                                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                    .fill(.ultraThinMaterial)
+                            )
                             .overlay(
                                 RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                    .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                                    .stroke(Color.white.opacity(0.16), lineWidth: 1)
                             )
                             .overlay(
                                 PageSheetTapOverlay {
@@ -144,17 +155,55 @@ struct DocumentBlockEditorView: View {
                             onClearBatchSelection: clearBlockSelection,
                             onDeleteSelectedBlocks: deleteSelectedBlocks,
                             onIndentSelectedBlocksIn: indentSelectedBlocksIn,
-                            onIndentSelectedBlocksOut: indentSelectedBlocksOut
+                            onIndentSelectedBlocksOut: indentSelectedBlocksOut,
+                            documentTextColor: resolvedDocumentTextColor
                         )
                         .padding(.horizontal, 16)
                     }
                 }
+                }
+                .padding(.bottom, 140)
             }
-            .padding(.bottom, 140)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             bottomAddBlockBar
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            isKeyboardVisible = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            isKeyboardVisible = false
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .documentBlockDidFocus)) { note in
+            if let info = note.object as? [String: Any],
+               let id = info["id"] as? UUID {
+                focusedBlockID = id
+            }
+        }
+        .sheet(isPresented: $showInlinePropertyDefinitionSheet) {
+            DocumentInlinePropertyDefinitionSheet { draft in
+                appendInlineProperty(draft)
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            .preferredColorScheme(.dark)
+        }
+    }
+
+    private var resolvedDocumentTextColor: UIColor {
+        let hex = entry.textColorHex.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !hex.isEmpty,
+              let r = UInt8(hex.prefix(2), radix: 16),
+              let g = UInt8(hex.dropFirst(2).prefix(2), radix: 16),
+              let b = UInt8(hex.dropFirst(4).prefix(2), radix: 16) else {
+            return UIColor(LColors.textPrimary)
+        }
+        return UIColor(
+            red: CGFloat(r) / 255,
+            green: CGFloat(g) / 255,
+            blue: CGFloat(b) / 255,
+            alpha: 1
+        )
     }
 
     private var visibleBlocks: [DocumentBlock] {
@@ -177,6 +226,8 @@ struct DocumentBlockEditorView: View {
 
             if isSelectionMode {
                 batchSelectionBar
+            } else if isKeyboardVisible {
+                keyboardBar
             } else {
                 addBlockMenu
             }
@@ -185,6 +236,58 @@ struct DocumentBlockEditorView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
+    }
+
+    private var keyboardBar: some View {
+        HStack(spacing: 10) {
+            // Add block menu — left side
+            Menu {
+                ForEach(DocumentBlockType.allCases, id: \.self) { type in
+                    Button(labelForType(type)) { appendBlock(type: type) }
+                }
+
+                Divider()
+
+                Button {
+                    showInlinePropertyDefinitionSheet = true
+                } label: {
+                    Label("Property", systemImage: "tag.fill")
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "plus")
+                    Text("Add Block")
+                }
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(LGradients.blue)
+                .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+
+            Spacer(minLength: 0)
+
+            // Done button — right side
+            Button {
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            } label: {
+                Text("Done")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 10)
+                    .background(LGradients.blue)
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color.black.opacity(0.36))
+        .clipShape(Capsule())
+        .overlay(Capsule().stroke(LColors.glassBorder, lineWidth: 1))
     }
 
     private var isSelectionMode: Bool {
@@ -305,10 +408,11 @@ struct DocumentBlockEditorView: View {
 
     private func canIndentBatchBlock(_ block: DocumentBlock) -> Bool {
         switch block.type {
-        case .paragraph, .heading1, .heading2, .heading3, .heading4,
+        case .paragraph, .heading1, .heading2, .heading3, .heading4, .heading5, .heading6,
+             .toggleHeading1, .toggleHeading2, .toggleHeading3, .toggleHeading4, .toggleHeading5, .toggleHeading6,
              .toggle, .bulletedList, .numberedList, .checklist, .blockquote, .callout:
             return true
-        case .divider, .code, .image:
+        case .divider, .code, .image, .table:
             return false
         }
     }
@@ -318,6 +422,14 @@ struct DocumentBlockEditorView: View {
             ForEach(DocumentBlockType.allCases, id: \.self) { type in
                 Button(labelForType(type)) { appendBlock(type: type) }
             }
+
+            Divider()
+
+            Button {
+                showInlinePropertyDefinitionSheet = true
+            } label: {
+                Label("Property", systemImage: "tag.fill")
+            }
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: "plus")
@@ -325,13 +437,12 @@ struct DocumentBlockEditorView: View {
             }
             .frame(maxWidth: .infinity)
             .font(.system(size: 14, weight: .bold))
-            .foregroundStyle(LGradients.blue)
+            .foregroundStyle(.white)
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
             .frame(minWidth: 180)
-            .background(Color.white.opacity(0.06))
+            .background(LGradients.blue)
             .clipShape(Capsule())
-            .overlay(Capsule().stroke(LGradients.blue, lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
@@ -339,16 +450,25 @@ struct DocumentBlockEditorView: View {
     private func appendBlock(type: DocumentBlockType) {
         guard !isMutatingBlocks else { return }
         clearBlockSelection()
+
+        // If a block is focused, insert after it
+        if let focusedID = focusedBlockID,
+           let focusedBlock = entry.sortedBlocks.first(where: { $0.id == focusedID }) {
+            insertBlockBelow(focusedBlock, type, "")
+            return
+        }
+
+        // Otherwise append to end
         isMutatingBlocks = true
         defer { isMutatingBlocks = false }
 
         let newBlock = DocumentBlock(
             type: type,
-            text: "",
+            text: type == .table ? DocumentTableData().toJSON() : "",
             sortOrder: entry.sortedBlocks.count,
             parentBlockID: nil,
             listGroupID: type == .bulletedList || type == .numberedList ? UUID() : nil,
-            isExpanded: type == .toggle,
+            isExpanded: type == .toggle || type.isToggleHeading,
             indentLevel: 0,
             calloutEmoji: type == .callout ? defaultCalloutIconID : "",
             languageHint: type == .divider ? DividerStyle.line.rawValue : ""
@@ -360,6 +480,139 @@ struct DocumentBlockEditorView: View {
         entry.ensureStarterBlock()
         entry.normalizeBlockSortOrders()
         save()
+    }
+
+    private func appendInlineProperty(_ draft: DocumentInlinePropertyDraft) {
+        guard !isMutatingBlocks else { return }
+        clearBlockSelection()
+
+        let displayText = inlinePropertyDisplayText(from: draft)
+
+        if let focusedID = focusedBlockID,
+           let focusedBlock = entry.sortedBlocks.first(where: { $0.id == focusedID }) {
+            insertInlinePropertyBelow(focusedBlock, draft: draft, displayText: displayText)
+            return
+        }
+
+        isMutatingBlocks = true
+        defer { isMutatingBlocks = false }
+
+        let propertyBlock = DocumentBlock(
+            type: .paragraph,
+            text: displayText,
+            sortOrder: entry.sortedBlocks.count,
+            parentBlockID: nil,
+            listGroupID: nil,
+            isExpanded: false,
+            indentLevel: 0,
+            calloutEmoji: "",
+            languageHint: ""
+        )
+
+        propertyBlock.entry = entry
+        propertyBlock.touch()
+        if entry.blocks == nil { entry.blocks = [] }
+        entry.blocks?.append(propertyBlock)
+
+        attachInlineProperty(draft, to: propertyBlock, displayText: displayText)
+        entry.ensureStarterBlock()
+        entry.normalizeBlockSortOrders()
+        save()
+    }
+
+    private func insertInlinePropertyBelow(_ block: DocumentBlock, draft: DocumentInlinePropertyDraft, displayText: String) {
+        guard !isMutatingBlocks else { return }
+        clearBlockSelection()
+        isMutatingBlocks = true
+        defer { isMutatingBlocks = false }
+
+        let sorted = entry.sortedBlocks
+        guard sorted.contains(where: { $0.id == block.id }) else { return }
+
+        let insertAfterOrder = block.sortOrder
+        let inheritedParentBlockID: UUID? = block.isToggleBlock ? block.id : block.parentBlockID
+        let inheritedIndentLevel: Int = block.isToggleBlock ? block.indentLevel + 1 : block.indentLevel
+
+        let propertyBlock = DocumentBlock(
+            type: .paragraph,
+            text: displayText,
+            sortOrder: insertAfterOrder + 1,
+            parentBlockID: inheritedParentBlockID,
+            listGroupID: nil,
+            isExpanded: false,
+            indentLevel: inheritedIndentLevel,
+            calloutEmoji: "",
+            languageHint: ""
+        )
+
+        propertyBlock.entry = entry
+        propertyBlock.touch()
+        if entry.blocks == nil { entry.blocks = [] }
+        entry.blocks?.append(propertyBlock)
+
+        for laterBlock in (entry.blocks ?? []) where laterBlock.id != propertyBlock.id && laterBlock.sortOrder > insertAfterOrder {
+            laterBlock.sortOrder += 1
+            laterBlock.touch()
+        }
+
+        attachInlineProperty(draft, to: propertyBlock, displayText: displayText)
+        entry.ensureStarterBlock()
+        entry.normalizeBlockSortOrders()
+        save()
+
+        let newBlockID = propertyBlock.id
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            NotificationCenter.default.post(name: .documentBlockRequestFocus, object: newBlockID)
+        }
+    }
+
+    private func attachInlineProperty(_ draft: DocumentInlinePropertyDraft, to block: DocumentBlock, displayText: String) {
+        let property = DocumentInlineProperty(
+            name: draft.name,
+            type: draft.type,
+            valueStorage: draft.valueStorage,
+            optionsStorage: draft.optionsStorage,
+            colorHex: draft.colorHex,
+            rangeLocation: 0,
+            rangeLength: (displayText as NSString).length,
+            block: block
+        )
+
+        modelContext.insert(property)
+
+        if block.inlineProperties == nil {
+            block.inlineProperties = []
+        }
+
+        block.inlineProperties?.append(property)
+        block.touch()
+    }
+
+    private func inlinePropertyDisplayText(from draft: DocumentInlinePropertyDraft) -> String {
+        let trimmedName = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = trimmedName.isEmpty ? draft.type.rawValue : trimmedName
+
+        switch draft.type {
+        case .boolean:
+            return "\(name): \(draft.valueStorage == "true" ? "True" : "False")"
+        case .checkbox:
+            return "\(name): \(draft.valueStorage == "true" ? "Checked" : "Unchecked")"
+        case .text, .number, .url, .select:
+            let value = draft.valueStorage.trimmingCharacters(in: .whitespacesAndNewlines)
+            return value.isEmpty ? name : "\(name): \(value)"
+        case .date:
+            if let date = ISO8601DateFormatter().date(from: draft.valueStorage) {
+                return "\(name): \(date.formatted(date: .abbreviated, time: .omitted))"
+            }
+            return name
+        case .multiSelect:
+            guard let data = draft.valueStorage.data(using: .utf8),
+                  let values = try? JSONDecoder().decode([String].self, from: data),
+                  !values.isEmpty else {
+                return name
+            }
+            return "\(name): \(values.joined(separator: ", "))"
+        }
     }
 
     private func insertBlockBelow(_ block: DocumentBlock, _ type: DocumentBlockType, _ initialText: String = "") {
@@ -391,11 +644,11 @@ struct DocumentBlockEditorView: View {
 
         let newBlock = DocumentBlock(
             type: type,
-            text: initialText,
+            text: type == .table ? (initialText.isEmpty ? DocumentTableData().toJSON() : initialText) : initialText,
             sortOrder: insertAfterOrder + 1,
             parentBlockID: inheritedParentBlockID,
             listGroupID: inheritedListGroupID,
-            isExpanded: type == .toggle,
+            isExpanded: type == .toggle || type.isToggleHeading,
             indentLevel: inheritedIndentLevel,
             calloutEmoji: type == .callout ? defaultCalloutIconID : "",
             languageHint: type == .divider ? DividerStyle.line.rawValue : ""
@@ -504,38 +757,57 @@ struct DocumentBlockEditorView: View {
             block.listGroupID = nil
         }
 
-        if type == .toggle { block.isExpanded = true }
+        if type == .toggle || type.isToggleHeading { block.isExpanded = true }
         else if !block.isToggleBlock { block.parentBlockID = nil }
+
+        let wasToggleChild = block.parentBlockID != nil
 
         switch type {
         case .callout:
-            block.parentBlockID = nil; block.indentLevel = 0
+            if !wasToggleChild { block.parentBlockID = nil }
+            block.indentLevel = wasToggleChild ? block.indentLevel : 0
             if block.calloutEmoji.isEmpty { block.calloutEmoji = defaultCalloutIconID }
         case .divider:
-            block.parentBlockID = nil; block.indentLevel = 0
+            if !wasToggleChild { block.parentBlockID = nil }
+            block.indentLevel = wasToggleChild ? block.indentLevel : 0
             block.text = ""; block.languageHint = DividerStyle.line.rawValue
             for s in (block.inlineStyles ?? []) { modelContext.delete(s) }
             block.inlineStyles = []
         case .code:
-            block.parentBlockID = nil; block.indentLevel = 0
+            if !wasToggleChild { block.parentBlockID = nil }
+            block.indentLevel = wasToggleChild ? block.indentLevel : 0
             for s in (block.inlineStyles ?? []) { modelContext.delete(s) }
             block.inlineStyles = []
         case .image:
-            block.parentBlockID = nil; block.indentLevel = 0
+            if !wasToggleChild { block.parentBlockID = nil }
+            block.indentLevel = wasToggleChild ? block.indentLevel : 0
             block.text = ""
             for s in (block.inlineStyles ?? []) { modelContext.delete(s) }
             block.inlineStyles = []
-        case .paragraph, .heading1, .heading2, .heading3, .heading4, .blockquote:
-            block.parentBlockID = nil; block.indentLevel = 0; block.languageHint = ""
-        case .toggle:
-            block.parentBlockID = nil; block.indentLevel = 0; block.languageHint = ""; block.isExpanded = true
+        case .paragraph, .heading1, .heading2, .heading3, .heading4, .heading5, .heading6, .blockquote:
+            if !wasToggleChild { block.parentBlockID = nil }
+            block.indentLevel = wasToggleChild ? block.indentLevel : 0
+            block.languageHint = ""
+        case .toggle, .toggleHeading1, .toggleHeading2, .toggleHeading3, .toggleHeading4, .toggleHeading5, .toggleHeading6:
+            if !wasToggleChild { block.parentBlockID = nil }
+            block.indentLevel = wasToggleChild ? block.indentLevel : 0
+            block.languageHint = ""; block.isExpanded = true
         case .bulletedList, .numberedList:
-            block.parentBlockID = nil; block.indentLevel = 0; block.languageHint = ""
+            if !wasToggleChild { block.parentBlockID = nil }
+            block.indentLevel = wasToggleChild ? block.indentLevel : 0
+            block.languageHint = ""
         case .checklist:
-            block.parentBlockID = nil; block.indentLevel = 0
+            if !wasToggleChild { block.parentBlockID = nil }
+            block.indentLevel = wasToggleChild ? block.indentLevel : 0
             if block.languageHint != "checked" && block.languageHint != "xmark" {
                 block.languageHint = ""
             }
+        case .table:
+            if !wasToggleChild { block.parentBlockID = nil }
+            block.indentLevel = 0
+            block.text = DocumentTableData().toJSON()
+            for s in (block.inlineStyles ?? []) { modelContext.delete(s) }
+            block.inlineStyles = []
         }
 
         block.touch()
@@ -554,6 +826,14 @@ struct DocumentBlockEditorView: View {
         case .heading2: return "Heading 2"
         case .heading3: return "Heading 3"
         case .heading4: return "Heading 4"
+        case .heading5: return "Heading 5"
+        case .heading6: return "Heading 6"
+        case .toggleHeading1: return "Toggle H1"
+        case .toggleHeading2: return "Toggle H2"
+        case .toggleHeading3: return "Toggle H3"
+        case .toggleHeading4: return "Toggle H4"
+        case .toggleHeading5: return "Toggle H5"
+        case .toggleHeading6: return "Toggle H6"
         case .toggle: return "Toggle"
         case .bulletedList: return "Bulleted List"
         case .numberedList: return "Numbered List"
@@ -563,6 +843,7 @@ struct DocumentBlockEditorView: View {
         case .divider: return "Divider"
         case .code: return "Code Block"
         case .image: return "Image"
+        case .table: return "Table"
         }
     }
 

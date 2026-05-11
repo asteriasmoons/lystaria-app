@@ -92,7 +92,20 @@ final class CalendarSyncManager {
         }
 
         // Compute the fire date from the relative offset (negative = before event).
-        let fireDate = appEvent.startDate.addingTimeInterval(alarm.relativeOffset)
+        // For all-day events, EventKit stores startDate as midnight UTC, which falls
+        // on the previous calendar day in any UTC- timezone. Snap to local noon first
+        // so the offset arithmetic targets the correct calendar day.
+        let anchorDate: Date
+        if appEvent.allDay {
+            var cal = Calendar.current
+            cal.timeZone = TimeZone(identifier: NotificationManager.shared.effectiveTimezoneID) ?? .current
+            // +43200 seconds (12h) guarantees we land in the correct local calendar day
+            // regardless of UTC offset, then snap to local start-of-day.
+            anchorDate = cal.startOfDay(for: appEvent.startDate.addingTimeInterval(43200))
+        } else {
+            anchorDate = appEvent.startDate
+        }
+        let fireDate = anchorDate.addingTimeInterval(alarm.relativeOffset)
         guard fireDate > syncedAt else { return }
 
         let minutesBefore = Int(-alarm.relativeOffset / 60)

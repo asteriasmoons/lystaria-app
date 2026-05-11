@@ -425,8 +425,9 @@ enum SelfCarePointsManager {
             throw SelfCarePointsError.insufficientPoints
         }
 
-        profile.currentPoints -= safeAmount
+        profile.currentPoints = max(0, profile.currentPoints - safeAmount)
         profile.spentPoints += safeAmount
+        profile.level = level(for: profile.currentPoints)
         profile.updatedAt = Date()
 
         try modelContext.save()

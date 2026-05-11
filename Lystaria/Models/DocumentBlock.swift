@@ -14,6 +14,14 @@ enum DocumentBlockType: String, Codable, CaseIterable {
     case heading2
     case heading3
     case heading4
+    case heading5
+    case heading6
+    case toggleHeading1
+    case toggleHeading2
+    case toggleHeading3
+    case toggleHeading4
+    case toggleHeading5
+    case toggleHeading6
     case blockquote
     case callout
     case divider
@@ -23,6 +31,15 @@ enum DocumentBlockType: String, Codable, CaseIterable {
     case bulletedList
     case numberedList
     case checklist
+    case table
+
+    var isToggleHeading: Bool {
+        switch self {
+        case .toggleHeading1, .toggleHeading2, .toggleHeading3,
+             .toggleHeading4, .toggleHeading5, .toggleHeading6: return true
+        default: return false
+        }
+    }
 }
 
 @Model
@@ -45,12 +62,18 @@ final class DocumentBlock {
 
     var calloutEmoji: String = ""
     var languageHint: String = ""
+    var colorHex: String = ""
+
+    var hasCustomBlockColor: Bool { !colorHex.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     var imageData: Data? = nil
 
     var entry: DocumentEntry?
 
     var inlineStyles: [DocumentInlineStyle]? = nil
+
+    @Relationship(deleteRule: .cascade)
+    var inlineProperties: [DocumentInlineProperty]? = nil
 
     init(
         type: DocumentBlockType = .paragraph,
@@ -122,7 +145,11 @@ final class DocumentBlock {
     }
 
     var isToggleBlock: Bool {
-        type == .toggle
+        switch type {
+        case .toggle, .toggleHeading1, .toggleHeading2, .toggleHeading3,
+             .toggleHeading4, .toggleHeading5, .toggleHeading6: return true
+        default: return false
+        }
     }
 
     var sortedInlineStyles: [DocumentInlineStyle] {

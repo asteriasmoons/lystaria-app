@@ -1023,18 +1023,23 @@ struct DashboardView: View {
         let startOfDay = dashboardCalendar.startOfDay(for: now)
         let hour = dashboardCalendar.component(.hour, from: now)
 
+        // Times: 12AM, 8AM, 11AM, 2PM, 5PM, 8PM, and 11PM
         let slotHour: Int
         switch hour {
         case 0..<8:
             slotHour = 0
-        case 8..<12:
+        case 8..<11:
             slotHour = 8
-        case 12..<16:
-            slotHour = 12
-        case 16..<20:
-            slotHour = 16
-        default:
+        case 11..<14:
+            slotHour = 11
+        case 14..<17:
+            slotHour = 14
+        case 17..<20:
+            slotHour = 17
+        case 20..<23:
             slotHour = 20
+        default:
+            slotHour = 23
         }
 
         return dashboardCalendar.date(byAdding: .hour, value: slotHour, to: startOfDay) ?? startOfDay
@@ -1072,17 +1077,8 @@ struct DashboardView: View {
         let snapshot = wellnessWallAISnapshot
         let snapshotHash = WellnessWallSnapshotHasher.hash(snapshot)
         let currentSlotStart = currentWellnessWallRefreshSlotStart
-        let forceRefreshKey = "forceWellnessWallAIRefreshOnce"
 
-        if UserDefaults.standard.bool(forKey: forceRefreshKey) == false {
-            UserDefaults.standard.set(true, forKey: forceRefreshKey)
-
-            if let savedInsight = todaySavedWellnessWallAIInsight {
-                modelContext.delete(savedInsight)
-                try? modelContext.save()
-                aiWellnessInsights = nil
-            }
-        } else if let savedInsight = todaySavedWellnessWallAIInsight {
+        if let savedInsight = todaySavedWellnessWallAIInsight {
             aiWellnessInsights = wellnessItems(from: savedInsight)
 
             if savedInsight.updatedAt >= currentSlotStart {
@@ -1381,32 +1377,27 @@ struct DashboardView: View {
         ]
     }
 
-    private var mostConsistentArea: ConsistencyAreaScore? {
-        consistencyAreaScores.max { lhs, rhs in
+    private var consistencyCardValues: (
+        mostConsistent: ConsistencyAreaScore?,
+        needsAttention: ConsistencyAreaScore?,
+        strongestStreak: ConsistencyStreakItem?,
+        leastActive: ConsistencyAreaScore?
+    ) {
+        let scores = consistencyAreaScores
+        var usedTitles = Set<String>()
+
+        let mostConsistent = scores.max { lhs, rhs in
             if lhs.activeDays == rhs.activeDays {
                 return lhs.title > rhs.title
             }
             return lhs.activeDays < rhs.activeDays
         }
-    }
 
-    private var leastActiveArea: ConsistencyAreaScore? {
-        let incompleteAreas = consistencyAreaScores.filter { $0.activeDays < last7DayStarts.count }
-
-        guard !incompleteAreas.isEmpty else {
-            return nil
+        if let mostConsistent {
+            usedTitles.insert(mostConsistent.title)
         }
 
-        return incompleteAreas.min { lhs, rhs in
-            if lhs.activeDays == rhs.activeDays {
-                return lhs.title < rhs.title
-            }
-            return lhs.activeDays < rhs.activeDays
-        }
-    }
-    
-    private var needsAttentionArea: ConsistencyAreaScore? {
-        let sorted = consistencyAreaScores.sorted { lhs, rhs in
+        let needsAttentionCandidates = scores.sorted { lhs, rhs in
             let lhsNeedsAttention = lhs.currentStreak == 0
             let rhsNeedsAttention = rhs.currentStreak == 0
 
@@ -1425,19 +1416,15 @@ struct DashboardView: View {
             return lhs.title < rhs.title
         }
 
-        guard let first = sorted.first else { return nil }
+        let needsAttention = needsAttentionCandidates.first { area in
+            !usedTitles.contains(area.title)
+        } ?? needsAttentionCandidates.first
 
-        if let leastActiveArea,
-           first.title == leastActiveArea.title,
-           let second = sorted.dropFirst().first {
-            return second
+        if let needsAttention {
+            usedTitles.insert(needsAttention.title)
         }
 
-        return first
-    }
-
-    private var strongestStreakItem: ConsistencyStreakItem? {
-        let streaks = [
+        let streakCandidates = [
             ConsistencyStreakItem(title: "Journaling", streakDays: journalCurrentStreak),
             ConsistencyStreakItem(title: "Mood", streakDays: moodCurrentStreak),
             ConsistencyStreakItem(title: "Habits", streakDays: habitCurrentStreak),
@@ -1446,13 +1433,51 @@ struct DashboardView: View {
             ConsistencyStreakItem(title: "Reading", streakDays: readingCurrentStreak)
         ]
         .filter { $0.streakDays > 0 }
-
-        return streaks.max { lhs, rhs in
+        .sorted { lhs, rhs in
             if lhs.streakDays == rhs.streakDays {
-                return lhs.title > rhs.title
+                return lhs.title < rhs.title
             }
-            return lhs.streakDays < rhs.streakDays
+            return lhs.streakDays > rhs.streakDays
         }
+
+        let strongestStreak = streakCandidates.first { item in
+            !usedTitles.contains(item.title)
+        } ?? streakCandidates.first
+
+        if let strongestStreak {
+            usedTitles.insert(strongestStreak.title)
+        }
+
+        let leastActiveCandidates = scores
+            .filter { $0.activeDays < last7DayStarts.count }
+            .sorted { lhs, rhs in
+                if lhs.activeDays == rhs.activeDays {
+                    return lhs.title < rhs.title
+                }
+                return lhs.activeDays < rhs.activeDays
+            }
+
+        let leastActive = leastActiveCandidates.first { area in
+            !usedTitles.contains(area.title)
+        } ?? leastActiveCandidates.first
+
+        return (mostConsistent, needsAttention, strongestStreak, leastActive)
+    }
+
+    private var mostConsistentArea: ConsistencyAreaScore? {
+        consistencyCardValues.mostConsistent
+    }
+
+    private var needsAttentionArea: ConsistencyAreaScore? {
+        consistencyCardValues.needsAttention
+    }
+
+    private var strongestStreakItem: ConsistencyStreakItem? {
+        consistencyCardValues.strongestStreak
+    }
+
+    private var leastActiveArea: ConsistencyAreaScore? {
+        consistencyCardValues.leastActive
     }
 
     // MARK: - Dashboard Content Subviews

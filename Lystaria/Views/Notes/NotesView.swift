@@ -47,6 +47,8 @@ struct NotesView: View {
     
     @StateObject private var voiceManager = VoiceTranscriptionManager()
     @State private var didInsertTranscript: Bool = false
+    /// Onboarding for hidden header icons
+    @StateObject private var onboarding = OnboardingManager()
     
     private let columns = [
         GridItem(.flexible(), spacing: 14),
@@ -109,6 +111,17 @@ struct NotesView: View {
                 }
             }
             .toolbarBackground(.hidden, for: .navigationBar)
+            .overlayPreferenceValue(OnboardingTargetKey.self) { anchors in
+                ZStack {
+                    OnboardingOverlay(anchors: anchors)
+                        .environmentObject(onboarding)
+                }
+                .task(id: anchors.count) {
+                    if anchors.count > 0 {
+                        onboarding.start(page: OnboardingPages.notes)
+                    }
+                }
+            }
         }
     }
     
@@ -302,6 +315,7 @@ struct NotesView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .onboardingTarget("docsIcon")
                 
                 // New tab button
                 Button {

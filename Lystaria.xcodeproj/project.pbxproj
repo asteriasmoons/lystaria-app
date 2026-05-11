@@ -302,12 +302,29 @@
 		CFEEED352FAA42B100F03103 /* DocumentInlineStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED322FAA42B100F03103 /* DocumentInlineStyle.swift */; };
 		CFEEED362FAA42B100F03103 /* DocumentBlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED2F2FAA42B100F03103 /* DocumentBlock.swift */; };
 		CFEEED382FAA42CC00F03103 /* DocumentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED372FAA42CC00F03103 /* DocumentsView.swift */; };
-		CFEEED3D2FAA42E500F03103 /* DocumentBlockEditorPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED392FAA42E500F03103 /* DocumentBlockEditorPage.swift */; };
-		CFEEED3E2FAA42E500F03103 /* DocumentBlockPreviewPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED3B2FAA42E500F03103 /* DocumentBlockPreviewPage.swift */; };
-		CFEEED3F2FAA42E500F03103 /* DocumentBlockRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED3C2FAA42E500F03103 /* DocumentBlockRow.swift */; };
-		CFEEED402FAA42E500F03103 /* DocumentBlockEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED3A2FAA42E500F03103 /* DocumentBlockEditorView.swift */; };
 		CFEEED422FAAEB3700F03103 /* DeveloperSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED412FAAEB3100F03103 /* DeveloperSettings.swift */; };
-		CFEEED442FAC52F900F03103 /* DividerStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED432FAC52F100F03103 /* DividerStyles.swift */; };
+		CFEEED602FAE93DE00F03103 /* DocumentBlockEditorPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED562FAE93DE00F03103 /* DocumentBlockEditorPage.swift */; };
+		CFEEED612FAE93DE00F03103 /* DocumentInlineProperty.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED5B2FAE93DE00F03103 /* DocumentInlineProperty.swift */; };
+		CFEEED622FAE93DE00F03103 /* DocumentBlockEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED572FAE93DE00F03103 /* DocumentBlockEditorView.swift */; };
+		CFEEED632FAE93DE00F03103 /* DocumentInlinePropertyViewSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED5E2FAE93DE00F03103 /* DocumentInlinePropertyViewSheet.swift */; };
+		CFEEED642FAE93DE00F03103 /* DocumentEntryBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED5A2FAE93DE00F03103 /* DocumentEntryBackground.swift */; };
+		CFEEED652FAE93DE00F03103 /* DocumentInlinePropertyChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED5C2FAE93DE00F03103 /* DocumentInlinePropertyChip.swift */; };
+		CFEEED662FAE93DE00F03103 /* DocumentBlockRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED592FAE93DE00F03103 /* DocumentBlockRow.swift */; };
+		CFEEED672FAE93DE00F03103 /* DividerStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED542FAE93DE00F03103 /* DividerStyles.swift */; };
+		CFEEED682FAE93DE00F03103 /* DocumentBlockPreviewPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED582FAE93DE00F03103 /* DocumentBlockPreviewPage.swift */; };
+		CFEEED692FAE93DE00F03103 /* DocumentBackgroundSettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED552FAE93DE00F03103 /* DocumentBackgroundSettingsSheet.swift */; };
+		CFEEED6A2FAE93DE00F03103 /* DocumentInlinePropertyDefinitionSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED5D2FAE93DE00F03103 /* DocumentInlinePropertyDefinitionSheet.swift */; };
+		CFEEED6B2FAE93DE00F03103 /* CodeHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED532FAE93DE00F03103 /* CodeHighlighter.swift */; };
+		CFEEED6D2FAEAB7200F03103 /* SelfCareRewardsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED6C2FAEAB6A00F03103 /* SelfCareRewardsView.swift */; };
+		CFEEED6F2FAF93C800F03103 /* DocumentTextColorPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED6E2FAF93C800F03103 /* DocumentTextColorPickerSheet.swift */; };
+		CFEEED712FB029A200F03103 /* DocumentTableEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED702FB029A200F03103 /* DocumentTableEditorView.swift */; };
+		CFEEED732FB02B0C00F03103 /* DocumentTableData.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED722FB02B0C00F03103 /* DocumentTableData.swift */; };
+		CFEEED752FB0ECDC00F03103 /* JournalTableData.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED742FB0ECDC00F03103 /* JournalTableData.swift */; };
+		CFEEED792FB0ECFF00F03103 /* JournalEntryBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED772FB0ECFF00F03103 /* JournalEntryBackground.swift */; };
+		CFEEED7A2FB0ECFF00F03103 /* JournalTableEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED782FB0ECFF00F03103 /* JournalTableEditorView.swift */; };
+		CFEEED7B2FB0ECFF00F03103 /* JournalBackgroundSettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED762FB0ECFF00F03103 /* JournalBackgroundSettingsSheet.swift */; };
+		CFEEED7D2FB10BDB00F03103 /* DocumentFolder.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED7C2FB10BD700F03103 /* DocumentFolder.swift */; };
+		CFEEED7F2FB10E8C00F03103 /* DocumentFolderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED7E2FB10E8400F03103 /* DocumentFolderView.swift */; };
 		CFF7C5AF2F72EA0D00A67EC3 /* Medication.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFF7C5AE2F72EA0800A67EC3 /* Medication.swift */; };
 		CFF7C5B12F72F19300A67EC3 /* MedicationPageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFF7C5B02F72F18900A67EC3 /* MedicationPageView.swift */; };
 		CFF7C5B32F734D8000A67EC3 /* DailyReadingProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFF7C5B22F734D7900A67EC3 /* DailyReadingProgress.swift */; };
@@ -633,12 +650,29 @@
 		CFEEED312FAA42B100F03103 /* DocumentEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentEntry.swift; sourceTree = "<group>"; };
 		CFEEED322FAA42B100F03103 /* DocumentInlineStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentInlineStyle.swift; sourceTree = "<group>"; };
 		CFEEED372FAA42CC00F03103 /* DocumentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentsView.swift; sourceTree = "<group>"; };
-		CFEEED392FAA42E500F03103 /* DocumentBlockEditorPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentBlockEditorPage.swift; sourceTree = "<group>"; };
-		CFEEED3A2FAA42E500F03103 /* DocumentBlockEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentBlockEditorView.swift; sourceTree = "<group>"; };
-		CFEEED3B2FAA42E500F03103 /* DocumentBlockPreviewPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentBlockPreviewPage.swift; sourceTree = "<group>"; };
-		CFEEED3C2FAA42E500F03103 /* DocumentBlockRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentBlockRow.swift; sourceTree = "<group>"; };
 		CFEEED412FAAEB3100F03103 /* DeveloperSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeveloperSettings.swift; sourceTree = "<group>"; };
-		CFEEED432FAC52F100F03103 /* DividerStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DividerStyles.swift; sourceTree = "<group>"; };
+		CFEEED532FAE93DE00F03103 /* CodeHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeHighlighter.swift; sourceTree = "<group>"; };
+		CFEEED542FAE93DE00F03103 /* DividerStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DividerStyles.swift; sourceTree = "<group>"; };
+		CFEEED552FAE93DE00F03103 /* DocumentBackgroundSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentBackgroundSettingsSheet.swift; sourceTree = "<group>"; };
+		CFEEED562FAE93DE00F03103 /* DocumentBlockEditorPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentBlockEditorPage.swift; sourceTree = "<group>"; };
+		CFEEED572FAE93DE00F03103 /* DocumentBlockEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentBlockEditorView.swift; sourceTree = "<group>"; };
+		CFEEED582FAE93DE00F03103 /* DocumentBlockPreviewPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentBlockPreviewPage.swift; sourceTree = "<group>"; };
+		CFEEED592FAE93DE00F03103 /* DocumentBlockRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentBlockRow.swift; sourceTree = "<group>"; };
+		CFEEED5A2FAE93DE00F03103 /* DocumentEntryBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentEntryBackground.swift; sourceTree = "<group>"; };
+		CFEEED5B2FAE93DE00F03103 /* DocumentInlineProperty.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentInlineProperty.swift; sourceTree = "<group>"; };
+		CFEEED5C2FAE93DE00F03103 /* DocumentInlinePropertyChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentInlinePropertyChip.swift; sourceTree = "<group>"; };
+		CFEEED5D2FAE93DE00F03103 /* DocumentInlinePropertyDefinitionSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentInlinePropertyDefinitionSheet.swift; sourceTree = "<group>"; };
+		CFEEED5E2FAE93DE00F03103 /* DocumentInlinePropertyViewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentInlinePropertyViewSheet.swift; sourceTree = "<group>"; };
+		CFEEED6C2FAEAB6A00F03103 /* SelfCareRewardsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfCareRewardsView.swift; sourceTree = "<group>"; };
+		CFEEED6E2FAF93C800F03103 /* DocumentTextColorPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentTextColorPickerSheet.swift; sourceTree = "<group>"; };
+		CFEEED702FB029A200F03103 /* DocumentTableEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentTableEditorView.swift; sourceTree = "<group>"; };
+		CFEEED722FB02B0C00F03103 /* DocumentTableData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentTableData.swift; sourceTree = "<group>"; };
+		CFEEED742FB0ECDC00F03103 /* JournalTableData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalTableData.swift; sourceTree = "<group>"; };
+		CFEEED762FB0ECFF00F03103 /* JournalBackgroundSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalBackgroundSettingsSheet.swift; sourceTree = "<group>"; };
+		CFEEED772FB0ECFF00F03103 /* JournalEntryBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalEntryBackground.swift; sourceTree = "<group>"; };
+		CFEEED782FB0ECFF00F03103 /* JournalTableEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalTableEditorView.swift; sourceTree = "<group>"; };
+		CFEEED7C2FB10BD700F03103 /* DocumentFolder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentFolder.swift; sourceTree = "<group>"; };
+		CFEEED7E2FB10E8400F03103 /* DocumentFolderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentFolderView.swift; sourceTree = "<group>"; };
 		CFF7C5AE2F72EA0800A67EC3 /* Medication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Medication.swift; sourceTree = "<group>"; };
 		CFF7C5B02F72F18900A67EC3 /* MedicationPageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MedicationPageView.swift; sourceTree = "<group>"; };
 		CFF7C5B22F734D7900A67EC3 /* DailyReadingProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyReadingProgress.swift; sourceTree = "<group>"; };
@@ -933,11 +967,9 @@
 		CF8B7F612F6B33E5006A7D3B /* Helpers */ = {
 			isa = PBXGroup;
 			children = (
-				CFEEED432FAC52F100F03103 /* DividerStyles.swift */,
-				CFEEED392FAA42E500F03103 /* DocumentBlockEditorPage.swift */,
-				CFEEED3A2FAA42E500F03103 /* DocumentBlockEditorView.swift */,
-				CFEEED3B2FAA42E500F03103 /* DocumentBlockPreviewPage.swift */,
-				CFEEED3C2FAA42E500F03103 /* DocumentBlockRow.swift */,
+				CFEEED762FB0ECFF00F03103 /* JournalBackgroundSettingsSheet.swift */,
+				CFEEED772FB0ECFF00F03103 /* JournalEntryBackground.swift */,
+				CFEEED782FB0ECFF00F03103 /* JournalTableEditorView.swift */,
 				CF175FEF2FA3A16500C58C6C /* TagFlowLayout.swift */,
 				CF29FCA02F718C7B00EC47F8 /* DividerStyle.swift */,
 				CF8B7F782F6B3AD4006A7D3B /* JournalBlockPreviewPage.swift */,
@@ -1078,6 +1110,7 @@
 		CF8D83132F50A4640092FC98 /* Settings */ = {
 			isa = PBXGroup;
 			children = (
+				CFEEED6C2FAEAB6A00F03103 /* SelfCareRewardsView.swift */,
 				CF8B7F842F6B7C80006A7D3B /* SelfCarePointsView.swift */,
 				CF8421B32F61E77F0069F12F /* SettingsView.swift */,
 				CF8D83552F5125F80092FC98 /* ContentView.swift */,
@@ -1141,6 +1174,9 @@
 		CF8D832C2F50A4940092FC98 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				CFEEED7C2FB10BD700F03103 /* DocumentFolder.swift */,
+				CFEEED742FB0ECDC00F03103 /* JournalTableData.swift */,
+				CFEEED722FB02B0C00F03103 /* DocumentTableData.swift */,
 				CFEEED412FAAEB3100F03103 /* DeveloperSettings.swift */,
 				CFEEED2F2FAA42B100F03103 /* DocumentBlock.swift */,
 				CFEEED302FAA42B100F03103 /* DocumentBook.swift */,
@@ -1221,6 +1257,7 @@
 		CF8D833A2F50A60F0092FC98 /* Lystaria */ = {
 			isa = PBXGroup;
 			children = (
+				CFEEED5F2FAE93DE00F03103 /* Documents */,
 				CF175FF32FA6801600C58C6C /* Network */,
 				CF8B7F612F6B33E5006A7D3B /* Helpers */,
 				CF13B6252F6442AD008D3CE9 /* Entities */,
@@ -1320,6 +1357,28 @@
 				CFDD11AD2F7F24010067B262 /* NotesView.swift */,
 			);
 			path = Notes;
+			sourceTree = "<group>";
+		};
+		CFEEED5F2FAE93DE00F03103 /* Documents */ = {
+			isa = PBXGroup;
+			children = (
+				CFEEED7E2FB10E8400F03103 /* DocumentFolderView.swift */,
+				CFEEED702FB029A200F03103 /* DocumentTableEditorView.swift */,
+				CFEEED6E2FAF93C800F03103 /* DocumentTextColorPickerSheet.swift */,
+				CFEEED532FAE93DE00F03103 /* CodeHighlighter.swift */,
+				CFEEED542FAE93DE00F03103 /* DividerStyles.swift */,
+				CFEEED552FAE93DE00F03103 /* DocumentBackgroundSettingsSheet.swift */,
+				CFEEED562FAE93DE00F03103 /* DocumentBlockEditorPage.swift */,
+				CFEEED572FAE93DE00F03103 /* DocumentBlockEditorView.swift */,
+				CFEEED582FAE93DE00F03103 /* DocumentBlockPreviewPage.swift */,
+				CFEEED592FAE93DE00F03103 /* DocumentBlockRow.swift */,
+				CFEEED5A2FAE93DE00F03103 /* DocumentEntryBackground.swift */,
+				CFEEED5B2FAE93DE00F03103 /* DocumentInlineProperty.swift */,
+				CFEEED5C2FAE93DE00F03103 /* DocumentInlinePropertyChip.swift */,
+				CFEEED5D2FAE93DE00F03103 /* DocumentInlinePropertyDefinitionSheet.swift */,
+				CFEEED5E2FAE93DE00F03103 /* DocumentInlinePropertyViewSheet.swift */,
+			);
+			path = Documents;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -1616,9 +1675,11 @@
 				CF822EC12F90555100CC5B80 /* SharedEventsAPIService.swift in Sources */,
 				CF29FC882F6F603000EC47F8 /* EventCalendar.swift in Sources */,
 				CFC6B1E82F99AD2E00A60409 /* BuddyGroupView.swift in Sources */,
-				CFEEED442FAC52F900F03103 /* DividerStyles.swift in Sources */,
 				CFC6B1E92F99AD2E00A60409 /* BuddyReadingView.swift in Sources */,
 				CFC6B1EA2F99AD2E00A60409 /* BuddyProgressUpdateSheet.swift in Sources */,
+				CFEEED792FB0ECFF00F03103 /* JournalEntryBackground.swift in Sources */,
+				CFEEED7A2FB0ECFF00F03103 /* JournalTableEditorView.swift in Sources */,
+				CFEEED7B2FB0ECFF00F03103 /* JournalBackgroundSettingsSheet.swift in Sources */,
 				CFC6B1EB2F99AD2E00A60409 /* BuddyPostAnnouncementSheet.swift in Sources */,
 				CF8B7F922F6C4DAF006A7D3B /* BookmarkDetailView.swift in Sources */,
 				CF8421892F6079EC0069F12F /* OnboardingManager.swift in Sources */,
@@ -1679,6 +1740,7 @@
 				CF8D832E2F50A4940092FC98 /* MoodLog.swift in Sources */,
 				CFF7C5B32F734D8000A67EC3 /* DailyReadingProgress.swift in Sources */,
 				CFEEED2D2FA81AA900F03103 /* JournalAnalysisService.swift in Sources */,
+				CFEEED7D2FB10BDB00F03103 /* DocumentFolder.swift in Sources */,
 				CFEEED2E2FA81AA900F03103 /* JournalAnalysisOverlay.swift in Sources */,
 				CFB0B1762F832BCE00B42AB3 /* ReadingTimerActivityAttributes.swift in Sources */,
 				CF8421B42F61E7830069F12F /* SettingsView.swift in Sources */,
@@ -1696,6 +1758,7 @@
 				CF8421922F607AE90069F12F /* StepCountView.swift in Sources */,
 				CFAF69022F76BF4900E74833 /* BubbleDistractionView.swift in Sources */,
 				CF84219E2F607BAE0069F12F /* OnboardingOverlay.swift in Sources */,
+				CFEEED6D2FAEAB7200F03103 /* SelfCareRewardsView.swift in Sources */,
 				CF8B7F6D2F6B3553006A7D3B /* JournalBlock.swift in Sources */,
 				CF92D5602F7591A400174F04 /* DailyCompletionSettings.swift in Sources */,
 				CFEEED422FAAEB3700F03103 /* DeveloperSettings.swift in Sources */,
@@ -1720,6 +1783,7 @@
 				CFEEED342FAA42B100F03103 /* DocumentEntry.swift in Sources */,
 				CFEEED352FAA42B100F03103 /* DocumentInlineStyle.swift in Sources */,
 				CFEEED362FAA42B100F03103 /* DocumentBlock.swift in Sources */,
+				CFEEED712FB029A200F03103 /* DocumentTableEditorView.swift in Sources */,
 				CFB0B1802F8944E500B42AB3 /* JournalStats.swift in Sources */,
 				CF29FC9D2F70AC7300EC47F8 /* DailyLenormandRecord.swift in Sources */,
 				CF20513E2F5787DD006B71AA /* JournalBook.swift in Sources */,
@@ -1749,10 +1813,6 @@
 				CF13B62D2F644AD3008D3CE9 /* AddWaterIntent.swift in Sources */,
 				CFAF69222F7C6B7800E74833 /* LogReadingSessionIntent.swift in Sources */,
 				CF8D833F2F50D5EE0092FC98 /* AppState.swift in Sources */,
-				CFEEED3D2FAA42E500F03103 /* DocumentBlockEditorPage.swift in Sources */,
-				CFEEED3E2FAA42E500F03103 /* DocumentBlockPreviewPage.swift in Sources */,
-				CFEEED3F2FAA42E500F03103 /* DocumentBlockRow.swift in Sources */,
-				CFEEED402FAA42E500F03103 /* DocumentBlockEditorView.swift in Sources */,
 				CF8B7F772F6B3AC5006A7D3B /* JournalBlockEditorPage.swift in Sources */,
 				CF0A09D72F5CA7A200401658 /* JournalPromptService.swift in Sources */,
 				CF8D83332F50A4940092FC98 /* HabitLog.swift in Sources */,
@@ -1776,6 +1836,7 @@
 				CF8D834C2F5124EB0092FC98 /* LystariaTheme.swift in Sources */,
 				CFC6B1F32F99ADFD00A60409 /* SprintSocketManager.swift in Sources */,
 				CFC6B1F92F99AEA300A60409 /* SprintJoinSheet.swift in Sources */,
+				CFEEED752FB0ECDC00F03103 /* JournalTableData.swift in Sources */,
 				CF8B7F672F6B34BF006A7D3B /* JournalInlineStyle.swift in Sources */,
 				CF8B7F9C2F6C6A35006A7D3B /* BookmarkIconLibrary.swift in Sources */,
 				CF13B6402F65CECB008D3CE9 /* CalendarEventDetailOverlay.swift in Sources */,
@@ -1796,6 +1857,20 @@
 				CF29FC802F6E141200EC47F8 /* ReadingGoal.swift in Sources */,
 				CFC6B1FD2F99AEEC00A60409 /* SprintLeaderboardView.swift in Sources */,
 				CF8D83352F50A4940092FC98 /* Book.swift in Sources */,
+				CFEEED602FAE93DE00F03103 /* DocumentBlockEditorPage.swift in Sources */,
+				CFEEED6F2FAF93C800F03103 /* DocumentTextColorPickerSheet.swift in Sources */,
+				CFEEED612FAE93DE00F03103 /* DocumentInlineProperty.swift in Sources */,
+				CFEEED622FAE93DE00F03103 /* DocumentBlockEditorView.swift in Sources */,
+				CFEEED632FAE93DE00F03103 /* DocumentInlinePropertyViewSheet.swift in Sources */,
+				CFEEED642FAE93DE00F03103 /* DocumentEntryBackground.swift in Sources */,
+				CFEEED652FAE93DE00F03103 /* DocumentInlinePropertyChip.swift in Sources */,
+				CFEEED662FAE93DE00F03103 /* DocumentBlockRow.swift in Sources */,
+				CFEEED672FAE93DE00F03103 /* DividerStyles.swift in Sources */,
+				CFEEED682FAE93DE00F03103 /* DocumentBlockPreviewPage.swift in Sources */,
+				CFEEED692FAE93DE00F03103 /* DocumentBackgroundSettingsSheet.swift in Sources */,
+				CFEEED732FB02B0C00F03103 /* DocumentTableData.swift in Sources */,
+				CFEEED6A2FAE93DE00F03103 /* DocumentInlinePropertyDefinitionSheet.swift in Sources */,
+				CFEEED6B2FAE93DE00F03103 /* CodeHighlighter.swift in Sources */,
 				CF8B7F962F6C4ED7006A7D3B /* AddEditBookmarkFolderView.swift in Sources */,
 				CF8421CB2F638EE00069F12F /* KanbanBoard.swift in Sources */,
 				CF13B6482F675DC4008D3CE9 /* DashboardConsistencyAnalyzer.swift in Sources */,
@@ -1813,6 +1888,7 @@
 				CF8B7F9A2F6C5F6D006A7D3B /* BookmarkFolderDetailView.swift in Sources */,
 				CF13B67B2F69B779008D3CE9 /* ExerciseLogCard.swift in Sources */,
 				CFAF691E2F7C6B3600E74833 /* BookEntity.swift in Sources */,
+				CFEEED7F2FB10E8C00F03103 /* DocumentFolderView.swift in Sources */,
 				CF822F182F9579B700CC5B80 /* CalendarEventResolver.swift in Sources */,
 				CF0A09D12F5C8C7400401658 /* BookSummarySheet.swift in Sources */,
 				CF175FF92FA680B900C58C6C /* WellnessWallAIService.swift in Sources */,
@@ -2188,7 +2264,7 @@
 				CODE_SIGN_ENTITLEMENTS = Lystaria/Lystaria.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 6;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = PLRRW8XCVU;
 				ENABLE_APP_SANDBOX = YES;
@@ -2269,7 +2345,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 6;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = PLRRW8XCVU;
 				ENABLE_APP_SANDBOX = YES;

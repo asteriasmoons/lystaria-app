@@ -14,14 +14,34 @@ final class DocumentEntry {
 
     // MARK: - Relationship
     var book: DocumentBook?
+    var folder: DocumentFolder?
     var blocks: [DocumentBlock]? = nil
 
     // MARK: - Fields
     var title: String = ""
     var tagsStorage: String = "[]"
 
+    // MARK: - Background Appearance
+    var backgroundModeRaw: String = DocumentEntryBackgroundMode.defaultLystaria.rawValue
+    var backgroundColorHex: String = ""
+    var backgroundGradientStartHex: String = ""
+    var backgroundGradientEndHex: String = ""
+    @Attribute(.externalStorage) var backgroundImageData: Data? = nil
+    var backgroundImageOpacity: Double = 0.85
+    var backgroundImageBlur: Double = 0.0
+    var backgroundOverlayOpacity: Double = 0.35
+    var textColorHex: String = ""
+
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
+
+    var backgroundMode: DocumentEntryBackgroundMode {
+        get { DocumentEntryBackgroundMode(rawValue: backgroundModeRaw) ?? .defaultLystaria }
+        set {
+            backgroundModeRaw = newValue.rawValue
+            touch()
+        }
+    }
 
     var tags: [String] {
         get {
@@ -44,12 +64,22 @@ final class DocumentEntry {
         title: String = "",
         tags: [String] = [],
         book: DocumentBook? = nil,
+        folder: DocumentFolder? = nil,
         deletedAt: Date? = nil
     ) {
         self.title = title
         self.tagsStorage = "[]"
         self.book = book
+        self.folder = folder
         self.deletedAt = deletedAt
+        self.backgroundModeRaw = DocumentEntryBackgroundMode.defaultLystaria.rawValue
+        self.backgroundColorHex = ""
+        self.backgroundGradientStartHex = ""
+        self.backgroundGradientEndHex = ""
+        self.backgroundImageData = nil
+        self.backgroundImageOpacity = 0.85
+        self.backgroundImageBlur = 0.0
+        self.backgroundOverlayOpacity = 0.35
         self.createdAt = Date()
         self.updatedAt = Date()
         self.tags = tags
@@ -131,15 +161,47 @@ final class DocumentEntry {
                 default:
                     return "☐ \(t)"
                 }
-            case .paragraph, .heading1, .heading2, .heading3, .heading4:
+            case .paragraph, .heading1, .heading2, .heading3, .heading4, .heading5, .heading6:
                 let t = block.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 return t.isEmpty ? nil : t
+            case .toggleHeading1, .toggleHeading2, .toggleHeading3,
+                 .toggleHeading4, .toggleHeading5, .toggleHeading6:
+                let t = block.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                return t.isEmpty ? nil : "▸ \(t)"
             case .image:
                 return block.imageData != nil ? "🖼️" : nil
+            case .table:
+                return nil
             }
         }
         let joined = pieces.joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return String(joined.prefix(300))
+    }
+
+    func touch() {
+        updatedAt = Date()
+    }
+}
+
+enum DocumentEntryBackgroundMode: String, Codable, CaseIterable, Identifiable {
+    case defaultLystaria
+    case solidColor
+    case gradient
+    case image
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .defaultLystaria:
+            return "Default"
+        case .solidColor:
+            return "Color"
+        case .gradient:
+            return "Gradient"
+        case .image:
+            return "Image"
+        }
     }
 }

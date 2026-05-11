@@ -53,6 +53,11 @@ final class LimitManager: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.recomputeAccess() }
             .store(in: &cancellables)
+
+        defaults.publisher(for: \.premiumUntil, options: [.new])
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.recomputeAccess() }
+            .store(in: &cancellables)
     }
 
     private func recomputeAccess() {
@@ -63,7 +68,13 @@ final class LimitManager: ObservableObject {
         let isPremium  = PremiumManager.shared.isPremium
         let isAdmin    = userId == adminAppleUserId
 
-        let newValue = !forceFree && (isPremium || devBypass || isAdmin)
+        let premiumUntilRaw = defaults.double(forKey: "premiumUntil")
+        let premiumUntil = premiumUntilRaw > 0
+            ? Date(timeIntervalSince1970: premiumUntilRaw)
+            : nil
+        let hasRewardPremium = premiumUntil.map { $0 > Date() } ?? false
+
+        let newValue = !forceFree && (isPremium || hasRewardPremium || devBypass || isAdmin)
         if hasPremiumAccess != newValue {
             hasPremiumAccess = newValue
         }
@@ -239,5 +250,8 @@ extension UserDefaults {
     }
     @objc dynamic var appleUserId: String {
         return string(forKey: "appleUserId") ?? ""
+    }
+    @objc dynamic var premiumUntil: Double {
+        return double(forKey: "premiumUntil")
     }
 }
