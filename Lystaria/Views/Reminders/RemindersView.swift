@@ -13,6 +13,7 @@ struct RemindersView: View {
     @Query private var events: [CalendarEvent]
     @Query private var medications: [Medication]
     @Query(sort: \LystariaReminder.nextRunAt) private var allReminders: [LystariaReminder]
+    @Query private var subscriptions: [Subscription]
 
     @State private var showNewReminder = false
     @State private var filter = "all"
@@ -970,6 +971,9 @@ struct RemindersView: View {
             try? modelContext.save()
             awardPointsForReminderCompletion(reminder, occurrenceDate: completedOccurrenceDate)
 
+            // Advance linked subscription's nextDueDate to match the new nextRunAt.
+            syncSubscriptionOnCompletion(reminder)
+
             print("[RemindersView] markDone recurring -> nextRunAt=\(reminder.nextRunAt)")
             print("[RemindersView] markDone -> about to schedule with nextRunAt=\(reminder.nextRunAt) notificationID=\(reminder.notificationID)")
             NotificationManager.shared.cancelReminder(reminder)
@@ -996,6 +1000,16 @@ struct RemindersView: View {
             showToast("\(reminder.title) marked complete")
         }
         appendHistoryEntry(reminder: reminder, occurredAt: Date(), kind: .completed)
+    }
+
+    /// Syncs the linked Subscription's nextDueDate forward when a linked reminder is marked done.
+    private func syncSubscriptionOnCompletion(_ reminder: LystariaReminder) {
+        guard let sub = subscriptions.first(where: { $0.linkedReminderNotificationID == reminder.notificationID }) else { return }
+        let cal = Calendar.current
+        let newDue = cal.startOfDay(for: reminder.nextRunAt)
+        sub.nextDueDate = newDue
+        sub.updatedAt = Date()
+        try? modelContext.save()
     }
 
     private func markSkipped(_ reminder: LystariaReminder) {
@@ -1246,18 +1260,20 @@ struct RemindersView: View {
             }()
             let kindLabel: String = {
                 switch reminder.linkedKindRaw?.lowercased() {
-                case "habit":      return "Habit"
-                case "event":      return "Event"
-                case "medication": return "Medication"
-                default:           return "General"
+                case "habit":        return "Habit"
+                case "event":        return "Event"
+                case "medication":   return "Medication"
+                case "subscription": return "Subscription"
+                default:             return "General"
                 }
             }()
             let kindColor: Color = {
                 switch reminder.linkedKindRaw?.lowercased() {
-                case "habit":      return Color(red: 0.14, green: 0.63, blue: 0.56).opacity(0.82)
-                case "event":      return Color(red: 0.95, green: 0.56, blue: 0.20).opacity(0.82)
-                case "medication": return Color(red: 0.86, green: 0.28, blue: 0.58).opacity(0.82)
-                default:           return Color.white.opacity(0.9)
+                case "habit":        return Color(red: 0.14, green: 0.63, blue: 0.56).opacity(0.82)
+                case "event":        return Color(red: 0.95, green: 0.56, blue: 0.20).opacity(0.82)
+                case "medication":   return Color(red: 0.86, green: 0.28, blue: 0.58).opacity(0.82)
+                case "subscription": return Color(red: 0.18, green: 0.62, blue: 0.92).opacity(0.82)
+                default:             return Color.white.opacity(0.9)
                 }
             }()
             let displayTZ = TimeZone(identifier: NotificationManager.shared.effectiveTimezoneID) ?? .current
@@ -1550,27 +1566,21 @@ struct ReminderCard: View {
 
     private var reminderKindLabel: String {
         switch reminder.linkedKindRaw?.lowercased() {
-        case "habit":
-            "Habit"
-        case "event":
-            "Event"
-        case "medication":
-            "Medication"
-        default:
-            "General"
+        case "habit":        "Habit"
+        case "event":        "Event"
+        case "medication":   "Medication"
+        case "subscription": "Subscription"
+        default:             "General"
         }
     }
 
     private var reminderKindBadgeColor: Color {
         switch reminder.linkedKindRaw?.lowercased() {
-        case "habit":
-            Color(red: 0.14, green: 0.63, blue: 0.56).opacity(0.82)
-        case "event":
-            Color(red: 0.95, green: 0.56, blue: 0.20).opacity(0.82)
-        case "medication":
-            Color(red: 0.86, green: 0.28, blue: 0.58).opacity(0.82)
-        default:
-            Color.white.opacity(0.9)
+        case "habit":        Color(red: 0.14, green: 0.63, blue: 0.56).opacity(0.82)
+        case "event":        Color(red: 0.95, green: 0.56, blue: 0.20).opacity(0.82)
+        case "medication":   Color(red: 0.86, green: 0.28, blue: 0.58).opacity(0.82)
+        case "subscription": Color(red: 0.18, green: 0.62, blue: 0.92).opacity(0.82)
+        default:             Color.white.opacity(0.9)
         }
     }
 
@@ -2795,6 +2805,7 @@ struct NewReminderSheet: View {
 
 struct EditReminderSheet: View {
     let onClose: () -> Void
+    @Environment(\.modelContext) private var modelContext
     @Query private var medications: [Medication]
     @Bindable var reminder: LystariaReminder
 
@@ -3401,6 +3412,19 @@ struct EditReminderSheet: View {
             reminder.schedule = schedule
             reminder.nextRunAt = runAt
             reminder.updatedAt = Date()
+
+            // If this reminder is linked to a subscription, sync the due date and time back
+            // so the subscription tracker stays consistent with any edits made here.
+            let nid = reminder.notificationID
+            let subDescriptor = FetchDescriptor<Subscription>()
+            if let subs = try? modelContext.fetch(subDescriptor),
+               let sub = subs.first(where: { $0.linkedReminderNotificationID == nid }) {
+                let cal = Calendar.current
+                sub.nextDueDate = cal.startOfDay(for: runAt)
+                sub.reminderTime = runAt
+                sub.updatedAt = Date()
+                try? modelContext.save()
+            }
 
             print("[EditReminderSheet] Updated reminder id=\(reminder.id) nextRunAt=\(reminder.nextRunAt) updatedAt=\(String(describing: reminder.updatedAt))")
 

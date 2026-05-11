@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct InfoTabView: View {
+    @Environment(\.dismiss) private var dismiss
     @State private var showReleaseNotes = false
     var body: some View {
         ZStack {
@@ -18,7 +19,23 @@ struct InfoTabView: View {
 
                 // MARK: - Page Header
                 VStack(alignment: .leading, spacing: 10) {
-                    GradientTitle(text: "Info", size: 28)
+                    HStack {
+                        GradientTitle(text: "Info", size: 28)
+                        Spacer()
+                        Button(action: { dismiss() }) {
+                            Image("xmark")
+                                .renderingMode(.template)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 18, height: 18)
+                                .foregroundStyle(LColors.textSecondary)
+                                .padding(8)
+                                .background(Color.white.opacity(0.08))
+                                .clipShape(Circle())
+                                .overlay(Circle().stroke(LColors.glassBorder, lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                    }
 
                     Rectangle()
                         .fill(LColors.glassBorder)
@@ -47,6 +64,7 @@ struct InfoTabView: View {
                 .presentationDragIndicator(.hidden)
                 .presentationBackground(.clear)
         }
+        .navigationBarBackButtonHidden(true)
     }
 
     // MARK: - Welcome Banner

@@ -908,20 +908,39 @@ struct DashboardView: View {
         )
     }
 
-    private var habitCompletionCountsToday: (completed: Int, target: Int) {
-        let activeHabits = habits.filter { !$0.isArchived }
-        guard !activeHabits.isEmpty else { return (0, 0) }
+    private func isHabitDueToday(_ habit: Habit) -> Bool {
+        if habit.reminderKind == .weekly {
+            let todayWeekday = dashboardCalendar.component(.weekday, from: Date()) - 1 // 0=Sun
+            return habit.reminderDaysOfWeek.contains(todayWeekday)
+        }
+        // For daily / interval / no-reminder habits, use daysPerWeek:
+        // treat the habit as due today if it hasn't yet met its weekly target
+        // (same logic used everywhere else in the app).
+        if habit.daysPerWeek >= 7 { return true }
+        guard let weekInterval = dashboardCalendar.dateInterval(of: .weekOfYear, for: Date()) else { return true }
+        var completedDaysThisWeek = Set<Date>()
+        for log in habitLogs where log.habit?.id == habit.id {
+            let d = dashboardCalendar.startOfDay(for: log.dayStart)
+            if weekInterval.contains(d), log.count >= max(1, habit.timesPerDay) {
+                completedDaysThisWeek.insert(d)
+            }
+        }
+        return completedDaysThisWeek.count < max(1, habit.daysPerWeek)
+    }
 
-        let target = activeHabits.reduce(0) { partial, habit in
+    private var habitCompletionCountsToday: (completed: Int, target: Int) {
+        let dueHabits = habits.filter { !$0.isArchived && isHabitDueToday($0) }
+        guard !dueHabits.isEmpty else { return (0, 0) }
+
+        let target = dueHabits.reduce(0) { partial, habit in
             partial + max(1, habit.timesPerDay)
         }
 
-        let completed = activeHabits.reduce(0) { partial, habit in
+        let completed = dueHabits.reduce(0) { partial, habit in
             let habitTarget = max(1, habit.timesPerDay)
-            let todayCount = (habit.logs ?? [])
-                .filter { dashboardCalendar.isDate($0.dayStart, inSameDayAs: Date()) }
+            let todayCount = habitLogs
+                .filter { $0.habit?.id == habit.id && dashboardCalendar.isDate($0.dayStart, inSameDayAs: Date()) }
                 .reduce(0) { $0 + $1.count }
-
             return partial + min(todayCount, habitTarget)
         }
 
@@ -1624,20 +1643,19 @@ struct DashboardView: View {
     }
 
     private var habitCompletionProgressToday: Double {
-        let activeHabits = habits
+        let dueHabits = habits.filter { !$0.isArchived && isHabitDueToday($0) }
 
-        guard !activeHabits.isEmpty else {
+        guard !dueHabits.isEmpty else {
             return habitCompletedToday ? 1.0 : 0.0
         }
 
-        let totalTarget = activeHabits.reduce(0) { $0 + max(1, $1.timesPerDay) }
+        let totalTarget = dueHabits.reduce(0) { $0 + max(1, $1.timesPerDay) }
         guard totalTarget > 0 else { return habitCompletedToday ? 1.0 : 0.0 }
 
-        let todayProgress = activeHabits.reduce(0) { partial, habit in
-            let todayCount = (habit.logs ?? [])
-                .filter { dashboardCalendar.isDate($0.dayStart, inSameDayAs: Date()) }
+        let todayProgress = dueHabits.reduce(0) { partial, habit in
+            let todayCount = habitLogs
+                .filter { $0.habit?.id == habit.id && dashboardCalendar.isDate($0.dayStart, inSameDayAs: Date()) }
                 .reduce(0) { $0 + $1.count }
-
             return partial + min(todayCount, max(1, habit.timesPerDay))
         }
 
@@ -1811,7 +1829,7 @@ struct DashboardView: View {
                             )
                             .frame(width: 34, height: 34)
 
-                        Image("bowheart")
+                        Image("lockfill")
                             .renderingMode(.template)
                             .resizable()
                             .scaledToFit()

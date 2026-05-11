@@ -298,10 +298,12 @@ final class LystariaReminder {
     var linkedHabitId: UUID?       // Habit.id
     var linkedMedicationId: UUID?  // Medication.id
     var linkedMedicationQuantity: Int = 1
+    var linkedSubscriptionId: UUID?  // Subscription.id
 
     enum LinkedKind: String, Codable {
         case habit = "habit"
         case medication = "medication"
+        case subscription = "subscription"
     }
 
     var linkedKind: LinkedKind? {
@@ -373,7 +375,8 @@ final class LystariaReminder {
         linkedKind: LinkedKind? = nil,
         linkedHabitId: UUID? = nil,
         linkedMedicationId: UUID? = nil,
-        linkedMedicationQuantity: Int = 1
+        linkedMedicationQuantity: Int = 1,
+        linkedSubscriptionId: UUID? = nil
     ) {
         self.title = title
         self.details = details
@@ -398,6 +401,7 @@ final class LystariaReminder {
         self.linkedHabitId = linkedHabitId
         self.linkedMedicationId = linkedMedicationId
         self.linkedMedicationQuantity = max(1, linkedMedicationQuantity)
+        self.linkedSubscriptionId = linkedSubscriptionId
         self.sentTimesOfDay = []
         self.checkedRoutineItemIDs = []
         self.schedule = schedule

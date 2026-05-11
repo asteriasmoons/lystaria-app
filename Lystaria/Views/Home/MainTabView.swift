@@ -18,18 +18,16 @@ struct MainTabView: View {
         case calendar  = "Calendar"
         case journal   = "Journal"
         case reading   = "Reading"
-        case profile   = "Profile"
-        case info      = "Info"
+        case more      = "More"
         case dashboard = "Dashboard"
 
         var icon: String {
             switch self {
             case .reminders: return "bellfill"
             case .calendar:  return "xoxocal"
-            case .journal:   return "bookie"
+            case .journal:   return "lovejournalfill"
             case .reading:   return "flatbook"
-            case .profile:   return "userwavy"
-            case .info:       return "infofill"
+            case .more:      return "dotsfill"
             case .dashboard: return "homeline"
             }
         }
@@ -45,8 +43,7 @@ struct MainTabView: View {
                 case .calendar:  CalendarTabView()
                 case .journal:   JournalTabView()
                 case .reading:   ReadingTabView()
-                case .profile:   ProfileTabView()
-                case .info:      InfoTabView()
+                case .more:      MoreTabView()
                 case .dashboard: DashboardView()
                 }
             }

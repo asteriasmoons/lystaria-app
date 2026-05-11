@@ -28,6 +28,24 @@ struct JournalBlockEditorView: View {
     @State private var selectedBlockIDs: Set<UUID> = []
     @State private var isKeyboardVisible: Bool = false
 
+    // Split visible blocks into page segments at .pageBreak dividers.
+    // Each entry: (indexed page blocks, optional page break block that follows it)
+    private var blockPages: [(blocks: [(Int, JournalBlock)], breakBlock: JournalBlock?)] {
+        var pages: [(blocks: [(Int, JournalBlock)], breakBlock: JournalBlock?)] = [([], nil)]
+        for item in Array(visibleBlocks.enumerated()) {
+            let block = item.element
+            if block.type == .divider,
+               (DividerStyle(rawValue: block.languageHint) ?? .line) == .pageBreak {
+                let last = pages[pages.count - 1]
+                pages[pages.count - 1] = (last.blocks, block)
+                pages.append(([], nil))
+            } else {
+                pages[pages.count - 1].blocks.append((item.offset, block))
+            }
+        }
+        return pages
+    }
+
     private var resolvedJournalTextColor: UIColor {
         let hex = entry.textColorHex.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !hex.isEmpty,
@@ -42,7 +60,9 @@ struct JournalBlockEditorView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                // Drop zone before first block — only visible while dragging
+                let pages = blockPages
+
+                // Drop zone before everything
                 if draggingBlock != nil {
                     BlockDropZone(index: 0, dragOverIndex: $dragOverIndex)
                         .onDrop(of: [.plainText], delegate: IndexedDropDelegate(
@@ -54,18 +74,95 @@ struct JournalBlockEditorView: View {
                         ))
                 }
 
-                // Page card
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(visibleBlocks.enumerated()), id: \.element.id) { i, block in
+                ForEach(Array(pages.enumerated()), id: \.offset) { pageIndex, pageEntry in
+                    let page = pageEntry.blocks
+
+                    // Floating page card
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(page, id: \.1.id) { (i, block) in
+                            JournalBlockRow(
+                                block: block,
+                                onAddBelow: { b, type, initialText in insertBlockBelow(b, type, initialText) },
+                                onDelete: deleteBlock,
+                                onMoveUp: moveBlockUp,
+                                onMoveDown: moveBlockDown,
+                                onTransform: transformBlock,
+                                isSelectionMode: isSelectionMode,
+                                isSelectedForBatchAction: selectedBlockIDs.contains(block.id),
+                                selectedBlockCount: selectedBlockIDs.count,
+                                onEnterSelectionMode: enterSelectionMode,
+                                onToggleBatchSelection: toggleBlockSelection,
+                                onClearBatchSelection: clearBlockSelection,
+                                onDeleteSelectedBlocks: deleteSelectedBlocks,
+                                onIndentSelectedBlocksIn: indentSelectedBlocksIn,
+                                onIndentSelectedBlocksOut: indentSelectedBlocksOut,
+                                journalTextColor: resolvedJournalTextColor
+                            )
+                            .opacity(draggingBlock?.id == block.id ? 0.4 : 1)
+                            .onDrag {
+                                draggingBlock = block
+                                dragOverIndex = nil
+                                return NSItemProvider(object: block.id.uuidString as NSString)
+                            }
+                            .padding(.vertical, isSelectionMode ? 3 : 6)
+
+                            if draggingBlock != nil {
+                                BlockDropZone(index: i + 1, dragOverIndex: $dragOverIndex)
+                                    .onDrop(of: [.plainText], delegate: IndexedDropDelegate(
+                                        index: i + 1,
+                                        draggingBlock: $draggingBlock,
+                                        dragOverIndex: $dragOverIndex,
+                                        visibleBlocks: visibleBlocks,
+                                        onMove: reorderBlockToIndex
+                                    ))
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 28)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .fill(Color.black.opacity(0.34))
+                            .background(
+                                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                    .fill(.ultraThinMaterial)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                    .stroke(Color.white.opacity(0.16), lineWidth: 1)
+                            )
+                            .overlay(
+                                PageSheetTapOverlay {
+                                    guard !isSelectionMode else { return }
+                                    if let last = page.last?.1 {
+                                        if last.type == .paragraph && last.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                            let id = last.id
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                                NotificationCenter.default.post(name: .journalBlockRequestFocus, object: id)
+                                            }
+                                        } else {
+                                            insertBlockBelow(last, .paragraph, "")
+                                        }
+                                    }
+                                }
+                                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                            )
+                    )
+                    .shadow(color: Color.black.opacity(0.25), radius: 12, x: 0, y: 4)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+
+                    // Render the page break block between cards so it's tappable
+                    if let breakBlock = pageEntry.breakBlock {
                         JournalBlockRow(
-                            block: block,
+                            block: breakBlock,
                             onAddBelow: { b, type, initialText in insertBlockBelow(b, type, initialText) },
                             onDelete: deleteBlock,
                             onMoveUp: moveBlockUp,
                             onMoveDown: moveBlockDown,
                             onTransform: transformBlock,
                             isSelectionMode: isSelectionMode,
-                            isSelectedForBatchAction: selectedBlockIDs.contains(block.id),
+                            isSelectedForBatchAction: selectedBlockIDs.contains(breakBlock.id),
                             selectedBlockCount: selectedBlockIDs.count,
                             onEnterSelectionMode: enterSelectionMode,
                             onToggleBatchSelection: toggleBlockSelection,
@@ -75,70 +172,9 @@ struct JournalBlockEditorView: View {
                             onIndentSelectedBlocksOut: indentSelectedBlocksOut,
                             journalTextColor: resolvedJournalTextColor
                         )
-                        .opacity(draggingBlock?.id == block.id ? 0.4 : 1)
-                        .contextMenu {
-                            Button(role: .destructive) { deleteBlock(block) } label: {
-                                Label("Delete Block", systemImage: "trash")
-                            }
-                            Button { moveBlockUp(block) } label: {
-                                Label("Move Up", systemImage: "arrow.up")
-                            }
-                            Button { moveBlockDown(block) } label: {
-                                Label("Move Down", systemImage: "arrow.down")
-                            }
-                        }
-                        .onDrag {
-                            draggingBlock = block
-                            dragOverIndex = nil
-                            return NSItemProvider(object: block.id.uuidString as NSString)
-                        }
-                        .padding(.vertical, isSelectionMode ? 3 : 6)
-
-                        if draggingBlock != nil {
-                            BlockDropZone(index: i + 1, dragOverIndex: $dragOverIndex)
-                                .onDrop(of: [.plainText], delegate: IndexedDropDelegate(
-                                    index: i + 1,
-                                    draggingBlock: $draggingBlock,
-                                    dragOverIndex: $dragOverIndex,
-                                    visibleBlocks: visibleBlocks,
-                                    onMove: reorderBlockToIndex
-                                ))
-                        }
+                        .padding(.horizontal, 16)
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 28)
-                .background(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(Color.black.opacity(0.34))
-                        .background(
-                            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                .fill(.ultraThinMaterial)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                .stroke(Color.white.opacity(0.16), lineWidth: 1)
-                        )
-                        .overlay(
-                            PageSheetTapOverlay {
-                                guard !isSelectionMode else { return }
-                                if let last = visibleBlocks.last {
-                                    if last.type == .paragraph && last.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                        let id = last.id
-                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                                            NotificationCenter.default.post(name: .journalBlockRequestFocus, object: id)
-                                        }
-                                    } else {
-                                        insertBlockBelow(last, .paragraph, "")
-                                    }
-                                }
-                            }
-                            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                        )
-                )
-                .shadow(color: Color.black.opacity(0.25), radius: 12, x: 0, y: 4)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
             }
             .padding(.bottom, 140)
         }

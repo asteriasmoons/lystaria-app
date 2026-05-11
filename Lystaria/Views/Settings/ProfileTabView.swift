@@ -14,6 +14,7 @@ import UniformTypeIdentifiers
 
 struct ProfileTabView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appState: AppState
     @Query private var authUsers: [AuthUser]
     @Query private var userSettings: [UserSettings]
@@ -141,6 +142,7 @@ struct ProfileTabView: View {
             }
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarHidden(true)
+            .navigationBarBackButtonHidden(true)
         }
     }
 
@@ -186,9 +188,21 @@ struct ProfileTabView: View {
     private var headerSection: some View {
         VStack(spacing: 0) {
             HStack {
+                GradientTitle(text: "Profile", font: .system(size: 28, weight: .bold))
                 Spacer()
-                GradientTitle(text: "Profile & Settings", font: .system(size: 28, weight: .bold))
-                Spacer()
+                        Button(action: { dismiss() }) {
+                            Image("xmark")
+                                .renderingMode(.template)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 18, height: 18)
+                                .foregroundStyle(LColors.textSecondary)
+                                .padding(8)
+                                .background(Color.white.opacity(0.08))
+                                .clipShape(Circle())
+                                .overlay(Circle().stroke(LColors.glassBorder, lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
             }
             Rectangle()
                 .fill(LColors.glassBorder)

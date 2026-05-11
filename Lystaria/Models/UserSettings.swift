@@ -30,11 +30,13 @@ final class UserSettings {
     // Sleep goal in hours.
     var sleepGoalHours: Double = 8
 
+    // Notes tab default view.
+    // Stores the tab name the user set as default. Empty string means use root tab.
+    var notesDefaultTab: String = ""
+
     // Timestamps
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
-
-    // Optional future sync flag
     var needsSync: Bool = false
 
     init(

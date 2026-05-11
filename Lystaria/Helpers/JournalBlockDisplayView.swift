@@ -318,20 +318,10 @@ struct JournalBlockDisplayView: View {
         let grad = blockGradient(block.dividerColorHex)
         switch style {
         case .pageBreak:
-            VStack(spacing: 0) {
-                Rectangle()
-                    .fill(Color.white.opacity(0.08))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 1)
-                Color.black.opacity(0.4)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 28)
-                Rectangle()
-                    .fill(Color.white.opacity(0.08))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 1)
-            }
-            .padding(.vertical, 8)
+            Color.clear
+                .frame(maxWidth: .infinity)
+                .frame(height: 1)
+                .padding(.vertical, 4)
         case .line:
             Capsule()
                 .fill(grad)

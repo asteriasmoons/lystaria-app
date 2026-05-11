@@ -13,6 +13,11 @@ import Combine
 final class LimitManager: ObservableObject {
     static let shared = LimitManager()
 
+    // MARK: - Global Kill Switch
+    // Set to true to disable ALL limits for all users regardless of premium status.
+    // Flip to false and re-ship to re-enable limits.
+    private let limitsDisabled: Bool = true
+
     // MARK: - AppStorage-backed inputs
     // @AppStorage on a non-View type doesn't trigger objectWillChange automatically,
     // but we pair each one with a Combine publisher via UserDefaults KVO so that
@@ -101,6 +106,7 @@ final class LimitManager: ObservableObject {
     }
 
     func canAccess(_ gate: PremiumGate) -> Bool {
+        if limitsDisabled { return true }
         // Free for all users
         if gate == .selfCareSystem
             || gate == .dashboardSelfCareCard
@@ -147,6 +153,7 @@ final class LimitManager: ObservableObject {
     }
 
     func limit(for feature: LimitedFeature) -> Int? {
+        guard !limitsDisabled else { return nil }
         guard !hasPremiumAccess else { return nil }
 
         switch feature {
@@ -213,6 +220,7 @@ final class LimitManager: ObservableObject {
     }
 
     func historyDays(for feature: HistoryFeature) -> Int? {
+        guard !limitsDisabled else { return nil }
         guard !hasPremiumAccess else { return nil }
 
         switch feature {

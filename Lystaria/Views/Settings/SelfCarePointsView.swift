@@ -441,20 +441,19 @@ struct SelfCarePointsView: View {
                 } label: {
                     ZStack {
                         Circle()
-                            .fill(LColors.glassSurface2)
+                            .fill(Color.white.opacity(0.08))
                             .overlay(
                                 Circle().stroke(LColors.glassBorder, lineWidth: 1)
                             )
+                            .frame(width: 34, height: 34)
 
                         Image("trophyfill")
                             .renderingMode(.template)
                             .resizable()
                             .scaledToFit()
-                            .frame(width: 20, height: 20)
-                            .foregroundStyle(LColors.textPrimary)
+                            .frame(width: 18, height: 18)
+                            .foregroundStyle(.white)
                     }
-                    .frame(width: 40, height: 40)
-                    .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
                 .onboardingTarget("heartIcon")

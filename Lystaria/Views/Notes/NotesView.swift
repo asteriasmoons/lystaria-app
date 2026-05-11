@@ -32,6 +32,7 @@ struct NotesView: View {
     @State private var showDeleteConfirmation = false
     @State private var visibleCount: Int = 6
     @AppStorage("notes.collapsedPinnedIDs") private var collapsedPinnedIDsStorage: String = ""
+    @Query private var userSettings: [UserSettings]
     @State private var collapsedPinnedIDs: Set<String> = []
     
     @State private var selectedTab: String = ""
@@ -55,6 +56,9 @@ struct NotesView: View {
         GridItem(.flexible(), spacing: 14)
     ]
     
+    private var settings: UserSettings? { userSettings.first }
+    private var notesDefaultTab: String { settings?.notesDefaultTab ?? "" }
+
     private var canAddTab: Bool {
         limits.canCreate(.notesTabsTotal, currentCount: notesTabs.count).allowed
     }
@@ -88,7 +92,8 @@ struct NotesView: View {
             .onAppear {
                 ensureRootTabExists()
                 if selectedTab.isEmpty {
-                    selectedTab = rootTabName
+                    let resolved = (!notesDefaultTab.isEmpty && notesTabs.contains(notesDefaultTab)) ? notesDefaultTab : rootTabName
+                    selectedTab = resolved
                 }
                 loadCollapsedPinnedIDs()
             }
@@ -442,6 +447,16 @@ struct NotesView: View {
                     .buttonStyle(.plain)
                     .contextMenu {
                         if !isLocked {
+                            Button(notesDefaultTab == tab ? "Default Tab ✓" : "Set as Default") {
+                                if let s = settings {
+                                    s.notesDefaultTab = tab
+                                    s.updatedAt = Date()
+                                    try? modelContext.save()
+                                }
+                            }
+
+                            Divider()
+
                             Button("Rename") {
                                 renamingTabName = tab
                                 renamedTabName = tab

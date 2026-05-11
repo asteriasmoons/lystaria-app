@@ -97,6 +97,7 @@ struct LystariaApp: App {
             DailyLenormandRecord.self,
             DailyHoroscopeRecord.self,
             WellnessWallAIInsight.self,
+            Subscription.self,
         ])
 
         let modelConfiguration = ModelConfiguration(
