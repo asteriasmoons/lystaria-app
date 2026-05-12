@@ -14,6 +14,7 @@ struct DocumentBackgroundSettingsSheet: View {
     @Bindable var entry: DocumentEntry
 
     @State private var showPhotoPicker = false
+    @State private var showCoverPhotoPicker = false
 
     var body: some View {
         NavigationStack {
@@ -31,9 +32,84 @@ struct DocumentBackgroundSettingsSheet: View {
                                     .font(.custom("Lily Script One", size: 30))
                                     .foregroundStyle(LGradients.blue)
 
-                                Text("Customize the background appearance behind your document.")
+                                Text("Customize the cover image and background appearance of your document.")
                                     .font(.callout)
                                     .foregroundStyle(.white.opacity(0.72))
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+
+                        // MARK: - Cover Image
+
+                        GlassCard {
+                            VStack(alignment: .leading, spacing: 16) {
+
+                                Text("Cover Image")
+                                    .font(.headline)
+                                    .foregroundStyle(.white)
+
+                                if let data = entry.coverImageData,
+                                   let uiImage = UIImage(data: data) {
+
+                                    Image(uiImage: uiImage)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(height: 160)
+                                        .frame(maxWidth: .infinity)
+                                        .clipShape(
+                                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        )
+
+                                    VStack(alignment: .leading, spacing: 10) {
+                                        HStack {
+                                            Text("Vertical Position")
+                                                .foregroundStyle(.white)
+                                            Spacer()
+                                            Text(verticalOffsetLabel)
+                                                .foregroundStyle(.white.opacity(0.7))
+                                        }
+                                        Slider(
+                                            value: $entry.coverImageVerticalOffset,
+                                            in: -1.0...1.0
+                                        )
+                                        .tint(LColors.accent)
+                                    }
+                                }
+
+                                Button {
+                                    showCoverPhotoPicker = true
+                                } label: {
+                                    HStack(spacing: 10) {
+                                        Image(systemName: "photo")
+                                        Text(entry.coverImageData == nil
+                                             ? "Add Cover Image"
+                                             : "Replace Cover Image")
+                                    }
+                                    .font(.headline)
+                                    .foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 14)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                            .fill(.white.opacity(0.08))
+                                    )
+                                }
+                                .buttonStyle(.plain)
+
+                                if entry.coverImageData != nil {
+                                    Button(role: .destructive) {
+                                        entry.coverImageData = nil
+                                        entry.coverImageVerticalOffset = 0.0
+                                        entry.touch()
+                                    } label: {
+                                        HStack {
+                                            Image(systemName: "trash.fill")
+                                            Text("Remove Cover Image")
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 14)
+                                    }
+                                }
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -93,7 +169,6 @@ struct DocumentBackgroundSettingsSheet: View {
                                         .foregroundStyle(.white)
 
                                     VStack(alignment: .leading, spacing: 10) {
-
                                         Text("Start Color")
                                             .font(.subheadline)
                                             .foregroundStyle(.white.opacity(0.72))
@@ -107,7 +182,6 @@ struct DocumentBackgroundSettingsSheet: View {
                                     }
 
                                     VStack(alignment: .leading, spacing: 10) {
-
                                         Text("End Color")
                                             .font(.subheadline)
                                             .foregroundStyle(.white.opacity(0.72))
@@ -144,10 +218,7 @@ struct DocumentBackgroundSettingsSheet: View {
                                             .frame(height: 180)
                                             .frame(maxWidth: .infinity)
                                             .clipShape(
-                                                RoundedRectangle(
-                                                    cornerRadius: 22,
-                                                    style: .continuous
-                                                )
+                                                RoundedRectangle(cornerRadius: 22, style: .continuous)
                                             )
                                     }
 
@@ -165,82 +236,55 @@ struct DocumentBackgroundSettingsSheet: View {
                                         .frame(maxWidth: .infinity)
                                         .padding(.vertical, 14)
                                         .background(
-                                            RoundedRectangle(
-                                                cornerRadius: 18,
-                                                style: .continuous
-                                            )
-                                            .fill(.white.opacity(0.08))
+                                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                                .fill(.white.opacity(0.08))
                                         )
                                     }
                                     .buttonStyle(.plain)
 
                                     VStack(alignment: .leading, spacing: 10) {
-
                                         HStack {
                                             Text("Image Opacity")
                                                 .foregroundStyle(.white)
-
                                             Spacer()
-
                                             Text("\(Int(entry.backgroundImageOpacity * 100))%")
                                                 .foregroundStyle(.white.opacity(0.7))
                                         }
-
-                                        Slider(
-                                            value: $entry.backgroundImageOpacity,
-                                            in: 0...1
-                                        )
-                                        .tint(LColors.accent)
+                                        Slider(value: $entry.backgroundImageOpacity, in: 0...1)
+                                            .tint(LColors.accent)
                                     }
 
                                     VStack(alignment: .leading, spacing: 10) {
-
                                         HStack {
                                             Text("Blur")
                                                 .foregroundStyle(.white)
-
                                             Spacer()
-
                                             Text("\(Int(entry.backgroundImageBlur))")
                                                 .foregroundStyle(.white.opacity(0.7))
                                         }
-
-                                        Slider(
-                                            value: $entry.backgroundImageBlur,
-                                            in: 0...20
-                                        )
-                                        .tint(LColors.accent)
+                                        Slider(value: $entry.backgroundImageBlur, in: 0...20)
+                                            .tint(LColors.accent)
                                     }
 
                                     VStack(alignment: .leading, spacing: 10) {
-
                                         HStack {
                                             Text("Dark Overlay")
                                                 .foregroundStyle(.white)
-
                                             Spacer()
-
                                             Text("\(Int(entry.backgroundOverlayOpacity * 100))%")
                                                 .foregroundStyle(.white.opacity(0.7))
                                         }
-
-                                        Slider(
-                                            value: $entry.backgroundOverlayOpacity,
-                                            in: 0...1
-                                        )
-                                        .tint(LColors.accent)
+                                        Slider(value: $entry.backgroundOverlayOpacity, in: 0...1)
+                                            .tint(LColors.accent)
                                     }
 
                                     if entry.backgroundImageData != nil {
-
                                         Button(role: .destructive) {
                                             entry.backgroundImageData = nil
                                             entry.touch()
                                         } label: {
-
                                             HStack {
                                                 Image(systemName: "trash.fill")
-
                                                 Text("Remove Image")
                                             }
                                             .frame(maxWidth: .infinity)
@@ -258,10 +302,8 @@ struct DocumentBackgroundSettingsSheet: View {
                             Button {
                                 resetBackground()
                             } label: {
-
                                 HStack {
                                     Image(systemName: "arrow.counterclockwise")
-
                                     Text("Reset Background")
                                 }
                                 .foregroundStyle(.white)
@@ -277,11 +319,8 @@ struct DocumentBackgroundSettingsSheet: View {
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Close") {
-                        dismiss()
-                    }
+                    Button("Close") { dismiss() }
                 }
             }
             .sheet(isPresented: $showPhotoPicker) {
@@ -290,7 +329,22 @@ struct DocumentBackgroundSettingsSheet: View {
                     entry.touch()
                 }
             }
+            .sheet(isPresented: $showCoverPhotoPicker) {
+                BackgroundImagePickerSheet { data in
+                    entry.coverImageData = data
+                    entry.touch()
+                }
+            }
         }
+    }
+
+    // MARK: - Helpers
+
+    private var verticalOffsetLabel: String {
+        let val = entry.coverImageVerticalOffset
+        if val < -0.1 { return "Top" }
+        if val > 0.1 { return "Bottom" }
+        return "Center"
     }
 
     // MARK: - Bindings
@@ -307,9 +361,7 @@ struct DocumentBackgroundSettingsSheet: View {
 
     private var solidColorBinding: Binding<Color> {
         Binding(
-            get: {
-                Color(hex: entry.backgroundColorHex) ?? .black
-            },
+            get: { Color(hex: entry.backgroundColorHex) ?? .black },
             set: {
                 entry.backgroundColorHex = Self.hexString(from: $0)
                 entry.touch()
@@ -319,9 +371,7 @@ struct DocumentBackgroundSettingsSheet: View {
 
     private var gradientStartBinding: Binding<Color> {
         Binding(
-            get: {
-                Color(hex: entry.backgroundGradientStartHex) ?? .black
-            },
+            get: { Color(hex: entry.backgroundGradientStartHex) ?? .black },
             set: {
                 entry.backgroundGradientStartHex = Self.hexString(from: $0)
                 entry.touch()
@@ -331,9 +381,7 @@ struct DocumentBackgroundSettingsSheet: View {
 
     private var gradientEndBinding: Binding<Color> {
         Binding(
-            get: {
-                Color(hex: entry.backgroundGradientEndHex) ?? .black
-            },
+            get: { Color(hex: entry.backgroundGradientEndHex) ?? .black },
             set: {
                 entry.backgroundGradientEndHex = Self.hexString(from: $0)
                 entry.touch()
@@ -359,22 +407,14 @@ struct DocumentBackgroundSettingsSheet: View {
 
     private static func hexString(from color: Color) -> String {
         let uiColor = UIColor(color)
-
         var red: CGFloat = 0
         var green: CGFloat = 0
         var blue: CGFloat = 0
         var alpha: CGFloat = 0
-
         guard uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else {
             return "#000000"
         }
-
-        return String(
-            format: "#%02X%02X%02X",
-            Int(red * 255),
-            Int(green * 255),
-            Int(blue * 255)
-        )
+        return String(format: "#%02X%02X%02X", Int(red * 255), Int(green * 255), Int(blue * 255))
     }
 }
 

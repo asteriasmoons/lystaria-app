@@ -99,6 +99,7 @@
 		CF29FC9D2F70AC7300EC47F8 /* DailyLenormandRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF29FC9C2F70AC6800EC47F8 /* DailyLenormandRecord.swift */; };
 		CF29FC9F2F70AC9300EC47F8 /* Lenormand.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF29FC9E2F70AC9300EC47F8 /* Lenormand.swift */; };
 		CF29FCA12F718C8100EC47F8 /* DividerStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF29FCA02F718C7B00EC47F8 /* DividerStyle.swift */; };
+		CF5A53672FB2CD6D00D24F99 /* DocumentIdentityHeaderEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF5A53662FB2CD4700D24F99 /* DocumentIdentityHeaderEditorView.swift */; };
 		CF6E9D632F8EA3B400140B17 /* MedicationDoseScheduleGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF6E9D622F8EA3B400140B17 /* MedicationDoseScheduleGrid.swift */; };
 		CF6E9D652F8F1C6600140B17 /* BookmarkAssetAndSymbolPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF6E9D642F8F1C5900140B17 /* BookmarkAssetAndSymbolPicker.swift */; };
 		CF822EBD2F9039B000CC5B80 /* EventAttendee.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF822EBC2F9039AA00CC5B80 /* EventAttendee.swift */; };
@@ -233,6 +234,7 @@
 		CF8D83822F548EAC0092FC98 /* ProfileTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83812F548EAC0092FC98 /* ProfileTabView.swift */; };
 		CF8D83862F54C4A10092FC98 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83852F54C4A10092FC98 /* NotificationManager.swift */; };
 		CF8D838A2F560F700092FC98 /* RemindersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83892F560F700092FC98 /* RemindersView.swift */; };
+		CF90C83C2FB2ABA400AD5DCC /* DocumentIdentityHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF90C83B2FB2ABA400AD5DCC /* DocumentIdentityHeaderView.swift */; };
 		CF92D5112F746E8F00174F04 /* LimitCleanup.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF92D5102F746E8900174F04 /* LimitCleanup.swift */; };
 		CF92D5132F746EB400174F04 /* LimitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF92D5122F746EAF00174F04 /* LimitManager.swift */; };
 		CF92D5152F748C2B00174F04 /* PremiumLockModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF92D5142F748C2500174F04 /* PremiumLockModifier.swift */; };
@@ -482,6 +484,7 @@
 		CF29FC9E2F70AC9300EC47F8 /* Lenormand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Lenormand.swift; sourceTree = "<group>"; };
 		CF29FCA02F718C7B00EC47F8 /* DividerStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DividerStyle.swift; sourceTree = "<group>"; };
 		CF41A5932F4DF57000C96018 /* Lystaria.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Lystaria.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		CF5A53662FB2CD4700D24F99 /* DocumentIdentityHeaderEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentIdentityHeaderEditorView.swift; sourceTree = "<group>"; };
 		CF6E9D622F8EA3B400140B17 /* MedicationDoseScheduleGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MedicationDoseScheduleGrid.swift; sourceTree = "<group>"; };
 		CF6E9D642F8F1C5900140B17 /* BookmarkAssetAndSymbolPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarkAssetAndSymbolPicker.swift; sourceTree = "<group>"; };
 		CF822EBC2F9039AA00CC5B80 /* EventAttendee.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventAttendee.swift; sourceTree = "<group>"; };
@@ -592,6 +595,7 @@
 		CF8D83812F548EAC0092FC98 /* ProfileTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileTabView.swift; sourceTree = "<group>"; };
 		CF8D83852F54C4A10092FC98 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		CF8D83892F560F700092FC98 /* RemindersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemindersView.swift; sourceTree = "<group>"; };
+		CF90C83B2FB2ABA400AD5DCC /* DocumentIdentityHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentIdentityHeaderView.swift; sourceTree = "<group>"; };
 		CF92D5102F746E8900174F04 /* LimitCleanup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitCleanup.swift; sourceTree = "<group>"; };
 		CF92D5122F746EAF00174F04 /* LimitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitManager.swift; sourceTree = "<group>"; };
 		CF92D5142F748C2500174F04 /* PremiumLockModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumLockModifier.swift; sourceTree = "<group>"; };
@@ -1371,6 +1375,8 @@
 		CFEEED5F2FAE93DE00F03103 /* Documents */ = {
 			isa = PBXGroup;
 			children = (
+				CF5A53662FB2CD4700D24F99 /* DocumentIdentityHeaderEditorView.swift */,
+				CF90C83B2FB2ABA400AD5DCC /* DocumentIdentityHeaderView.swift */,
 				CFEEED7E2FB10E8400F03103 /* DocumentFolderView.swift */,
 				CFEEED702FB029A200F03103 /* DocumentTableEditorView.swift */,
 				CFEEED6E2FAF93C800F03103 /* DocumentTextColorPickerSheet.swift */,
@@ -1696,6 +1702,7 @@
 				CF13B67F2F69DCF7008D3CE9 /* ChecklistEntity.swift in Sources */,
 				CF0A09CF2F5C8C5500401658 /* BookSummaryService.swift in Sources */,
 				CF8421A02F607BD80069F12F /* OnboardingPages.swift in Sources */,
+				CF5A53672FB2CD6D00D24F99 /* DocumentIdentityHeaderEditorView.swift in Sources */,
 				CF13B6642F69ACBA008D3CE9 /* ExerciseLogEntry.swift in Sources */,
 				CF8421B82F6266380069F12F /* DashboardView.swift in Sources */,
 				CFEEED262FA7DF1D00F03103 /* ReleaseNotesView.swift in Sources */,
@@ -1872,6 +1879,7 @@
 				CFEEED6F2FAF93C800F03103 /* DocumentTextColorPickerSheet.swift in Sources */,
 				CFEEED612FAE93DE00F03103 /* DocumentInlineProperty.swift in Sources */,
 				CFEEED622FAE93DE00F03103 /* DocumentBlockEditorView.swift in Sources */,
+				CF90C83C2FB2ABA400AD5DCC /* DocumentIdentityHeaderView.swift in Sources */,
 				CFEEED632FAE93DE00F03103 /* DocumentInlinePropertyViewSheet.swift in Sources */,
 				CFEEED642FAE93DE00F03103 /* DocumentEntryBackground.swift in Sources */,
 				CFEEED652FAE93DE00F03103 /* DocumentInlinePropertyChip.swift in Sources */,
@@ -2341,7 +2349,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 				XROS_DEPLOYMENT_TARGET = 26.2;
 			};
 			name = Debug;
@@ -2422,7 +2430,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 				XROS_DEPLOYMENT_TARGET = 26.2;
 			};
 			name = Release;

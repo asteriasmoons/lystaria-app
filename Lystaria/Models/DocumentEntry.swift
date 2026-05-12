@@ -32,6 +32,10 @@ final class DocumentEntry {
     var backgroundOverlayOpacity: Double = 0.35
     var textColorHex: String = ""
 
+    // MARK: - Cover Image
+    @Attribute(.externalStorage) var coverImageData: Data? = nil
+    var coverImageVerticalOffset: Double = 0.0
+
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
 
@@ -80,6 +84,8 @@ final class DocumentEntry {
         self.backgroundImageOpacity = 0.85
         self.backgroundImageBlur = 0.0
         self.backgroundOverlayOpacity = 0.35
+        self.coverImageData = nil
+        self.coverImageVerticalOffset = 0.0
         self.createdAt = Date()
         self.updatedAt = Date()
         self.tags = tags
@@ -150,9 +156,7 @@ final class DocumentEntry {
             case .checklist:
                 let t = block.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !t.isEmpty else { return nil }
-
                 let state = block.languageHint.trimmingCharacters(in: .whitespacesAndNewlines)
-
                 switch state {
                 case "checked":
                     return "☑ \(t)"
