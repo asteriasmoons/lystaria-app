@@ -12,6 +12,7 @@ import PhotosUI
 struct DocumentBlockEditorPage: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     
     let book: DocumentBook
     let existingEntry: DocumentEntry?
@@ -38,6 +39,10 @@ struct DocumentBlockEditorPage: View {
         self.defaultFolder = defaultFolder
     }
     
+    private var editorInnerPageMaxWidth: CGFloat {
+        horizontalSizeClass == .regular ? 720 : 410
+    }
+
     private var focusedBlock: DocumentBlock? {
         guard let id = focusedBlockID else { return nil }
         return workingEntry?.sortedBlocks.first { $0.id == id }
@@ -72,6 +77,8 @@ struct DocumentBlockEditorPage: View {
                             )
                         )
                     )
+                    .frame(maxWidth: editorInnerPageMaxWidth)
+                    .frame(maxWidth: .infinity, alignment: .center)
                     .scrollDismissesKeyboard(.interactively)
                 } else {
                     ProgressView().tint(.white)
@@ -323,4 +330,3 @@ struct DocumentBlockEditorPage: View {
         return String(format: "%02X%02X%02X", Int(r * 255), Int(g * 255), Int(b * 255))
     }
 }
-

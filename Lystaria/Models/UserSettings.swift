@@ -34,6 +34,13 @@ final class UserSettings {
     // Stores the tab name the user set as default. Empty string means use root tab.
     var notesDefaultTab: String = ""
 
+    // Whether the user has completed the welcome flow.
+    var hasSeenWelcome: Bool = false
+
+    // Premium bypass kill switch.
+    // If true: all premium gates and feature limits are disabled for this user's synced settings record.
+    var premiumBypassEnabled: Bool = true
+
     // Timestamps
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
@@ -44,12 +51,16 @@ final class UserSettings {
         useSystemTimezone: Bool = true,
         timezoneIdentifier: String = TimeZone.current.identifier,
         readingDefaultStatusFilter: String = "",
+        hasSeenWelcome: Bool = false,
+        premiumBypassEnabled: Bool = true,
         needsSync: Bool = false
     ) {
         self.serverId = serverId
         self.useSystemTimezone = useSystemTimezone
         self.timezoneIdentifier = timezoneIdentifier
         self.readingDefaultStatusFilter = readingDefaultStatusFilter
+        self.hasSeenWelcome = hasSeenWelcome
+        self.premiumBypassEnabled = premiumBypassEnabled
         self.createdAt = Date()
         self.updatedAt = Date()
         self.needsSync = needsSync

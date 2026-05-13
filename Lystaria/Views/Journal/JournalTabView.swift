@@ -8,6 +8,7 @@ import WidgetKit
 
 struct JournalTabView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @StateObject private var limits = LimitManager.shared
     @EnvironmentObject private var appState: AppState
     @State private var showBookEditor = false
@@ -196,13 +197,13 @@ struct JournalTabView: View {
     // MARK: - Bookshelf
 
     private var bookshelf: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: horizontalSizeClass == .regular ? 26 : 12) {
             if books.isEmpty {
                 EmptyState(icon: "books.vertical", message: "No journal books yet.\nTap + to create your first book.")
                     .padding(.top, 20)
                     .padding(.horizontal, LSpacing.pageHorizontal)
             } else {
-                LazyVGrid(columns: gridColumns, spacing: 14) {
+                LazyVGrid(columns: gridColumns, spacing: bookshelfGridSpacing) {
                     let allowedBookIds = Set(
                         sortedBooks
                             .sorted { $0.createdAt < $1.createdAt }
@@ -248,15 +249,19 @@ struct JournalTabView: View {
                     }
                 }
                 .padding(.horizontal, LSpacing.pageHorizontal)
-                .padding(.top, 4)
+                .padding(.top, horizontalSizeClass == .regular ? 42 : 4)
             }
         }
     }
 
+    private var bookshelfGridSpacing: CGFloat {
+        horizontalSizeClass == .regular ? 52 : 14
+    }
+
     private var gridColumns: [GridItem] {
         [
-            GridItem(.flexible(), spacing: 14),
-            GridItem(.flexible(), spacing: 14)
+            GridItem(.flexible(), spacing: bookshelfGridSpacing),
+            GridItem(.flexible(), spacing: bookshelfGridSpacing)
         ]
     }
     
@@ -632,13 +637,28 @@ struct JournalBookCard: View {
     let entryCount: Int
     let lastDate: Date?
     let isPinned: Bool
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     private var coverColor: Color { Color(hex: coverHex) }
+    
+    private var bookMaxWidth: CGFloat {
+        horizontalSizeClass == .regular ? 330 : .infinity
+    }
+
+    private var bookHeight: CGFloat {
+        horizontalSizeClass == .regular ? 330 : 230
+    }
+
+    private var bookScale: CGFloat {
+        horizontalSizeClass == .regular ? 1.0 : 0.85
+    }
 
     var body: some View {
         bookGraphic
-            .frame(height: 230)
-            .scaleEffect(0.85)
+            .frame(maxWidth: bookMaxWidth)
+            .frame(height: bookHeight)
+            .scaleEffect(bookScale)
+            .frame(maxWidth: .infinity, alignment: .center)
             .contentShape(RoundedRectangle(cornerRadius: 18))
     }
 
@@ -665,7 +685,7 @@ struct JournalBookCard: View {
                             endPoint: .bottom
                         )
                     )
-                    .frame(width: w * 0.18, height: h * 0.88)
+                    .frame(width: w * 0.18, height: horizontalSizeClass == .regular ? h * 0.78 : h * 0.88)
                     .overlay(
                         VStack(spacing: 2) {
                             ForEach(0..<14, id: \.self) { _ in
@@ -678,7 +698,7 @@ struct JournalBookCard: View {
                         .padding(.vertical, 10)
                         .opacity(0.55)
                     )
-                    .offset(x: w * 0.34, y: 0)
+                    .offset(x: w * 0.34, y: horizontalSizeClass == .regular ? h * 0.02 : 0)
                     .shadow(color: .black.opacity(0.18), radius: 10, x: 8, y: 8)
 
                 // Cover (slightly narrower so pages peek out)
@@ -723,17 +743,6 @@ struct JournalBookCard: View {
                             .opacity(0.7)
                         )
 
-                    // Gloss highlight
-                    RoundedRectangle(cornerRadius: 18)
-                        .fill(
-                            LinearGradient(
-                                colors: [Color.white.opacity(0.28), .clear],
-                                startPoint: .topLeading,
-                                endPoint: .center
-                            )
-                        )
-                        .blendMode(.screen)
-                        .opacity(0.75)
 
                     // Cover content
                     VStack(alignment: .leading, spacing: 8) {
@@ -784,7 +793,8 @@ struct JournalBookCard: View {
                     .padding(.top, 16)
                     .padding(.bottom, 12)
                 }
-                .frame(width: w * 0.86, height: h)
+                .frame(width: horizontalSizeClass == .regular ? w * 0.66 : w * 0.86, height: horizontalSizeClass == .regular ? h * 0.86 : h)
+                .offset(y: horizontalSizeClass == .regular ? h * 0.02 : 0)
                 .overlay(
                     RoundedRectangle(cornerRadius: 18)
                         .stroke(Color.white.opacity(0.18), lineWidth: 1)

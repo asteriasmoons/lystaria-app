@@ -12,6 +12,7 @@ import SwiftData
 
 struct DocumentsView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     @Query(filter: #Predicate<DocumentBook> { $0.deletedAt == nil }, sort: \DocumentBook.createdAt, order: .reverse)
     private var books: [DocumentBook]
@@ -69,6 +70,10 @@ struct DocumentsView: View {
                     (book: book, entry: entry)
                 }
         }
+    }
+
+    private var bookshelfGridSpacing: CGFloat {
+        horizontalSizeClass == .regular ? 34 : 14
     }
 
     var body: some View {
@@ -228,7 +233,7 @@ struct DocumentsView: View {
     // MARK: - Bookshelf
 
     private var bookshelf: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: horizontalSizeClass == .regular ? 26 : 12) {
             if books.isEmpty {
                 EmptyState(icon: "doc.text", message: "No document books yet.\nTap + to create your first book.")
                     .padding(.top, 20)
@@ -238,7 +243,7 @@ struct DocumentsView: View {
                     .padding(.top, 20)
                     .padding(.horizontal, LSpacing.pageHorizontal)
             } else {
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)], spacing: 14) {
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: bookshelfGridSpacing), GridItem(.flexible(), spacing: bookshelfGridSpacing)], spacing: bookshelfGridSpacing) {
                     ForEach(filteredBooks, id: \.persistentModelID) { book in
                         Button {
                             print("📘 DocumentsView: selected book title=\(book.title), id=\(book.persistentModelID), uuid=\(book.uuid), entriesRelationshipCount=\(book.entries?.count ?? -1)")
@@ -266,7 +271,7 @@ struct DocumentsView: View {
                     }
                 }
                 .padding(.horizontal, LSpacing.pageHorizontal)
-                .padding(.top, 16)
+                .padding(.top, horizontalSizeClass == .regular ? 28 : 16)
             }
         }
     }
@@ -308,13 +313,28 @@ struct DocumentBookCard: View {
     let entryCount: Int
     let lastDate: Date?
     let isPinned: Bool
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     private var coverColor: Color { Color(hex: coverHex) }
 
+    private var bookMaxWidth: CGFloat {
+        .infinity
+    }
+
+    private var bookHeight: CGFloat {
+        horizontalSizeClass == .regular ? 360 : 230
+    }
+
+    private var bookScale: CGFloat {
+        horizontalSizeClass == .regular ? 1.0 : 0.85
+    }
+
     var body: some View {
         bookGraphic
-            .frame(height: 230)
-            .scaleEffect(0.85)
+            .frame(maxWidth: bookMaxWidth)
+            .frame(height: bookHeight)
+            .scaleEffect(bookScale)
+            .frame(maxWidth: .infinity, alignment: .center)
             .contentShape(RoundedRectangle(cornerRadius: 18))
     }
 
@@ -404,7 +424,7 @@ struct DocumentBookCard: View {
                     }
                     .padding(.leading, 16).padding(.trailing, 18).padding(.top, 16).padding(.bottom, 12)
                 }
-                .frame(width: w * 0.86, height: h)
+                .frame(width: horizontalSizeClass == .regular ? w * 0.66 : w * 0.86, height: h)
                 .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.white.opacity(0.18), lineWidth: 1))
                 .shadow(color: .black.opacity(0.22), radius: 14, x: 10, y: 12)
                 .rotation3DEffect(.degrees(-10), axis: (x: 0, y: 1, z: 0))
@@ -451,7 +471,7 @@ struct DocumentBookDetailView: View {
 
     private var visibleEntries: [DocumentEntry] {
         entries.filter { entry in
-            entry.folder == nil
+            entry.folder == nil && !entry.isNestedPage
         }
     }
 

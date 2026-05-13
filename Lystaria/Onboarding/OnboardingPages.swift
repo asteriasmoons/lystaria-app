@@ -21,6 +21,11 @@ struct OnboardingPages {
                 targetID: "boardIcon",
                 title: "Kanban View",
                 message: "Tap here to view all your reminders in cards in kanban view. You can also mark reminders done from the kanban view."
+            ),
+            OnboardingStep(
+                targetID: "clockBookIcon",
+                title: "History View",
+                message: "Review your reminders history for the day or another day by tapping the calendar days."
             )
         ]
     )

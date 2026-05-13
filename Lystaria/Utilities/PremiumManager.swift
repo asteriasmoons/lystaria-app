@@ -16,6 +16,13 @@ final class PremiumManager: ObservableObject {
     @Published var isPremium: Bool = false
     @Published var products: [Product] = []
 
+    // MARK: - Synced Premium Bypass
+    // This mirrors the UserSettings premium bypass used by LimitManager.
+    // If synced settings are unavailable during beta/testing, fallback keeps premium unlocked.
+    @Published private(set) var premiumBypassEnabled: Bool = true
+
+    private let fallbackPremiumBypassEnabled = true
+
     private let productIds: Set<String> = [
         "lystaria.premium.monthly",
         "lystaria.premium.weekly"
@@ -26,6 +33,28 @@ final class PremiumManager: ObservableObject {
             await loadProducts()
             await updatePremiumStatus()
             listenForTransactions()
+        }
+    }
+
+    // MARK: - Premium Bypass Sync
+
+    func syncPremiumBypass(from settings: UserSettings?) {
+        let shouldBypass = settings?.premiumBypassEnabled ?? fallbackPremiumBypassEnabled
+        guard premiumBypassEnabled != shouldBypass else {
+            if shouldBypass && !isPremium {
+                isPremium = true
+            }
+            return
+        }
+
+        premiumBypassEnabled = shouldBypass
+
+        if shouldBypass {
+            isPremium = true
+        } else {
+            Task {
+                await updatePremiumStatus()
+            }
         }
     }
 
@@ -74,6 +103,11 @@ final class PremiumManager: ObservableObject {
     // MARK: - Check Status
 
     func updatePremiumStatus() async {
+        if premiumBypassEnabled {
+            isPremium = true
+            return
+        }
+
         var hasPremium = false
 
         for await result in Transaction.currentEntitlements {

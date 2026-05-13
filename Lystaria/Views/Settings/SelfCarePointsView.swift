@@ -899,6 +899,8 @@ struct SelfCarePointsView: View {
     private var logHistoryButtonSection: some View {
         GlassCard {
             Button {
+                print("History tapped")
+
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                     showLogHistoryPopup = true
                 }

@@ -12,6 +12,7 @@ import UIKit
 struct DocumentBlockPreviewPage: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     let entry: DocumentEntry
 
@@ -23,12 +24,18 @@ struct DocumentBlockPreviewPage: View {
     @State private var showTextColorSheet = false
     @State private var textColorPickerSelection: Color = .white
 
+    private var previewInnerPageMaxWidth: CGFloat {
+        horizontalSizeClass == .regular ? 720 : 410
+    }
+
     var body: some View {
         ZStack {
             DocumentEntryBackground(entry: entry)
 
             ScrollView {
                 DocumentPagedContentView(entry: entry)
+                    .frame(maxWidth: previewInnerPageMaxWidth)
+                    .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.bottom, 32)
             }
         }
@@ -303,7 +310,7 @@ struct DocumentBlockDisplayView: View {
              .toggleHeading1, .toggleHeading2, .toggleHeading3, .toggleHeading4, .toggleHeading5, .toggleHeading6,
              .toggle, .bulletedList, .numberedList, .checklist, .blockquote, .callout:
             return CGFloat(block.indentLevel) * 20
-        case .divider, .code, .image, .table:
+        case .divider, .code, .image, .table, .page:
             return 0
         }
     }
@@ -587,6 +594,8 @@ struct DocumentBlockDisplayView: View {
             }
         case .table:
             DocumentTablePreviewView(block: block, resolvedTextColor: resolvedTextColor)
+        case .page:
+            NestedPagePreviewCard(block: block)
         }
     }
 
@@ -1115,6 +1124,33 @@ private extension UIColor {
         var hex = hexString.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "#", with: "")
         guard hex.count == 6, let value = Int(hex, radix: 16) else { return nil }
         self.init(red: CGFloat((value >> 16) & 0xFF) / 255.0, green: CGFloat((value >> 8) & 0xFF) / 255.0, blue: CGFloat(value & 0xFF) / 255.0, alpha: 1.0)
+    }
+}
+
+// MARK: - Nested Page Preview Card
+
+struct NestedPagePreviewCard: View {
+    @Environment(\.modelContext) private var modelContext
+    let block: DocumentBlock
+
+    private var childEntry: DocumentEntry? {
+        guard let uuid = block.pageChildUUID else { return nil }
+        let descriptor = FetchDescriptor<DocumentEntry>(
+            predicate: #Predicate { $0.uuid == uuid }
+        )
+        return try? modelContext.fetch(descriptor).first
+    }
+
+    var body: some View {
+        let child = childEntry
+        PageCardView(
+            block: block,
+            childEntry: child,
+            destination: child.map { entry in
+                AnyView(DocumentBlockPreviewPage(entry: entry))
+            },
+            isSelectionMode: false
+        )
     }
 }
 

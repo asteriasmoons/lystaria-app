@@ -69,42 +69,50 @@ struct DocumentBlockEditorView: View {
                             }
 
                             VStack(alignment: .leading, spacing: 0) {
-                                ForEach(page, id: \.1.id) { (i, block) in
-                                    DocumentBlockRow(
-                                        block: block,
-                                        onAddBelow: { b, type, initialText in insertBlockBelow(b, type, initialText) },
-                                        onDelete: deleteBlock,
-                                        onMoveUp: moveBlockUp,
-                                        onMoveDown: moveBlockDown,
-                                        onTransform: transformBlock,
-                                        isSelectionMode: isSelectionMode,
-                                        isSelectedForBatchAction: selectedBlockIDs.contains(block.id),
-                                        selectedBlockCount: selectedBlockIDs.count,
-                                        onEnterSelectionMode: enterSelectionMode,
-                                        onToggleBatchSelection: toggleBlockSelection,
-                                        onClearBatchSelection: clearBlockSelection,
-                                        onDeleteSelectedBlocks: deleteSelectedBlocks,
-                                        onIndentSelectedBlocksIn: indentSelectedBlocksIn,
-                                        onIndentSelectedBlocksOut: indentSelectedBlocksOut,
-                                        documentTextColor: resolvedDocumentTextColor
-                                    )
-                                    .opacity(draggingBlock?.id == block.id ? 0.4 : 1)
-                                    .onDrag {
-                                        draggingBlock = block
-                                        dragOverIndex = nil
-                                        return NSItemProvider(object: block.id.uuidString as NSString)
-                                    }
-                                    .padding(.vertical, isSelectionMode ? 3 : 6)
+                                if page.isEmpty {
+                                    // Empty new page card — show placeholder so it's visible and tappable
+                                    Text("Tap to write...")
+                                        .font(.system(size: 15, weight: .regular))
+                                        .foregroundStyle(LColors.textSecondary.opacity(0.5))
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                } else {
+                                    ForEach(page, id: \.1.id) { (i, block) in
+                                        DocumentBlockRow(
+                                            block: block,
+                                            onAddBelow: { b, type, initialText in insertBlockBelow(b, type, initialText) },
+                                            onDelete: deleteBlock,
+                                            onMoveUp: moveBlockUp,
+                                            onMoveDown: moveBlockDown,
+                                            onTransform: transformBlock,
+                                            isSelectionMode: isSelectionMode,
+                                            isSelectedForBatchAction: selectedBlockIDs.contains(block.id),
+                                            selectedBlockCount: selectedBlockIDs.count,
+                                            onEnterSelectionMode: enterSelectionMode,
+                                            onToggleBatchSelection: toggleBlockSelection,
+                                            onClearBatchSelection: clearBlockSelection,
+                                            onDeleteSelectedBlocks: deleteSelectedBlocks,
+                                            onIndentSelectedBlocksIn: indentSelectedBlocksIn,
+                                            onIndentSelectedBlocksOut: indentSelectedBlocksOut,
+                                            documentTextColor: resolvedDocumentTextColor
+                                        )
+                                        .opacity(draggingBlock?.id == block.id ? 0.4 : 1)
+                                        .onDrag {
+                                            draggingBlock = block
+                                            dragOverIndex = nil
+                                            return NSItemProvider(object: block.id.uuidString as NSString)
+                                        }
+                                        .padding(.vertical, isSelectionMode ? 3 : 6)
 
-                                    if draggingBlock != nil {
-                                        DocumentBlockDropZone(index: i + 1, dragOverIndex: $dragOverIndex)
-                                            .onDrop(of: [.plainText], delegate: DocumentIndexedDropDelegate(
-                                                index: i + 1,
-                                                draggingBlock: $draggingBlock,
-                                                dragOverIndex: $dragOverIndex,
-                                                visibleBlocks: visibleBlocks,
-                                                onMove: reorderBlockToIndex
-                                            ))
+                                        if draggingBlock != nil {
+                                            DocumentBlockDropZone(index: i + 1, dragOverIndex: $dragOverIndex)
+                                                .onDrop(of: [.plainText], delegate: DocumentIndexedDropDelegate(
+                                                    index: i + 1,
+                                                    draggingBlock: $draggingBlock,
+                                                    dragOverIndex: $dragOverIndex,
+                                                    visibleBlocks: visibleBlocks,
+                                                    onMove: reorderBlockToIndex
+                                                ))
+                                        }
                                     }
                                 }
                             }
@@ -126,7 +134,13 @@ struct DocumentBlockEditorView: View {
                                 .overlay(
                                     PageSheetTapOverlay {
                                         guard !isSelectionMode else { return }
-                                        if let last = page.last?.1 {
+                                        if page.isEmpty {
+                                            // Empty new page card — insert paragraph after the preceding page break
+                                            let allPages = blockPages
+                                            if pageIndex > 0, let breakBlock = allPages[pageIndex - 1].breakBlock {
+                                                insertBlockBelow(breakBlock, .paragraph, "")
+                                            }
+                                        } else if let last = page.last?.1 {
                                             if last.type == .paragraph && last.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                                 let id = last.id
                                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
@@ -378,7 +392,7 @@ struct DocumentBlockEditorView: View {
              .toggleHeading1, .toggleHeading2, .toggleHeading3, .toggleHeading4, .toggleHeading5, .toggleHeading6,
              .toggle, .bulletedList, .numberedList, .checklist, .blockquote, .callout:
             return true
-        case .divider, .code, .image, .table:
+        case .divider, .code, .image, .table, .page:
             return false
         }
     }
@@ -430,6 +444,9 @@ struct DocumentBlockEditorView: View {
             calloutEmoji: type == .callout ? defaultCalloutIconID : "",
             languageHint: type == .divider ? DividerStyle.line.rawValue : ""
         )
+        if type == .page {
+            createChildEntry(for: newBlock)
+        }
         newBlock.entry = entry; newBlock.touch()
         if entry.blocks == nil { entry.blocks = [] }
         entry.blocks?.append(newBlock)
@@ -515,6 +532,24 @@ struct DocumentBlockEditorView: View {
         }
     }
 
+    // MARK: - Child Entry Creation
+
+    /// Creates a child DocumentEntry for a .page block and stores its UUID in block.languageHint.
+    private func createChildEntry(for block: DocumentBlock) {
+        let childEntry = DocumentEntry(
+            title: "",
+            tags: [],
+            book: entry.book,
+            folder: nil,
+            isNestedPage: true
+        )
+        modelContext.insert(childEntry)
+        childEntry.ensureStarterBlock()
+        block.setPageCardMeta(childUUID: childEntry.uuid, size: .square, style: .default)
+    }
+
+    // MARK: - Insert Block Below
+
     private func insertBlockBelow(_ block: DocumentBlock, _ type: DocumentBlockType, _ initialText: String = "") {
         guard !isMutatingBlocks else { return }
         clearBlockSelection()
@@ -542,6 +577,9 @@ struct DocumentBlockEditorView: View {
             calloutEmoji: type == .callout ? defaultCalloutIconID : "",
             languageHint: type == .divider ? DividerStyle.line.rawValue : ""
         )
+        if type == .page {
+            createChildEntry(for: newBlock)
+        }
         newBlock.entry = entry; newBlock.touch()
         if entry.blocks == nil { entry.blocks = [] }
         entry.blocks?.append(newBlock)
@@ -564,6 +602,16 @@ struct DocumentBlockEditorView: View {
         let blockID = block.id
         selectedBlockIDs.remove(blockID)
         let blockSortOrder = block.sortOrder
+        // If this is a page block, soft-delete the child entry
+        if block.type == .page {
+            if let uuid = block.pageChildUUID {
+                let descriptor = FetchDescriptor<DocumentEntry>(predicate: #Predicate { $0.uuid == uuid })
+                if let childEntry = try? modelContext.fetch(descriptor).first {
+                    childEntry.deletedAt = Date()
+                    childEntry.updatedAt = Date()
+                }
+            }
+        }
         for inlineStyle in (block.inlineStyles ?? []) { modelContext.delete(inlineStyle) }
         if let index = entry.blocks?.firstIndex(where: { $0.id == blockID }) { entry.blocks?.remove(at: index) }
         modelContext.delete(block)
@@ -668,6 +716,16 @@ struct DocumentBlockEditorView: View {
             block.text = DocumentTableData().toJSON()
             for s in (block.inlineStyles ?? []) { modelContext.delete(s) }
             block.inlineStyles = []
+        case .page:
+            if !wasToggleChild { block.parentBlockID = nil }
+            block.indentLevel = 0
+            for s in (block.inlineStyles ?? []) { modelContext.delete(s) }
+            block.inlineStyles = []
+            // Only create a child entry if one doesn't already exist
+            let rawUUID = block.languageHint.trimmingCharacters(in: .whitespacesAndNewlines)
+            if UUID(uuidString: rawUUID) == nil {
+                createChildEntry(for: block)
+            }
         }
         block.touch()
         entry.normalizeBlockSortOrders()
@@ -701,6 +759,7 @@ struct DocumentBlockEditorView: View {
         case .code: return "Code Block"
         case .image: return "Image"
         case .table: return "Table"
+        case .page: return "Page"
         }
     }
 

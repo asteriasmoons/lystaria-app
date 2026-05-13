@@ -289,7 +289,8 @@ struct DocumentFolderView: View {
 
         var descriptor = FetchDescriptor<DocumentEntry>(
             predicate: #Predicate<DocumentEntry> { entry in
-                entry.deletedAt == nil
+                entry.deletedAt == nil &&
+                entry.isNestedPage == false
             },
             sortBy: [
                 SortDescriptor(\.updatedAt, order: .reverse)

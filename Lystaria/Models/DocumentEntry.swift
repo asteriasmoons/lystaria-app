@@ -18,8 +18,10 @@ final class DocumentEntry {
     var blocks: [DocumentBlock]? = nil
 
     // MARK: - Fields
+    var uuid: UUID = UUID()
     var title: String = ""
     var tagsStorage: String = "[]"
+    var isNestedPage: Bool = false
 
     // MARK: - Background Appearance
     var backgroundModeRaw: String = DocumentEntryBackgroundMode.defaultLystaria.rawValue
@@ -69,13 +71,16 @@ final class DocumentEntry {
         tags: [String] = [],
         book: DocumentBook? = nil,
         folder: DocumentFolder? = nil,
-        deletedAt: Date? = nil
+        deletedAt: Date? = nil,
+        isNestedPage: Bool = false
     ) {
         self.title = title
         self.tagsStorage = "[]"
+        self.uuid = UUID()
         self.book = book
         self.folder = folder
         self.deletedAt = deletedAt
+        self.isNestedPage = isNestedPage
         self.backgroundModeRaw = DocumentEntryBackgroundMode.defaultLystaria.rawValue
         self.backgroundColorHex = ""
         self.backgroundGradientStartHex = ""
@@ -175,6 +180,8 @@ final class DocumentEntry {
             case .image:
                 return block.imageData != nil ? "🖼️" : nil
             case .table:
+                return nil
+            case .page:
                 return nil
             }
         }

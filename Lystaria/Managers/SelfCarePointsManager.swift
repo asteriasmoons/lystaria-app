@@ -137,46 +137,6 @@ enum SelfCarePointsManager {
         modelContext.insert(resetLog)
     }
 
-    @discardableResult
-    static func applyWeeklyResetIfNeeded(
-        in modelContext: ModelContext,
-        profile: SelfCarePointsProfile,
-        userId: String,
-        now: Date = Date(),
-        calendar: Calendar = .current
-    ) throws -> Bool {
-        let currentWeekKey = weekStartDayKey(from: now, calendar: calendar)
-
-        if profile.currentWeekStartDayKey.isEmpty {
-            profile.currentWeekStartDayKey = currentWeekKey
-            profile.updatedAt = now
-            try modelContext.save()
-            return false
-        }
-
-        guard profile.currentWeekStartDayKey != currentWeekKey else {
-            return false
-        }
-
-        insertResetLog(
-            in: modelContext,
-            userId: userId,
-            weekStartDayKey: profile.currentWeekStartDayKey,
-            resetAt: now,
-            pointsBeforeReset: profile.currentPoints,
-            levelBeforeReset: profile.level
-        )
-
-        profile.currentPoints = 0
-        profile.level = 0
-        profile.lastWeeklyResetAt = now
-        profile.currentWeekStartDayKey = currentWeekKey
-        profile.updatedAt = now
-
-        try modelContext.save()
-        return true
-    }
-
     // MARK: - Profile Fetch / Create
 
     @discardableResult
@@ -189,8 +149,6 @@ enum SelfCarePointsManager {
         )
 
         if let existing = try modelContext.fetch(descriptor).first {
-            _ = try applyWeeklyResetIfNeeded(in: modelContext, profile: existing, userId: userId)
-
             let correctedLevel = level(for: existing.currentPoints)
             if existing.level != correctedLevel {
                 existing.level = correctedLevel
@@ -299,7 +257,6 @@ enum SelfCarePointsManager {
         }
 
         let profile = try fetchOrCreateProfile(in: modelContext, userId: userId)
-        _ = try applyWeeklyResetIfNeeded(in: modelContext, profile: profile, userId: userId, calendar: calendar)
 
         let safePoints = max(0, entry.points)
         let currentWeekKey = weekStartDayKey(calendar: calendar)
@@ -347,9 +304,11 @@ enum SelfCarePointsManager {
             snapshotWeekKey = "manual-\(profile.currentWeekStartDayKey)"
         }
 
+        let uniqueManualSnapshotKey = "\(snapshotWeekKey)-\(Int(now.timeIntervalSince1970))"
+
         let snapshot = SelfCarePointsResetLog(
             userId: userId,
-            weekStartDayKey: snapshotWeekKey,
+            weekStartDayKey: uniqueManualSnapshotKey,
             resetAt: now,
             pointsBeforeReset: profile.currentPoints,
             levelBeforeReset: level(for: profile.currentPoints),
@@ -384,7 +343,6 @@ enum SelfCarePointsManager {
         }
 
         let profile = try fetchOrCreateProfile(in: modelContext, userId: userId)
-        _ = try applyWeeklyResetIfNeeded(in: modelContext, profile: profile, userId: userId, now: earnedAt, calendar: calendar)
 
         let entry = SelfCarePointEntry(
             userId: userId,

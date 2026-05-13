@@ -6,7 +6,7 @@ import SwiftData
 
 struct ContentView: View {
     @EnvironmentObject private var appState: AppState
-    @AppStorage("hasSeenWelcome") private var hasSeenWelcome = false
+    @Query private var allSettings: [UserSettings]
     @Query(filter: #Predicate<JournalBook> { $0.deletedAt == nil }, sort: \JournalBook.createdAt, order: .reverse) private var journalBooks: [JournalBook]
     @ObservedObject private var notificationManager = NotificationManager.shared
     @State private var selectedTab: MainTabView.Tab = .dashboard
@@ -21,10 +21,13 @@ struct ContentView: View {
     // Change it back to `false` when you're done testing.
     private let alwaysShowWelcomeForDev = false
 
+    private var settings: UserSettings? { allSettings.first }
+    private var hasSeenWelcome: Bool { settings?.hasSeenWelcome ?? false }
+
     var body: some View {
         Group {
-            if !hasSeenWelcome {
-                WelcomeFlowView()
+            if !hasSeenWelcome, let settings {
+                WelcomeFlowView(settings: settings)
                     .environmentObject(appState)
                     .preferredColorScheme(.dark)
             } else if case .signedOut = appState.status {
@@ -65,7 +68,7 @@ struct ContentView: View {
         }
         .onAppear {
             if alwaysShowWelcomeForDev {
-                hasSeenWelcome = false
+                settings?.hasSeenWelcome = false
             }
 
             if case .signedIn = appState.status, pendingOpenMoodFromWidget {

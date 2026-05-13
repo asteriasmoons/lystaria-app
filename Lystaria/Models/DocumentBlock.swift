@@ -32,6 +32,7 @@ enum DocumentBlockType: String, Codable, CaseIterable {
     case numberedList
     case checklist
     case table
+    case page
 
     var isToggleHeading: Bool {
         switch self {

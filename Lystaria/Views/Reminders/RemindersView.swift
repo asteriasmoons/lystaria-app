@@ -422,6 +422,7 @@ struct RemindersView: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .onboardingTarget("clockBookIcon")
                     
                     Button {
                         showTimeBlock = true

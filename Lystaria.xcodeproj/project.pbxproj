@@ -61,7 +61,6 @@
 		CF13B67D2F69B7CB008D3CE9 /* HealthFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B67C2F69B7C5008D3CE9 /* HealthFormatting.swift */; };
 		CF13B67F2F69DCF7008D3CE9 /* ChecklistEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B67E2F69DCF1008D3CE9 /* ChecklistEntity.swift */; };
 		CF13B6832F6A2DFF008D3CE9 /* JournalPromptUsage.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B6822F6A2DF9008D3CE9 /* JournalPromptUsage.swift */; };
-		CF175FF02FA3A16500C58C6C /* TagFlowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF175FEF2FA3A16500C58C6C /* TagFlowLayout.swift */; };
 		CF175FF22FA552E400C58C6C /* ReminderHistoryDayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF175FF12FA552DC00C58C6C /* ReminderHistoryDayView.swift */; };
 		CF175FF52FA6804B00C58C6C /* WellnessWallAIInsight.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF175FF42FA6804200C58C6C /* WellnessWallAIInsight.swift */; };
 		CF175FF72FA6807400C58C6C /* WellnessWallAIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF175FF62FA6806D00C58C6C /* WellnessWallAIModels.swift */; };
@@ -90,7 +89,6 @@
 		CF29FC8A2F7073F500EC47F8 /* JournalEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83282F50A4940092FC98 /* JournalEntry.swift */; };
 		CF29FC8D2F70762E00EC47F8 /* JournalPrompt.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B65E2F68BE65008D3CE9 /* JournalPrompt.swift */; };
 		CF29FC8E2F70768000EC47F8 /* JournalBlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8B7F6C2F6B3550006A7D3B /* JournalBlock.swift */; };
-		CF29FC8F2F7076A700EC47F8 /* JournalInlineStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8B7F662F6B34BA006A7D3B /* JournalInlineStyle.swift */; };
 		CF29FC902F707E1F00EC47F8 /* AuthUser.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D83222F50A4940092FC98 /* AuthUser.swift */; };
 		CF29FC912F707E3900EC47F8 /* JournalPromptUsage.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF13B6822F6A2DF9008D3CE9 /* JournalPromptUsage.swift */; };
 		CF29FC922F707E4D00EC47F8 /* Reminder.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8D832A2F50A4940092FC98 /* Reminder.swift */; };
@@ -98,7 +96,6 @@
 		CF29FC992F70905A00EC47F8 /* HealthWidgetSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF29FC982F70905300EC47F8 /* HealthWidgetSync.swift */; };
 		CF29FC9D2F70AC7300EC47F8 /* DailyLenormandRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF29FC9C2F70AC6800EC47F8 /* DailyLenormandRecord.swift */; };
 		CF29FC9F2F70AC9300EC47F8 /* Lenormand.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF29FC9E2F70AC9300EC47F8 /* Lenormand.swift */; };
-		CF29FCA12F718C8100EC47F8 /* DividerStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF29FCA02F718C7B00EC47F8 /* DividerStyle.swift */; };
 		CF5A53672FB2CD6D00D24F99 /* DocumentIdentityHeaderEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF5A53662FB2CD4700D24F99 /* DocumentIdentityHeaderEditorView.swift */; };
 		CF6E9D632F8EA3B400140B17 /* MedicationDoseScheduleGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF6E9D622F8EA3B400140B17 /* MedicationDoseScheduleGrid.swift */; };
 		CF6E9D652F8F1C6600140B17 /* BookmarkAssetAndSymbolPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF6E9D642F8F1C5900140B17 /* BookmarkAssetAndSymbolPicker.swift */; };
@@ -158,22 +155,31 @@
 		CF8421C72F636DD00069F12F /* ToolboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8421C62F636DCB0069F12F /* ToolboxView.swift */; };
 		CF8421C92F638EAD0069F12F /* KanbanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8421C82F638EA70069F12F /* KanbanView.swift */; };
 		CF8421CB2F638EE00069F12F /* KanbanBoard.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8421CA2F638EDB0069F12F /* KanbanBoard.swift */; };
+		CF84CE5E2FB3AA50004FA24E /* PageCardBlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84CE5D2FB3AA50004FA24E /* PageCardBlock.swift */; };
+		CF84CE752FB3F9CB004FA24E /* RichBlockTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84CE722FB3F9CB004FA24E /* RichBlockTextView.swift */; };
+		CF84CE762FB3F9CB004FA24E /* JournalTableEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84CE712FB3F9CB004FA24E /* JournalTableEditorView.swift */; };
+		CF84CE772FB3F9CB004FA24E /* JournalIdentityHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84CE6F2FB3F9CB004FA24E /* JournalIdentityHeaderView.swift */; };
+		CF84CE782FB3F9CB004FA24E /* JournalBlockPreviewPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84CE692FB3F9CB004FA24E /* JournalBlockPreviewPage.swift */; };
+		CF84CE792FB3F9CB004FA24E /* JournalIdentityEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84CE6E2FB3F9CB004FA24E /* JournalIdentityEditorView.swift */; };
+		CF84CE7A2FB3F9CB004FA24E /* JournalCardBlockPreviewSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84CE6B2FB3F9CB004FA24E /* JournalCardBlockPreviewSupport.swift */; };
+		CF84CE7B2FB3F9CB004FA24E /* JournalBlockDisplayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84CE652FB3F9CB004FA24E /* JournalBlockDisplayView.swift */; };
+		CF84CE7C2FB3F9CB004FA24E /* JournalBlockEditorPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84CE662FB3F9CB004FA24E /* JournalBlockEditorPage.swift */; };
+		CF84CE7D2FB3F9CB004FA24E /* TagFlowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84CE732FB3F9CB004FA24E /* TagFlowLayout.swift */; };
+		CF84CE7E2FB3F9CB004FA24E /* JournalBlockRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84CE6A2FB3F9CB004FA24E /* JournalBlockRow.swift */; };
+		CF84CE7F2FB3F9CB004FA24E /* JournalInlineStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84CE702FB3F9CB004FA24E /* JournalInlineStyle.swift */; };
+		CF84CE802FB3F9CB004FA24E /* JournalEntryBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84CE6C2FB3F9CB004FA24E /* JournalEntryBackground.swift */; };
+		CF84CE812FB3F9CB004FA24E /* JournalBlockPreviewBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84CE682FB3F9CB004FA24E /* JournalBlockPreviewBuilder.swift */; };
+		CF84CE822FB3F9CB004FA24E /* JournalBlockEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84CE672FB3F9CB004FA24E /* JournalBlockEditorView.swift */; };
+		CF84CE832FB3F9CB004FA24E /* JournalBackgroundSettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84CE642FB3F9CB004FA24E /* JournalBackgroundSettingsSheet.swift */; };
+		CF84CE842FB3F9CB004FA24E /* JournalEntryBlockMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84CE6D2FB3F9CB004FA24E /* JournalEntryBlockMigration.swift */; };
+		CF84CE852FB3F9CB004FA24E /* DividerStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84CE632FB3F9CB004FA24E /* DividerStyle.swift */; };
+		CF84CE862FB40711004FA24E /* JournalInlineStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84CE702FB3F9CB004FA24E /* JournalInlineStyle.swift */; };
+		CF84CE872FB40779004FA24E /* JournalInlineStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF84CE702FB3F9CB004FA24E /* JournalInlineStyle.swift */; };
 		CF8B7F5C2F6B0505006A7D3B /* BodyStateClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8B7F5B2F6B04FE006A7D3B /* BodyStateClassifier.swift */; };
 		CF8B7F5E2F6B0548006A7D3B /* BodyStateRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8B7F5D2F6B0542006A7D3B /* BodyStateRecord.swift */; };
 		CF8B7F602F6B058E006A7D3B /* BodyStateHealthKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8B7F5F2F6B0586006A7D3B /* BodyStateHealthKitManager.swift */; };
-		CF8B7F632F6B3402006A7D3B /* JournalBlockRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8B7F622F6B33FB006A7D3B /* JournalBlockRow.swift */; };
-		CF8B7F652F6B346B006A7D3B /* JournalBlockEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8B7F642F6B3464006A7D3B /* JournalBlockEditorView.swift */; };
-		CF8B7F672F6B34BF006A7D3B /* JournalInlineStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8B7F662F6B34BA006A7D3B /* JournalInlineStyle.swift */; };
-		CF8B7F692F6B34DF006A7D3B /* RichBlockTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8B7F682F6B34D8006A7D3B /* RichBlockTextView.swift */; };
-		CF8B7F6B2F6B3501006A7D3B /* JournalBlockDisplayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8B7F6A2F6B34FB006A7D3B /* JournalBlockDisplayView.swift */; };
 		CF8B7F6D2F6B3553006A7D3B /* JournalBlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8B7F6C2F6B3550006A7D3B /* JournalBlock.swift */; };
-		CF8B7F6F2F6B3A4E006A7D3B /* JournalBlockPreviewBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8B7F6E2F6B3A46006A7D3B /* JournalBlockPreviewBuilder.swift */; };
-		CF8B7F712F6B3A6B006A7D3B /* JournalEntryBlockMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8B7F702F6B3A63006A7D3B /* JournalEntryBlockMigration.swift */; };
-		CF8B7F752F6B3AA6006A7D3B /* JournalCardBlockPreviewSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8B7F742F6B3A9B006A7D3B /* JournalCardBlockPreviewSupport.swift */; };
-		CF8B7F772F6B3AC5006A7D3B /* JournalBlockEditorPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8B7F762F6B3ABE006A7D3B /* JournalBlockEditorPage.swift */; };
-		CF8B7F792F6B3ADD006A7D3B /* JournalBlockPreviewPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8B7F782F6B3AD4006A7D3B /* JournalBlockPreviewPage.swift */; };
 		CF8B7F7A2F6B4345006A7D3B /* JournalBlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8B7F6C2F6B3550006A7D3B /* JournalBlock.swift */; };
-		CF8B7F7B2F6B4375006A7D3B /* JournalInlineStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8B7F662F6B34BA006A7D3B /* JournalInlineStyle.swift */; };
 		CF8B7F7F2F6B7309006A7D3B /* SelfCarePointsProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8B7F7E2F6B7300006A7D3B /* SelfCarePointsProfile.swift */; };
 		CF8B7F812F6B732E006A7D3B /* SelfCarePointEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8B7F802F6B7327006A7D3B /* SelfCarePointEntry.swift */; };
 		CF8B7F832F6B7395006A7D3B /* SelfCarePointsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8B7F822F6B738D006A7D3B /* SelfCarePointsManager.swift */; };
@@ -322,9 +328,6 @@
 		CFEEED712FB029A200F03103 /* DocumentTableEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED702FB029A200F03103 /* DocumentTableEditorView.swift */; };
 		CFEEED732FB02B0C00F03103 /* DocumentTableData.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED722FB02B0C00F03103 /* DocumentTableData.swift */; };
 		CFEEED752FB0ECDC00F03103 /* JournalTableData.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED742FB0ECDC00F03103 /* JournalTableData.swift */; };
-		CFEEED792FB0ECFF00F03103 /* JournalEntryBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED772FB0ECFF00F03103 /* JournalEntryBackground.swift */; };
-		CFEEED7A2FB0ECFF00F03103 /* JournalTableEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED782FB0ECFF00F03103 /* JournalTableEditorView.swift */; };
-		CFEEED7B2FB0ECFF00F03103 /* JournalBackgroundSettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED762FB0ECFF00F03103 /* JournalBackgroundSettingsSheet.swift */; };
 		CFEEED7D2FB10BDB00F03103 /* DocumentFolder.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED7C2FB10BD700F03103 /* DocumentFolder.swift */; };
 		CFEEED7F2FB10E8C00F03103 /* DocumentFolderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED7E2FB10E8400F03103 /* DocumentFolderView.swift */; };
 		CFEEED812FB22BB600F03103 /* MoreTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEEED802FB22BB600F03103 /* MoreTabView.swift */; };
@@ -456,7 +459,6 @@
 		CF13B67C2F69B7C5008D3CE9 /* HealthFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthFormatting.swift; sourceTree = "<group>"; };
 		CF13B67E2F69DCF1008D3CE9 /* ChecklistEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChecklistEntity.swift; sourceTree = "<group>"; };
 		CF13B6822F6A2DF9008D3CE9 /* JournalPromptUsage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalPromptUsage.swift; sourceTree = "<group>"; };
-		CF175FEF2FA3A16500C58C6C /* TagFlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagFlowLayout.swift; sourceTree = "<group>"; };
 		CF175FF12FA552DC00C58C6C /* ReminderHistoryDayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderHistoryDayView.swift; sourceTree = "<group>"; };
 		CF175FF42FA6804200C58C6C /* WellnessWallAIInsight.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WellnessWallAIInsight.swift; sourceTree = "<group>"; };
 		CF175FF62FA6806D00C58C6C /* WellnessWallAIModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WellnessWallAIModels.swift; sourceTree = "<group>"; };
@@ -482,7 +484,6 @@
 		CF29FC982F70905300EC47F8 /* HealthWidgetSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthWidgetSync.swift; sourceTree = "<group>"; };
 		CF29FC9C2F70AC6800EC47F8 /* DailyLenormandRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyLenormandRecord.swift; sourceTree = "<group>"; };
 		CF29FC9E2F70AC9300EC47F8 /* Lenormand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Lenormand.swift; sourceTree = "<group>"; };
-		CF29FCA02F718C7B00EC47F8 /* DividerStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DividerStyle.swift; sourceTree = "<group>"; };
 		CF41A5932F4DF57000C96018 /* Lystaria.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Lystaria.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CF5A53662FB2CD4700D24F99 /* DocumentIdentityHeaderEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentIdentityHeaderEditorView.swift; sourceTree = "<group>"; };
 		CF6E9D622F8EA3B400140B17 /* MedicationDoseScheduleGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MedicationDoseScheduleGrid.swift; sourceTree = "<group>"; };
@@ -522,20 +523,28 @@
 		CF8421C62F636DCB0069F12F /* ToolboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolboxView.swift; sourceTree = "<group>"; };
 		CF8421C82F638EA70069F12F /* KanbanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KanbanView.swift; sourceTree = "<group>"; };
 		CF8421CA2F638EDB0069F12F /* KanbanBoard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KanbanBoard.swift; sourceTree = "<group>"; };
+		CF84CE5D2FB3AA50004FA24E /* PageCardBlock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageCardBlock.swift; sourceTree = "<group>"; };
+		CF84CE632FB3F9CB004FA24E /* DividerStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DividerStyle.swift; sourceTree = "<group>"; };
+		CF84CE642FB3F9CB004FA24E /* JournalBackgroundSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalBackgroundSettingsSheet.swift; sourceTree = "<group>"; };
+		CF84CE652FB3F9CB004FA24E /* JournalBlockDisplayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalBlockDisplayView.swift; sourceTree = "<group>"; };
+		CF84CE662FB3F9CB004FA24E /* JournalBlockEditorPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalBlockEditorPage.swift; sourceTree = "<group>"; };
+		CF84CE672FB3F9CB004FA24E /* JournalBlockEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalBlockEditorView.swift; sourceTree = "<group>"; };
+		CF84CE682FB3F9CB004FA24E /* JournalBlockPreviewBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalBlockPreviewBuilder.swift; sourceTree = "<group>"; };
+		CF84CE692FB3F9CB004FA24E /* JournalBlockPreviewPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalBlockPreviewPage.swift; sourceTree = "<group>"; };
+		CF84CE6A2FB3F9CB004FA24E /* JournalBlockRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalBlockRow.swift; sourceTree = "<group>"; };
+		CF84CE6B2FB3F9CB004FA24E /* JournalCardBlockPreviewSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalCardBlockPreviewSupport.swift; sourceTree = "<group>"; };
+		CF84CE6C2FB3F9CB004FA24E /* JournalEntryBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalEntryBackground.swift; sourceTree = "<group>"; };
+		CF84CE6D2FB3F9CB004FA24E /* JournalEntryBlockMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalEntryBlockMigration.swift; sourceTree = "<group>"; };
+		CF84CE6E2FB3F9CB004FA24E /* JournalIdentityEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalIdentityEditorView.swift; sourceTree = "<group>"; };
+		CF84CE6F2FB3F9CB004FA24E /* JournalIdentityHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalIdentityHeaderView.swift; sourceTree = "<group>"; };
+		CF84CE702FB3F9CB004FA24E /* JournalInlineStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalInlineStyle.swift; sourceTree = "<group>"; };
+		CF84CE712FB3F9CB004FA24E /* JournalTableEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalTableEditorView.swift; sourceTree = "<group>"; };
+		CF84CE722FB3F9CB004FA24E /* RichBlockTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RichBlockTextView.swift; sourceTree = "<group>"; };
+		CF84CE732FB3F9CB004FA24E /* TagFlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagFlowLayout.swift; sourceTree = "<group>"; };
 		CF8B7F5B2F6B04FE006A7D3B /* BodyStateClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BodyStateClassifier.swift; sourceTree = "<group>"; };
 		CF8B7F5D2F6B0542006A7D3B /* BodyStateRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BodyStateRecord.swift; sourceTree = "<group>"; };
 		CF8B7F5F2F6B0586006A7D3B /* BodyStateHealthKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BodyStateHealthKitManager.swift; sourceTree = "<group>"; };
-		CF8B7F622F6B33FB006A7D3B /* JournalBlockRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalBlockRow.swift; sourceTree = "<group>"; };
-		CF8B7F642F6B3464006A7D3B /* JournalBlockEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalBlockEditorView.swift; sourceTree = "<group>"; };
-		CF8B7F662F6B34BA006A7D3B /* JournalInlineStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalInlineStyle.swift; sourceTree = "<group>"; };
-		CF8B7F682F6B34D8006A7D3B /* RichBlockTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RichBlockTextView.swift; sourceTree = "<group>"; };
-		CF8B7F6A2F6B34FB006A7D3B /* JournalBlockDisplayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalBlockDisplayView.swift; sourceTree = "<group>"; };
 		CF8B7F6C2F6B3550006A7D3B /* JournalBlock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalBlock.swift; sourceTree = "<group>"; };
-		CF8B7F6E2F6B3A46006A7D3B /* JournalBlockPreviewBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalBlockPreviewBuilder.swift; sourceTree = "<group>"; };
-		CF8B7F702F6B3A63006A7D3B /* JournalEntryBlockMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalEntryBlockMigration.swift; sourceTree = "<group>"; };
-		CF8B7F742F6B3A9B006A7D3B /* JournalCardBlockPreviewSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalCardBlockPreviewSupport.swift; sourceTree = "<group>"; };
-		CF8B7F762F6B3ABE006A7D3B /* JournalBlockEditorPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalBlockEditorPage.swift; sourceTree = "<group>"; };
-		CF8B7F782F6B3AD4006A7D3B /* JournalBlockPreviewPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalBlockPreviewPage.swift; sourceTree = "<group>"; };
 		CF8B7F7E2F6B7300006A7D3B /* SelfCarePointsProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfCarePointsProfile.swift; sourceTree = "<group>"; };
 		CF8B7F802F6B7327006A7D3B /* SelfCarePointEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfCarePointEntry.swift; sourceTree = "<group>"; };
 		CF8B7F822F6B738D006A7D3B /* SelfCarePointsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfCarePointsManager.swift; sourceTree = "<group>"; };
@@ -675,9 +684,6 @@
 		CFEEED702FB029A200F03103 /* DocumentTableEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentTableEditorView.swift; sourceTree = "<group>"; };
 		CFEEED722FB02B0C00F03103 /* DocumentTableData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentTableData.swift; sourceTree = "<group>"; };
 		CFEEED742FB0ECDC00F03103 /* JournalTableData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalTableData.swift; sourceTree = "<group>"; };
-		CFEEED762FB0ECFF00F03103 /* JournalBackgroundSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalBackgroundSettingsSheet.swift; sourceTree = "<group>"; };
-		CFEEED772FB0ECFF00F03103 /* JournalEntryBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalEntryBackground.swift; sourceTree = "<group>"; };
-		CFEEED782FB0ECFF00F03103 /* JournalTableEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalTableEditorView.swift; sourceTree = "<group>"; };
 		CFEEED7C2FB10BD700F03103 /* DocumentFolder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentFolder.swift; sourceTree = "<group>"; };
 		CFEEED7E2FB10E8400F03103 /* DocumentFolderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentFolderView.swift; sourceTree = "<group>"; };
 		CFEEED802FB22BB600F03103 /* MoreTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreTabView.swift; sourceTree = "<group>"; };
@@ -974,26 +980,28 @@
 			path = Tools;
 			sourceTree = "<group>";
 		};
-		CF8B7F612F6B33E5006A7D3B /* Helpers */ = {
+		CF84CE742FB3F9CB004FA24E /* Journal */ = {
 			isa = PBXGroup;
 			children = (
-				CFEEED762FB0ECFF00F03103 /* JournalBackgroundSettingsSheet.swift */,
-				CFEEED772FB0ECFF00F03103 /* JournalEntryBackground.swift */,
-				CFEEED782FB0ECFF00F03103 /* JournalTableEditorView.swift */,
-				CF175FEF2FA3A16500C58C6C /* TagFlowLayout.swift */,
-				CF29FCA02F718C7B00EC47F8 /* DividerStyle.swift */,
-				CF8B7F782F6B3AD4006A7D3B /* JournalBlockPreviewPage.swift */,
-				CF8B7F762F6B3ABE006A7D3B /* JournalBlockEditorPage.swift */,
-				CF8B7F742F6B3A9B006A7D3B /* JournalCardBlockPreviewSupport.swift */,
-				CF8B7F702F6B3A63006A7D3B /* JournalEntryBlockMigration.swift */,
-				CF8B7F6E2F6B3A46006A7D3B /* JournalBlockPreviewBuilder.swift */,
-				CF8B7F6A2F6B34FB006A7D3B /* JournalBlockDisplayView.swift */,
-				CF8B7F682F6B34D8006A7D3B /* RichBlockTextView.swift */,
-				CF8B7F662F6B34BA006A7D3B /* JournalInlineStyle.swift */,
-				CF8B7F642F6B3464006A7D3B /* JournalBlockEditorView.swift */,
-				CF8B7F622F6B33FB006A7D3B /* JournalBlockRow.swift */,
+				CF84CE632FB3F9CB004FA24E /* DividerStyle.swift */,
+				CF84CE642FB3F9CB004FA24E /* JournalBackgroundSettingsSheet.swift */,
+				CF84CE652FB3F9CB004FA24E /* JournalBlockDisplayView.swift */,
+				CF84CE662FB3F9CB004FA24E /* JournalBlockEditorPage.swift */,
+				CF84CE672FB3F9CB004FA24E /* JournalBlockEditorView.swift */,
+				CF84CE682FB3F9CB004FA24E /* JournalBlockPreviewBuilder.swift */,
+				CF84CE692FB3F9CB004FA24E /* JournalBlockPreviewPage.swift */,
+				CF84CE6A2FB3F9CB004FA24E /* JournalBlockRow.swift */,
+				CF84CE6B2FB3F9CB004FA24E /* JournalCardBlockPreviewSupport.swift */,
+				CF84CE6C2FB3F9CB004FA24E /* JournalEntryBackground.swift */,
+				CF84CE6D2FB3F9CB004FA24E /* JournalEntryBlockMigration.swift */,
+				CF84CE6E2FB3F9CB004FA24E /* JournalIdentityEditorView.swift */,
+				CF84CE6F2FB3F9CB004FA24E /* JournalIdentityHeaderView.swift */,
+				CF84CE702FB3F9CB004FA24E /* JournalInlineStyle.swift */,
+				CF84CE712FB3F9CB004FA24E /* JournalTableEditorView.swift */,
+				CF84CE722FB3F9CB004FA24E /* RichBlockTextView.swift */,
+				CF84CE732FB3F9CB004FA24E /* TagFlowLayout.swift */,
 			);
-			path = Helpers;
+			path = Journal;
 			sourceTree = "<group>";
 		};
 		CF8B7F8C2F6C4A7E006A7D3B /* Bookmark */ = {
@@ -1270,9 +1278,9 @@
 		CF8D833A2F50A60F0092FC98 /* Lystaria */ = {
 			isa = PBXGroup;
 			children = (
+				CF84CE742FB3F9CB004FA24E /* Journal */,
 				CFEEED5F2FAE93DE00F03103 /* Documents */,
 				CF175FF32FA6801600C58C6C /* Network */,
-				CF8B7F612F6B33E5006A7D3B /* Helpers */,
 				CF13B6252F6442AD008D3CE9 /* Entities */,
 				CF13B6222F644205008D3CE9 /* Writers */,
 				CF13B6212F6441F7008D3CE9 /* Intents */,
@@ -1375,6 +1383,7 @@
 		CFEEED5F2FAE93DE00F03103 /* Documents */ = {
 			isa = PBXGroup;
 			children = (
+				CF84CE5D2FB3AA50004FA24E /* PageCardBlock.swift */,
 				CF5A53662FB2CD4700D24F99 /* DocumentIdentityHeaderEditorView.swift */,
 				CF90C83B2FB2ABA400AD5DCC /* DocumentIdentityHeaderView.swift */,
 				CFEEED7E2FB10E8400F03103 /* DocumentFolderView.swift */,
@@ -1626,6 +1635,7 @@
 				CF822F0E2F9554A200CC5B80 /* KanbanBoard.swift in Sources */,
 				CF822EF12F95222000CC5B80 /* Habit.swift in Sources */,
 				CF822F0F2F95556D00CC5B80 /* LystariaTheme.swift in Sources */,
+				CF84CE872FB40779004FA24E /* JournalInlineStyle.swift in Sources */,
 				CF822F142F95776F00CC5B80 /* CalendarEvent.swift in Sources */,
 				CF822F0C2F9551CC00CC5B80 /* ReminderCompute.swift in Sources */,
 				CF822EFA2F95328C00CC5B80 /* ReadingStats.swift in Sources */,
@@ -1645,7 +1655,6 @@
 				CF13B6522F678C27008D3CE9 /* JournalEntry.swift in Sources */,
 				CF822EF92F9531DC00CC5B80 /* DailyReadingProgress.swift in Sources */,
 				CF92D53A2F75837200174F04 /* MoodStreak.swift in Sources */,
-				CF8B7F7B2F6B4375006A7D3B /* JournalInlineStyle.swift in Sources */,
 				CF13B6562F678D53008D3CE9 /* JournalBook.swift in Sources */,
 				CF13B6602F68C2CA008D3CE9 /* JournalPrompt.swift in Sources */,
 			);
@@ -1659,13 +1668,13 @@
 				CF29FC8D2F70762E00EC47F8 /* JournalPrompt.swift in Sources */,
 				CF29FC7B2F6D960E00EC47F8 /* MoodLog.swift in Sources */,
 				CF29FC932F707F5600EC47F8 /* KanbanBoard.swift in Sources */,
+				CF84CE862FB40711004FA24E /* JournalInlineStyle.swift in Sources */,
 				CF29FC8A2F7073F500EC47F8 /* JournalEntry.swift in Sources */,
 				CF29FC912F707E3900EC47F8 /* JournalPromptUsage.swift in Sources */,
 				CFB0B1772F832BF900B42AB3 /* ReadingTimerActivityAttributes.swift in Sources */,
 				CF29FC902F707E1F00EC47F8 /* AuthUser.swift in Sources */,
 				CF29FC922F707E4D00EC47F8 /* Reminder.swift in Sources */,
 				CF29FC8E2F70768000EC47F8 /* JournalBlock.swift in Sources */,
-				CF29FC8F2F7076A700EC47F8 /* JournalInlineStyle.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1692,11 +1701,25 @@
 				CFC6B1E82F99AD2E00A60409 /* BuddyGroupView.swift in Sources */,
 				CFC6B1E92F99AD2E00A60409 /* BuddyReadingView.swift in Sources */,
 				CFC6B1EA2F99AD2E00A60409 /* BuddyProgressUpdateSheet.swift in Sources */,
-				CFEEED792FB0ECFF00F03103 /* JournalEntryBackground.swift in Sources */,
-				CFEEED7A2FB0ECFF00F03103 /* JournalTableEditorView.swift in Sources */,
-				CFEEED7B2FB0ECFF00F03103 /* JournalBackgroundSettingsSheet.swift in Sources */,
 				CFC6B1EB2F99AD2E00A60409 /* BuddyPostAnnouncementSheet.swift in Sources */,
 				CF8B7F922F6C4DAF006A7D3B /* BookmarkDetailView.swift in Sources */,
+				CF84CE752FB3F9CB004FA24E /* RichBlockTextView.swift in Sources */,
+				CF84CE762FB3F9CB004FA24E /* JournalTableEditorView.swift in Sources */,
+				CF84CE772FB3F9CB004FA24E /* JournalIdentityHeaderView.swift in Sources */,
+				CF84CE782FB3F9CB004FA24E /* JournalBlockPreviewPage.swift in Sources */,
+				CF84CE792FB3F9CB004FA24E /* JournalIdentityEditorView.swift in Sources */,
+				CF84CE7A2FB3F9CB004FA24E /* JournalCardBlockPreviewSupport.swift in Sources */,
+				CF84CE7B2FB3F9CB004FA24E /* JournalBlockDisplayView.swift in Sources */,
+				CF84CE7C2FB3F9CB004FA24E /* JournalBlockEditorPage.swift in Sources */,
+				CF84CE7D2FB3F9CB004FA24E /* TagFlowLayout.swift in Sources */,
+				CF84CE7E2FB3F9CB004FA24E /* JournalBlockRow.swift in Sources */,
+				CF84CE7F2FB3F9CB004FA24E /* JournalInlineStyle.swift in Sources */,
+				CF84CE802FB3F9CB004FA24E /* JournalEntryBackground.swift in Sources */,
+				CF84CE812FB3F9CB004FA24E /* JournalBlockPreviewBuilder.swift in Sources */,
+				CF84CE822FB3F9CB004FA24E /* JournalBlockEditorView.swift in Sources */,
+				CF84CE832FB3F9CB004FA24E /* JournalBackgroundSettingsSheet.swift in Sources */,
+				CF84CE842FB3F9CB004FA24E /* JournalEntryBlockMigration.swift in Sources */,
+				CF84CE852FB3F9CB004FA24E /* DividerStyle.swift in Sources */,
 				CF8421892F6079EC0069F12F /* OnboardingManager.swift in Sources */,
 				CF13B6712F69B610008D3CE9 /* HealthMetricsHistoryPopupView.swift in Sources */,
 				CF13B67F2F69DCF7008D3CE9 /* ChecklistEntity.swift in Sources */,
@@ -1713,7 +1736,6 @@
 				CF8421C42F632DCB0069F12F /* HoroscopeService.swift in Sources */,
 				CF13B6182F63B996008D3CE9 /* MoodIntentEnum.swift in Sources */,
 				CF8B7FBC2F6C789C006A7D3B /* SharedFolderOption.swift in Sources */,
-				CF8B7F712F6B3A6B006A7D3B /* JournalEntryBlockMigration.swift in Sources */,
 				CF8421A62F607E310069F12F /* OnboardingTargetKey.swift in Sources */,
 				CF8D83202F50A4770092FC98 /* KeychainHelper.swift in Sources */,
 				CF29FC822F6E4F0C00EC47F8 /* HabitSkip.swift in Sources */,
@@ -1746,7 +1768,7 @@
 				CF13B6462F675D8A008D3CE9 /* DashboardConsistencyModels.swift in Sources */,
 				CFC6B1F72F99AE8100A60409 /* SprintStartSheet.swift in Sources */,
 				CF6E9D632F8EA3B400140B17 /* MedicationDoseScheduleGrid.swift in Sources */,
-				CF8B7F632F6B3402006A7D3B /* JournalBlockRow.swift in Sources */,
+				CF84CE5E2FB3AA50004FA24E /* PageCardBlock.swift in Sources */,
 				CF8D837C2F53E1E60092FC98 /* SignInView.swift in Sources */,
 				CFC6B1FB2F99AEC400A60409 /* SprintEndPageSheet.swift in Sources */,
 				CF13B65F2F68BE6E008D3CE9 /* JournalPrompt.swift in Sources */,
@@ -1767,10 +1789,8 @@
 				CF8B7FB32F6C7371006A7D3B /* SharedBookmarkPayload.swift in Sources */,
 				CFAF691A2F7AA6D500E74833 /* SymptomLoggerView.swift in Sources */,
 				CF8D83432F50E7930092FC98 /* AuthDTOs.swift in Sources */,
-				CF29FCA12F718C8100EC47F8 /* DividerStyle.swift in Sources */,
 				CF8D832F2F50A4940092FC98 /* UserSettings.swift in Sources */,
 				CF92D5622F75920B00174F04 /* DailyCompletionArcHelper.swift in Sources */,
-				CF8B7F6F2F6B3A4E006A7D3B /* JournalBlockPreviewBuilder.swift in Sources */,
 				CF8421912F607AE90069F12F /* WaterTrackingView.swift in Sources */,
 				CF8421922F607AE90069F12F /* StepCountView.swift in Sources */,
 				CFAF69022F76BF4900E74833 /* BubbleDistractionView.swift in Sources */,
@@ -1789,7 +1809,6 @@
 				CF8D834A2F5124C70092FC98 /* LystariaComponents.swift in Sources */,
 				CF2051402F5788CE006B71AA /* JournalBookEditorSheet.swift in Sources */,
 				CF822EBD2F9039B000CC5B80 /* EventAttendee.swift in Sources */,
-				CF175FF02FA3A16500C58C6C /* TagFlowLayout.swift in Sources */,
 				CF20514C2F578E11006B71AA /* JournalPreviewSheet.swift in Sources */,
 				CF8D83862F54C4A10092FC98 /* NotificationManager.swift in Sources */,
 				CF13B6792F69B75F008D3CE9 /* HealthMetricsCard.swift in Sources */,
@@ -1827,16 +1846,13 @@
 				CF822EED2F951CA200CC5B80 /* WatchSessionManager.swift in Sources */,
 				CF8D83322F50A4940092FC98 /* ChecklistItem.swift in Sources */,
 				CFF7C5B12F72F19300A67EC3 /* MedicationPageView.swift in Sources */,
-				CF8B7F652F6B346B006A7D3B /* JournalBlockEditorView.swift in Sources */,
 				CF13B62D2F644AD3008D3CE9 /* AddWaterIntent.swift in Sources */,
 				CFAF69222F7C6B7800E74833 /* LogReadingSessionIntent.swift in Sources */,
 				CF8D833F2F50D5EE0092FC98 /* AppState.swift in Sources */,
-				CF8B7F772F6B3AC5006A7D3B /* JournalBlockEditorPage.swift in Sources */,
 				CF0A09D72F5CA7A200401658 /* JournalPromptService.swift in Sources */,
 				CF8D83332F50A4940092FC98 /* HabitLog.swift in Sources */,
 				CFEEED382FAA42CC00F03103 /* DocumentsView.swift in Sources */,
 				CF13B63E2F65C73F008D3CE9 /* LocationSearchSheet.swift in Sources */,
-				CF8B7F752F6B3AA6006A7D3B /* JournalCardBlockPreviewSupport.swift in Sources */,
 				CF13B6392F65C064008D3CE9 /* ChecklistItemIntent.swift in Sources */,
 				CFC6B1CE2F965FC700A60409 /* CalendarManageSheet.swift in Sources */,
 				CFEEED282FA7EF2100F03103 /* ReleaseNotesData.swift in Sources */,
@@ -1855,7 +1871,6 @@
 				CFC6B1F32F99ADFD00A60409 /* SprintSocketManager.swift in Sources */,
 				CFC6B1F92F99AEA300A60409 /* SprintJoinSheet.swift in Sources */,
 				CFEEED752FB0ECDC00F03103 /* JournalTableData.swift in Sources */,
-				CF8B7F672F6B34BF006A7D3B /* JournalInlineStyle.swift in Sources */,
 				CF8B7F9C2F6C6A35006A7D3B /* BookmarkIconLibrary.swift in Sources */,
 				CF13B6402F65CECB008D3CE9 /* CalendarEventDetailOverlay.swift in Sources */,
 				CFC6B2012F9A681900A60409 /* SetDisplayNameSheet.swift in Sources */,
@@ -1912,15 +1927,12 @@
 				CF0A09D12F5C8C7400401658 /* BookSummarySheet.swift in Sources */,
 				CF175FF92FA680B900C58C6C /* WellnessWallAIService.swift in Sources */,
 				CF8B7FB62F6C73AE006A7D3B /* SharedBookmarkInbox.swift in Sources */,
-				CF8B7F792F6B3ADD006A7D3B /* JournalBlockPreviewPage.swift in Sources */,
 				CF822EC42F90605000CC5B80 /* JoinSharedEventView.swift in Sources */,
 				CF822EC52F90605000CC5B80 /* SharedEventDetailView.swift in Sources */,
 				CF0B8E672F6CBD1500D5D2C8 /* LogExerciseIntent.swift in Sources */,
 				CFAF69042F7708D900E74833 /* BookSeries.swift in Sources */,
 				CF822EEB2F9268E100CC5B80 /* ReadingGoalSnapshot.swift in Sources */,
-				CF8B7F692F6B34DF006A7D3B /* RichBlockTextView.swift in Sources */,
 				CF822F062F95506400CC5B80 /* ReminderCompute.swift in Sources */,
-				CF8B7F6B2F6B3501006A7D3B /* JournalBlockDisplayView.swift in Sources */,
 				CF8B7F902F6C4C1A006A7D3B /* BookmarkCard.swift in Sources */,
 				CF8B7F812F6B732E006A7D3B /* SelfCarePointEntry.swift in Sources */,
 				CF822EE92F9141A800CC5B80 /* SleepHealthKitManager.swift in Sources */,
@@ -2349,7 +2361,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 				XROS_DEPLOYMENT_TARGET = 26.2;
 			};
 			name = Debug;
@@ -2430,7 +2442,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 				XROS_DEPLOYMENT_TARGET = 26.2;
 			};
 			name = Release;

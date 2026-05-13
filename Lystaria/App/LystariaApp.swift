@@ -131,6 +131,12 @@ struct LystariaApp: App {
                 WatchSessionManager.shared.activate()
 
                     appState.bootstrap(modelContext: sharedModelContainer.mainContext)
+
+                    if let settings = try? sharedModelContainer.mainContext.fetch(FetchDescriptor<UserSettings>()).first {
+                        LimitManager.shared.syncPremiumBypass(from: settings)
+                        PremiumManager.shared.syncPremiumBypass(from: settings)
+                    }
+
                     seedReleaseNotesIfNeeded(modelContext: sharedModelContainer.mainContext)
                     SharedBookmarkImportManager.importPendingBookmark(modelContext: sharedModelContainer.mainContext)
                     SharedFolderExportManager.exportFolders(modelContext: sharedModelContainer.mainContext)
@@ -157,6 +163,12 @@ struct LystariaApp: App {
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
                 SelfCarePointsManager.scheduleWeeklyResetTimer(modelContainer: sharedModelContainer)
                 notificationManager.refreshAuthorizationStatus()
+
+                    if let settings = try? sharedModelContainer.mainContext.fetch(FetchDescriptor<UserSettings>()).first {
+                        LimitManager.shared.syncPremiumBypass(from: settings)
+                        PremiumManager.shared.syncPremiumBypass(from: settings)
+                    }
+
                     SharedBookmarkImportManager.importPendingBookmark(modelContext: sharedModelContainer.mainContext)
                     SharedFolderExportManager.exportFolders(modelContext: sharedModelContainer.mainContext)
                     processRefills(modelContext: sharedModelContainer.mainContext)

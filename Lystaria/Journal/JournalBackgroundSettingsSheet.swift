@@ -12,6 +12,7 @@ struct JournalBackgroundSettingsSheet: View {
     @Bindable var entry: JournalEntry
 
     @State private var showPhotoPicker = false
+    @State private var showCoverPhotoPicker = false
 
     var body: some View {
         NavigationStack {
@@ -32,6 +33,79 @@ struct JournalBackgroundSettingsSheet: View {
                                 Text("Customize the background appearance behind your journal entry.")
                                     .font(.callout)
                                     .foregroundStyle(.white.opacity(0.72))
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+
+                        // MARK: - Cover Image
+
+                        GlassCard {
+                            VStack(alignment: .leading, spacing: 16) {
+
+                                Text("Cover Image")
+                                    .font(.headline)
+                                    .foregroundStyle(.white)
+
+                                if let data = entry.coverImageData,
+                                   let uiImage = UIImage(data: data) {
+
+                                    Image(uiImage: uiImage)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(height: 160)
+                                        .frame(maxWidth: .infinity)
+                                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+                                    VStack(alignment: .leading, spacing: 10) {
+                                        HStack {
+                                            Text("Vertical Position")
+                                                .foregroundStyle(.white)
+                                            Spacer()
+                                            Text(verticalOffsetLabel)
+                                                .foregroundStyle(.white.opacity(0.7))
+                                        }
+                                        Slider(
+                                            value: $entry.coverImageVerticalOffset,
+                                            in: -1.0...1.0
+                                        )
+                                        .tint(LColors.accent)
+                                    }
+                                }
+
+                                Button {
+                                    showCoverPhotoPicker = true
+                                } label: {
+                                    HStack(spacing: 10) {
+                                        Image(systemName: "photo")
+                                        Text(entry.coverImageData == nil
+                                             ? "Add Cover Image"
+                                             : "Replace Cover Image")
+                                    }
+                                    .font(.headline)
+                                    .foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 14)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                            .fill(.white.opacity(0.08))
+                                    )
+                                }
+                                .buttonStyle(.plain)
+
+                                if entry.coverImageData != nil {
+                                    Button(role: .destructive) {
+                                        entry.coverImageData = nil
+                                        entry.coverImageVerticalOffset = 0.0
+                                        entry.touch()
+                                    } label: {
+                                        HStack {
+                                            Image(systemName: "trash.fill")
+                                            Text("Remove Cover Image")
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 14)
+                                    }
+                                }
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -288,7 +362,20 @@ struct JournalBackgroundSettingsSheet: View {
                     entry.touch()
                 }
             }
+            .sheet(isPresented: $showCoverPhotoPicker) {
+                JournalBackgroundImagePickerSheet { data in
+                    entry.coverImageData = data
+                    entry.touch()
+                }
+            }
         }
+    }
+
+    private var verticalOffsetLabel: String {
+        let val = entry.coverImageVerticalOffset
+        if val < -0.1 { return "Top" }
+        if val > 0.1 { return "Bottom" }
+        return "Center"
     }
 
     // MARK: - Bindings

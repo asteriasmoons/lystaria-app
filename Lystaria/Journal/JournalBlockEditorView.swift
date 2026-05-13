@@ -20,9 +20,16 @@ extension Notification.Name {
 
 struct JournalBlockEditorView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Bindable var entry: JournalEntry
     @Binding var focusedBlockID: UUID?
+    /// Optional identity header injected at the top of the first page card
+    var identityHeader: AnyView? = nil
     @State private var isMutatingBlocks = false
+
+    private var innerPageMaxWidth: CGFloat {
+        horizontalSizeClass == .regular ? 720 : .infinity
+    }
     @State private var draggingBlock: JournalBlock? = nil
     @State private var dragOverIndex: Int? = nil
     @State private var selectedBlockIDs: Set<UUID> = []
@@ -79,47 +86,63 @@ struct JournalBlockEditorView: View {
 
                     // Floating page card
                     VStack(alignment: .leading, spacing: 0) {
-                        ForEach(page, id: \.1.id) { (i, block) in
-                            JournalBlockRow(
-                                block: block,
-                                onAddBelow: { b, type, initialText in insertBlockBelow(b, type, initialText) },
-                                onDelete: deleteBlock,
-                                onMoveUp: moveBlockUp,
-                                onMoveDown: moveBlockDown,
-                                onTransform: transformBlock,
-                                isSelectionMode: isSelectionMode,
-                                isSelectedForBatchAction: selectedBlockIDs.contains(block.id),
-                                selectedBlockCount: selectedBlockIDs.count,
-                                onEnterSelectionMode: enterSelectionMode,
-                                onToggleBatchSelection: toggleBlockSelection,
-                                onClearBatchSelection: clearBlockSelection,
-                                onDeleteSelectedBlocks: deleteSelectedBlocks,
-                                onIndentSelectedBlocksIn: indentSelectedBlocksIn,
-                                onIndentSelectedBlocksOut: indentSelectedBlocksOut,
-                                journalTextColor: resolvedJournalTextColor
-                            )
-                            .opacity(draggingBlock?.id == block.id ? 0.4 : 1)
-                            .onDrag {
-                                draggingBlock = block
-                                dragOverIndex = nil
-                                return NSItemProvider(object: block.id.uuidString as NSString)
-                            }
-                            .padding(.vertical, isSelectionMode ? 3 : 6)
+                        // Inject identity header at top of first page card only
+                        if pageIndex == 0, let header = identityHeader {
+                            header
+                        }
 
-                            if draggingBlock != nil {
-                                BlockDropZone(index: i + 1, dragOverIndex: $dragOverIndex)
-                                    .onDrop(of: [.plainText], delegate: IndexedDropDelegate(
-                                        index: i + 1,
-                                        draggingBlock: $draggingBlock,
-                                        dragOverIndex: $dragOverIndex,
-                                        visibleBlocks: visibleBlocks,
-                                        onMove: reorderBlockToIndex
-                                    ))
+                        VStack(alignment: .leading, spacing: 0) {
+                            if page.isEmpty {
+                                // Empty page — show placeholder so it looks and feels like a real card
+                                Text("Tap to write...")
+                                    .font(.system(size: 15, weight: .regular))
+                                    .foregroundStyle(LColors.textSecondary.opacity(0.5))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            } else {
+                                ForEach(page, id: \.1.id) { (i, block) in
+                                    JournalBlockRow(
+                                        block: block,
+                                        onAddBelow: { b, type, initialText in insertBlockBelow(b, type, initialText) },
+                                        onDelete: deleteBlock,
+                                        onMoveUp: moveBlockUp,
+                                        onMoveDown: moveBlockDown,
+                                        onTransform: transformBlock,
+                                        isSelectionMode: isSelectionMode,
+                                        isSelectedForBatchAction: selectedBlockIDs.contains(block.id),
+                                        selectedBlockCount: selectedBlockIDs.count,
+                                        onEnterSelectionMode: enterSelectionMode,
+                                        onToggleBatchSelection: toggleBlockSelection,
+                                        onClearBatchSelection: clearBlockSelection,
+                                        onDeleteSelectedBlocks: deleteSelectedBlocks,
+                                        onIndentSelectedBlocksIn: indentSelectedBlocksIn,
+                                        onIndentSelectedBlocksOut: indentSelectedBlocksOut,
+                                        journalTextColor: resolvedJournalTextColor
+                                    )
+                                    .opacity(draggingBlock?.id == block.id ? 0.4 : 1)
+                                    .onDrag {
+                                        draggingBlock = block
+                                        dragOverIndex = nil
+                                        return NSItemProvider(object: block.id.uuidString as NSString)
+                                    }
+                                    .padding(.vertical, isSelectionMode ? 3 : 6)
+
+                                    if draggingBlock != nil {
+                                        BlockDropZone(index: i + 1, dragOverIndex: $dragOverIndex)
+                                            .onDrop(of: [.plainText], delegate: IndexedDropDelegate(
+                                                index: i + 1,
+                                                draggingBlock: $draggingBlock,
+                                                dragOverIndex: $dragOverIndex,
+                                                visibleBlocks: visibleBlocks,
+                                                onMove: reorderBlockToIndex
+                                            ))
+                                    }
+                                }
                             }
                         }
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 28)
+                        .padding(.top, (pageIndex == 0 && identityHeader != nil) ? 8 : 28)
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 28)
                     .background(
                         RoundedRectangle(cornerRadius: 20, style: .continuous)
                             .fill(Color.black.opacity(0.34))
@@ -134,7 +157,13 @@ struct JournalBlockEditorView: View {
                             .overlay(
                                 PageSheetTapOverlay {
                                     guard !isSelectionMode else { return }
-                                    if let last = page.last?.1 {
+                                    if page.isEmpty {
+                                        // Empty new page card — insert paragraph after the preceding page break
+                                        let allPages = blockPages
+                                        if pageIndex > 0, let breakBlock = allPages[pageIndex - 1].breakBlock {
+                                            insertBlockBelow(breakBlock, .paragraph, "")
+                                        }
+                                    } else if let last = page.last?.1 {
                                         if last.type == .paragraph && last.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                             let id = last.id
                                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
@@ -177,6 +206,8 @@ struct JournalBlockEditorView: View {
                 }
             }
             .padding(.bottom, 140)
+            .frame(maxWidth: innerPageMaxWidth)
+            .frame(maxWidth: .infinity)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             bottomAddBlockBar

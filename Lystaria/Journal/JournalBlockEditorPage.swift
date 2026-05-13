@@ -5,11 +5,13 @@
 
 import SwiftUI
 import SwiftData
+import PhotosUI
 
 struct JournalBlockEditorPage: View {
     @Environment(\.modelContext) private var modelContext
-    @StateObject private var limits = LimitManager.shared
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @StateObject private var limits = LimitManager.shared
 
     let book: JournalBook
     let existingEntry: JournalEntry?
@@ -24,25 +26,53 @@ struct JournalBlockEditorPage: View {
     @State private var showBackgroundSettingsSheet = false
     @State private var showTextColorSheet = false
     @State private var textColorPickerSelection: Color = .white
-    // Focused block tracking for paintbrush menu
     @State private var focusedBlockID: UUID? = nil
-    // Block accent color sheets
-    @State private var showDividerColorSheet = false
-    @State private var showBlockquoteColorSheet = false
-    @State private var showCalloutColorSheet = false
-    @State private var blockAccentColor1: Color = Color(red: 0.32, green: 0.27, blue: 0.96)
-    @State private var blockAccentColor2: Color = Color(red: 0.71, green: 0.45, blue: 0.98)
+    @State private var showBlockColorSheet = false
+    @State private var blockColor1Selection: Color = Color(LColors.accent)
+    @State private var blockColor2Selection: Color = Color(LColors.accent)
+    
+    private var editorInnerPageMaxWidth: CGFloat {
+        horizontalSizeClass == .regular ? 720 : 410
+    }
+
+    private var focusedBlock: JournalBlock? {
+        guard let id = focusedBlockID else { return nil }
+        return workingEntry?.sortedBlocks.first { $0.id == id }
+    }
+
+    private var focusedBlockSupportsColor: Bool {
+        guard let b = focusedBlock else { return false }
+        return b.type == .divider || b.type == .callout || b.type == .blockquote || b.isBlockquoteStyle || b.isCalloutStyle
+    }
+
+    private var focusedBlockColorLabel: String {
+        guard let b = focusedBlock else { return "Block Color" }
+        if b.type == .divider { return "Divider Color" }
+        if b.type == .callout || b.isCalloutStyle { return "Callout Color" }
+        return "Blockquote Color"
+    }
 
     var body: some View {
         ZStack {
-            LystariaBackground().ignoresSafeArea()
+            JournalEntryBackground(entry: workingEntry ?? JournalEntry())
+                .ignoresSafeArea()
 
             Group {
                 if let workingEntry {
-                    VStack(spacing: 0) {
-                        pageMetaFields(entry: workingEntry)
-                        JournalBlockEditorView(entry: workingEntry, focusedBlockID: $focusedBlockID)
-                    }
+                    JournalBlockEditorView(
+                        entry: workingEntry,
+                        focusedBlockID: $focusedBlockID,
+                        identityHeader: AnyView(
+                            JournalIdentityEditorView(
+                                entry: workingEntry,
+                                pageTitleDraft: $pageTitleDraft,
+                                pageTagsDraft: $pageTagsDraft
+                            )
+                        )
+                    )
+                    .frame(maxWidth: editorInnerPageMaxWidth)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .scrollDismissesKeyboard(.interactively)
                 } else {
                     ProgressView().tint(.white)
                 }
@@ -84,34 +114,12 @@ struct JournalBlockEditorPage: View {
                             Label("Text Color", systemImage: "textformat")
                         }
 
-                        // Block-level accent colors — shown only when relevant block is focused
-                        if let block = focusedBlock {
-                            if block.type == .divider {
-                                Divider()
-                                Button {
-                                    loadBlockColors(from: block.dividerColorHex)
-                                    showDividerColorSheet = true
-                                } label: {
-                                    Label("Divider Color", systemImage: "paintpalette")
-                                }
-                            }
-                            if block.isBlockquoteStyle || block.type == .blockquote {
-                                Divider()
-                                Button {
-                                    loadBlockColors(from: block.blockquoteColorHex)
-                                    showBlockquoteColorSheet = true
-                                } label: {
-                                    Label("Blockquote Color", systemImage: "paintpalette")
-                                }
-                            }
-                            if block.isCalloutStyle || block.type == .callout {
-                                Divider()
-                                Button {
-                                    loadBlockColors(from: block.calloutColorHex)
-                                    showCalloutColorSheet = true
-                                } label: {
-                                    Label("Callout Color", systemImage: "paintpalette")
-                                }
+                        if focusedBlockSupportsColor, let block = focusedBlock {
+                            Button {
+                                loadBlockColors(from: currentBlockColorHex(for: block))
+                                showBlockColorSheet = true
+                            } label: {
+                                Label(focusedBlockColorLabel, systemImage: "paintpalette")
                             }
                         }
                     } label: {
@@ -128,67 +136,13 @@ struct JournalBlockEditorPage: View {
                 }
             }
         }
-        .sheet(isPresented: $showDividerColorSheet) {
+        
+        .sheet(isPresented: $showBlockColorSheet) {
             if let block = focusedBlock {
-                blockAccentColorPickerSheet(
-                    title: "Divider Color",
-                    hasCustom: !block.dividerColorHex.isEmpty,
-                    onApply: {
-                        block.dividerColorHex = hexGradient(blockAccentColor1, blockAccentColor2)
-                        block.touch()
-                        showDividerColorSheet = false
-                    },
-                    onReset: {
-                        block.dividerColorHex = ""
-                        block.touch()
-                        showDividerColorSheet = false
-                    }
-                )
-                .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
-                .preferredColorScheme(.dark)
-            }
-        }
-        .sheet(isPresented: $showBlockquoteColorSheet) {
-            if let block = focusedBlock {
-                blockAccentColorPickerSheet(
-                    title: "Blockquote Color",
-                    hasCustom: !block.blockquoteColorHex.isEmpty,
-                    onApply: {
-                        block.blockquoteColorHex = hexGradient(blockAccentColor1, blockAccentColor2)
-                        block.touch()
-                        showBlockquoteColorSheet = false
-                    },
-                    onReset: {
-                        block.blockquoteColorHex = ""
-                        block.touch()
-                        showBlockquoteColorSheet = false
-                    }
-                )
-                .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
-                .preferredColorScheme(.dark)
-            }
-        }
-        .sheet(isPresented: $showCalloutColorSheet) {
-            if let block = focusedBlock {
-                blockAccentColorPickerSheet(
-                    title: "Callout Color",
-                    hasCustom: !block.calloutColorHex.isEmpty,
-                    onApply: {
-                        block.calloutColorHex = hexGradient(blockAccentColor1, blockAccentColor2)
-                        block.touch()
-                        showCalloutColorSheet = false
-                    },
-                    onReset: {
-                        block.calloutColorHex = ""
-                        block.touch()
-                        showCalloutColorSheet = false
-                    }
-                )
-                .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
-                .preferredColorScheme(.dark)
+                blockColorSheet(for: block)
+                    .presentationDetents([.medium])
+                    .presentationDragIndicator(.visible)
+                    .preferredColorScheme(.dark)
             }
         }
         .sheet(isPresented: $showBackgroundSettingsSheet) {
@@ -259,50 +213,6 @@ struct JournalBlockEditorPage: View {
             cleanupEmptyNewEntryIfNeeded()
             isCompletingAction = false
         }
-    }
-
-    @ViewBuilder
-    private func pageMetaFields(entry: JournalEntry) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            TextField("Entry Title", text: $pageTitleDraft)
-                .textFieldStyle(.plain)
-                .font(.system(size: 24, weight: .bold))
-                .foregroundStyle(LColors.textPrimary)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(Color.white.opacity(0.06))
-                .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-                .onChange(of: pageTitleDraft) {
-                    entry.title = pageTitleDraft
-                    entry.updatedAt = Date()
-                    try? modelContext.save()
-                }
-
-            TextField("Tags (comma separated)", text: $pageTagsDraft)
-                .textFieldStyle(.plain)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(LColors.textPrimary)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(Color.white.opacity(0.05))
-                .overlay(RoundedRectangle(cornerRadius: 14).stroke(LColors.glassBorder, lineWidth: 1))
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-                .onChange(of: pageTagsDraft) {
-                    let parsed = pageTagsDraft
-                        .split(separator: ",")
-                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                        .filter { !$0.isEmpty }
-                    entry.tags = parsed
-                    entry.updatedAt = Date()
-                    try? modelContext.save()
-                }
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
-        .padding(.bottom, 8)
     }
 
     private func prepareEntry() {
@@ -390,15 +300,94 @@ struct JournalBlockEditorPage: View {
         dismiss()
     }
 
-    // MARK: - Focused Block
+    // MARK: - Block Color Sheet
 
-    private var focusedBlock: JournalBlock? {
-        guard let id = focusedBlockID,
-              let entry = workingEntry else { return nil }
-        return (entry.blocks ?? []).first(where: { $0.id == id })
+    private func blockColorSheet(for block: JournalBlock) -> some View {
+        NavigationStack {
+            ZStack {
+                LystariaBackground().ignoresSafeArea()
+                VStack(spacing: 28) {
+                    VStack(alignment: .leading, spacing: 16) {
+                        ColorPicker("Color 1", selection: $blockColor1Selection, supportsOpacity: false)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(LColors.textPrimary)
+                        ColorPicker("Color 2", selection: $blockColor2Selection, supportsOpacity: false)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(LColors.textPrimary)
+                    }
+                    .padding(.horizontal, LSpacing.pageHorizontal)
+
+                    Canvas { ctx, size in
+                        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .linearGradient(
+                            Gradient(colors: [blockColor1Selection, blockColor2Selection]),
+                            startPoint: CGPoint(x: 0, y: size.height / 2),
+                            endPoint: CGPoint(x: size.width, y: size.height / 2)
+                        ))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 4)
+                    .clipShape(Capsule())
+                    .padding(.horizontal, LSpacing.pageHorizontal)
+
+                    Button {
+                        let c1 = hexStringFromColor(UIColor(blockColor1Selection))
+                        let c2 = hexStringFromColor(UIColor(blockColor2Selection))
+                        applyBlockColor(to: block, hex: "\(c1):\(c2)")
+                        block.touch()
+                        showBlockColorSheet = false
+                    } label: {
+                        Text("Apply Color")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(LGradients.blue)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, LSpacing.pageHorizontal)
+
+                    if !currentBlockColorHex(for: block).isEmpty {
+                        Button {
+                            applyBlockColor(to: block, hex: "")
+                            block.touch()
+                            showBlockColorSheet = false
+                        } label: {
+                            Text("Reset to Default")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(LColors.textSecondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    Spacer()
+                }
+                .padding(.top, 28)
+            }
+            .navigationTitle(focusedBlockColorLabel)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { showBlockColorSheet = false }
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+            }
+        }
     }
 
-    // MARK: - Block Accent Color Helpers
+    private func currentBlockColorHex(for block: JournalBlock) -> String {
+        if block.type == .divider { return block.dividerColorHex }
+        if block.type == .callout || block.isCalloutStyle { return block.calloutColorHex }
+        return block.blockquoteColorHex
+    }
+
+    private func applyBlockColor(to block: JournalBlock, hex: String) {
+        if block.type == .divider { block.dividerColorHex = hex }
+        else if block.type == .callout || block.isCalloutStyle { block.calloutColorHex = hex }
+        else { block.blockquoteColorHex = hex }
+    }
 
     private func loadBlockColors(from hex: String) {
         let parts = hex.components(separatedBy: ":")
@@ -409,73 +398,18 @@ struct JournalBlockEditorPage: View {
            let r2 = UInt8(parts[1].prefix(2), radix: 16),
            let g2 = UInt8(parts[1].dropFirst(2).prefix(2), radix: 16),
            let b2 = UInt8(parts[1].dropFirst(4).prefix(2), radix: 16) {
-            blockAccentColor1 = Color(red: Double(r)/255, green: Double(g)/255, blue: Double(b)/255)
-            blockAccentColor2 = Color(red: Double(r2)/255, green: Double(g2)/255, blue: Double(b2)/255)
+            blockColor1Selection = Color(red: Double(r)/255, green: Double(g)/255, blue: Double(b)/255)
+            blockColor2Selection = Color(red: Double(r2)/255, green: Double(g2)/255, blue: Double(b2)/255)
         } else {
-            blockAccentColor1 = Color(red: 0.32, green: 0.27, blue: 0.96)
-            blockAccentColor2 = Color(red: 0.71, green: 0.45, blue: 0.98)
+            blockColor1Selection = Color(LColors.accent)
+            blockColor2Selection = Color(LColors.accent)
         }
     }
 
-    private func hexGradient(_ c1: Color, _ c2: Color) -> String {
-        func hex(_ c: Color) -> String {
-            let ui = UIColor(c)
-            var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-            ui.getRed(&r, green: &g, blue: &b, alpha: &a)
-            return String(format: "%02X%02X%02X", Int(r*255), Int(g*255), Int(b*255))
-        }
-        return "\(hex(c1)):\(hex(c2))"
-    }
-
-    private func blockAccentColorPickerSheet(
-        title: String,
-        hasCustom: Bool,
-        onApply: @escaping () -> Void,
-        onReset: @escaping () -> Void
-    ) -> some View {
-        NavigationStack {
-            ZStack {
-                LystariaBackground().ignoresSafeArea()
-                VStack(spacing: 28) {
-                    VStack(alignment: .leading, spacing: 16) {
-                        ColorPicker("Color 1", selection: $blockAccentColor1, supportsOpacity: false)
-                            .font(.system(size: 15, weight: .semibold)).foregroundStyle(LColors.textPrimary)
-                        ColorPicker("Color 2", selection: $blockAccentColor2, supportsOpacity: false)
-                            .font(.system(size: 15, weight: .semibold)).foregroundStyle(LColors.textPrimary)
-                    }
-                    .padding(.horizontal, LSpacing.pageHorizontal)
-
-                    LinearGradient(
-                        colors: [blockAccentColor1, blockAccentColor2],
-                        startPoint: .leading, endPoint: .trailing
-                    )
-                    .frame(maxWidth: .infinity).frame(height: 6)
-                    .clipShape(Capsule())
-                    .padding(.horizontal, LSpacing.pageHorizontal)
-
-                    Button(action: onApply) {
-                        Text("Apply")
-                            .font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
-                            .frame(maxWidth: .infinity).padding(.vertical, 14)
-                            .background(LGradients.blue).clipShape(RoundedRectangle(cornerRadius: 14))
-                    }
-                    .buttonStyle(.plain).padding(.horizontal, LSpacing.pageHorizontal)
-
-                    if hasCustom {
-                        Button(action: onReset) {
-                            Text("Reset to Default")
-                                .font(.system(size: 14, weight: .medium)).foregroundStyle(LColors.textSecondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    Spacer()
-                }
-                .padding(.top, 28)
-            }
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar)
-        }
+    private func hexStringFromColor(_ color: UIColor) -> String {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        color.getRed(&r, green: &g, blue: &b, alpha: &a)
+        return String(format: "%02X%02X%02X", Int(r * 255), Int(g * 255), Int(b * 255))
     }
 
     private func isEntryEffectivelyEmpty(_ entry: JournalEntry) -> Bool {

@@ -9,6 +9,8 @@ import UIKit
 
 struct JournalBlockDisplayView: View {
     let entry: JournalEntry
+    /// When set, renders just this one block flat — used by JournalPagedContentView.
+    var singleBlock: JournalBlock? = nil
     @Environment(\.modelContext) private var modelContext
     var onMentionTapped: ((String) -> Void)? = nil
 
@@ -45,6 +47,11 @@ struct JournalBlockDisplayView: View {
     }
 
     var body: some View {
+        if let block = singleBlock {
+            // Single block mode — flat render, no card wrapping
+            renderBlock(block)
+        } else {
+        // Full paged mode — each page gets its own glass card
         let pages = blockPages
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(pages.enumerated()), id: \.offset) { index, page in
@@ -79,6 +86,7 @@ struct JournalBlockDisplayView: View {
                 }
             }
         }
+        } // end full paged mode
     }
 
     // MARK: - Block pages — split at .pageBreak dividers
@@ -507,6 +515,11 @@ struct JournalBlockDisplayView: View {
                 case .mention:
                     mutable.addAttribute(.foregroundColor, value: UIColor.systemBlue, range: range)
                     mutable.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+                    // Embed the mention target ID so RichBlockTextView can fire the tap callback
+                    let mentionID = style.urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !mentionID.isEmpty {
+                        mutable.addAttribute(JournalMentionIDAttributeName, value: mentionID, range: range)
+                    }
                 }
             }
         }
@@ -518,7 +531,7 @@ struct JournalBlockDisplayView: View {
         }
 
         return AnyView(
-            RichBlockTextView(attributedText: mutable, isSelectable: true, linkTintColor: UIColor.systemBlue)
+            RichBlockTextView(attributedText: mutable, isSelectable: true, linkTintColor: UIColor.systemBlue, onMentionTapped: onMentionTapped)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
                 .layoutPriority(1)

@@ -13,10 +13,13 @@ import Combine
 final class LimitManager: ObservableObject {
     static let shared = LimitManager()
 
-    // MARK: - Global Kill Switch
-    // Set to true to disable ALL limits for all users regardless of premium status.
-    // Flip to false and re-ship to re-enable limits.
-    private let limitsDisabled: Bool = true
+    // MARK: - Synced Premium Bypass
+    // Emergency fallback bypass.
+    // This is NOT the primary source of truth.
+    // If synced settings fail to load during beta/testing, this keeps premium unlocked.
+    private let fallbackPremiumBypassEnabled = true
+
+    @Published private(set) var limitsDisabled: Bool = false
 
     // MARK: - AppStorage-backed inputs
     // @AppStorage on a non-View type doesn't trigger objectWillChange automatically,
@@ -63,6 +66,14 @@ final class LimitManager: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.recomputeAccess() }
             .store(in: &cancellables)
+    }
+
+    func syncPremiumBypass(from settings: UserSettings?) {
+        let shouldBypass = settings?.premiumBypassEnabled ?? fallbackPremiumBypassEnabled
+        guard limitsDisabled != shouldBypass else { return }
+
+        limitsDisabled = shouldBypass
+        recomputeAccess()
     }
 
     private func recomputeAccess() {

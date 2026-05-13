@@ -389,6 +389,7 @@ struct DocumentBlockRow: View {
         case .callout:   calloutEditor
         case .image:     imageEditor
         case .table:     tableEditor
+        case .page:      pageEditor
         case .toggle, .toggleHeading1, .toggleHeading2, .toggleHeading3,
              .toggleHeading4, .toggleHeading5, .toggleHeading6: textEditor
         default:         textEditor
@@ -670,6 +671,50 @@ struct DocumentBlockRow: View {
                 .padding(.leading, indentPadding)
             }
         }
+    }
+
+    // MARK: - Page Card Editor
+
+    @State private var showPageCardCustomization = false
+
+    @ViewBuilder
+    private var pageEditor: some View {
+        PageCardView(
+            block: block,
+            childEntry: resolvedChildEntry,
+            destination: resolvedChildEntry.flatMap { entry in
+                entry.book.map { book in
+                    AnyView(DocumentBlockEditorPage(book: book, existingEntry: entry))
+                }
+            },
+            isSelectionMode: isSelectionMode
+        )
+        .contextMenu {
+            Button {
+                showPageCardCustomization = true
+            } label: {
+                Label("Card Style", systemImage: "paintbrush")
+            }
+            Button(role: .destructive) {
+                onDelete(block)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        .sheet(isPresented: $showPageCardCustomization) {
+            PageCardCustomizationSheet(block: block)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+    }
+
+    private var resolvedChildEntry: DocumentEntry? {
+        guard block.type == .page else { return nil }
+        guard let uuid = block.pageChildUUID else { return nil }
+        let descriptor = FetchDescriptor<DocumentEntry>(
+            predicate: #Predicate { $0.uuid == uuid }
+        )
+        return try? modelContext.fetch(descriptor).first
     }
 
     // MARK: - Table Editor
@@ -1310,7 +1355,7 @@ struct DocumentBlockRow: View {
         case .paragraph, .heading1, .heading2, .heading3, .heading4, .heading5, .heading6,
              .toggleHeading1, .toggleHeading2, .toggleHeading3, .toggleHeading4, .toggleHeading5, .toggleHeading6,
              .toggle, .bulletedList, .numberedList, .checklist, .blockquote, .callout: return true
-        case .divider, .code, .image, .table: return false
+        case .divider, .code, .image, .table, .page: return false
         }
     }
 
@@ -1320,7 +1365,7 @@ struct DocumentBlockRow: View {
              .toggle, .bulletedList, .numberedList, .checklist:
             return true
         case .toggleHeading1, .toggleHeading2, .toggleHeading3, .toggleHeading4, .toggleHeading5, .toggleHeading6,
-             .blockquote, .callout, .divider, .code, .image, .table:
+             .blockquote, .callout, .divider, .code, .image, .table, .page:
             return false
         }
     }
@@ -1519,7 +1564,7 @@ struct DocumentBlockRow: View {
              .toggleHeading1, .toggleHeading2, .toggleHeading3, .toggleHeading4, .toggleHeading5, .toggleHeading6,
              .toggle, .bulletedList, .numberedList, .checklist, .blockquote, .callout:
             return true
-        case .divider, .code, .image, .table:
+        case .divider, .code, .image, .table, .page:
             return false
         }
     }
@@ -1595,7 +1640,7 @@ struct DocumentBlockRow: View {
              .toggleHeading1, .toggleHeading2, .toggleHeading3, .toggleHeading4, .toggleHeading5, .toggleHeading6,
              .toggle, .bulletedList, .numberedList, .checklist, .blockquote, .callout, .code:
             return true
-        case .divider, .image, .table:
+        case .divider, .image, .table, .page:
             return false
         }
     }
@@ -1606,7 +1651,7 @@ struct DocumentBlockRow: View {
              .toggleHeading1, .toggleHeading2, .toggleHeading3, .toggleHeading4, .toggleHeading5, .toggleHeading6,
              .toggle, .bulletedList, .numberedList, .checklist, .blockquote, .callout, .code:
             return true
-        case .divider, .image, .table:
+        case .divider, .image, .table, .page:
             return false
         }
     }
@@ -1630,6 +1675,7 @@ struct DocumentBlockRow: View {
         case .code: return "Code"
         case .image: return ""
         case .table: return ""
+        case .page: return ""
         }
     }
 

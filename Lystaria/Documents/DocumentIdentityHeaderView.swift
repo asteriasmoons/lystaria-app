@@ -15,6 +15,11 @@ import PhotosUI
 
 struct DocumentIdentityHeaderView: View {
     let entry: DocumentEntry
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var coverHorizontalPadding: CGFloat {
+        horizontalSizeClass == .regular ? 16 : 16
+    }
 
     private var resolvedTitleColor: Color {
         let hex = entry.textColorHex.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -31,7 +36,7 @@ struct DocumentIdentityHeaderView: View {
             // Cover image — only rendered when data exists, sits inside the card
             if let data = entry.coverImageData, let uiImage = UIImage(data: data) {
                 coverImageView(uiImage)
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, coverHorizontalPadding)
                     .padding(.top, 16)
                     .padding(.bottom, 14)
             }
@@ -69,22 +74,15 @@ struct DocumentIdentityHeaderView: View {
 
     @ViewBuilder
     private func coverImageView(_ uiImage: UIImage) -> some View {
-        let offset = entry.coverImageVerticalOffset
-        GeometryReader { geo in
-            Image(uiImage: uiImage)
-                .resizable()
-                .scaledToFill()
-                .frame(width: geo.size.width, height: geo.size.height)
-                .offset(y: offset * 30)
-                .clipped()
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: 200)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.white.opacity(0.12), lineWidth: 1)
-        )
+        Image(uiImage: uiImage)
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+            )
     }
 
     @ViewBuilder

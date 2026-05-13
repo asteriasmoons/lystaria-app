@@ -1,20 +1,18 @@
 //
-//  DocumentIdentityHeaderEditorView.swift
+//  JournalIdentityEditorView.swift
 //  Lystaria
-//
-//  Created by Asteria Moon on 5/11/26.
 //
 
 import SwiftUI
 import SwiftData
 import PhotosUI
 
-// MARK: - Editor
-// Note: this view has NO glass card background — it is designed to be embedded
-// inside DocumentPagedContentView which wraps identity + first content page in one card.
+// MARK: - Preview
+// Read-only journal identity header. No glass card background — designed to be embedded
+// inside the journal paged content/card structure.
 
-struct DocumentIdentityHeaderEditorPreviewView: View {
-    let entry: DocumentEntry
+struct JournalIdentityEditorPreviewView: View {
+    let entry: JournalEntry
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     private var coverMaxWidth: CGFloat {
@@ -124,11 +122,12 @@ struct DocumentIdentityHeaderEditorPreviewView: View {
 }
 
 // MARK: - Editor (editable title + tags + cover picker)
+// No glass card — embedded inside JournalBlockEditorView's first page card.
 
-struct DocumentIdentityHeaderEditorView: View {
+struct JournalIdentityEditorView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    let entry: DocumentEntry
+    let entry: JournalEntry
 
     @Binding var pageTitleDraft: String
     @Binding var pageTagsDraft: String
